@@ -1,6 +1,6 @@
 {
   "name": "@aictx/memory",
-  "version": "0.1.49",
+  "version": "0.1.50",
   "description": "Local-first project memory for AI coding agents.",
   "license": "MIT",
   "type": "module",
