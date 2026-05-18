@@ -35,3 +35,4 @@
 {"actor":"agent","event":"memory.updated","id":"synthesis.agent-guidance","timestamp":"2026-05-18T14:02:38+02:00"}
 {"actor":"agent","event":"memory.updated","id":"source.readme","timestamp":"2026-05-18T14:02:38+02:00"}
 {"actor":"agent","event":"memory.updated","id":"source.docs-src-content-docs-agent-integration","timestamp":"2026-05-18T14:02:38+02:00"}
+{"actor":"agent","event":"memory.created","id":"decision.viewer-project-open-is-graph-first","timestamp":"2026-05-18T14:42:13+02:00"}

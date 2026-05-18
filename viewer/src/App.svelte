@@ -404,6 +404,7 @@
   let graphShowInactive = $state(false);
   let selectedGraphObjectId = $state<string | null>(null);
   let selectedGraphRelationId = $state<string | null>(null);
+  let pendingGraphFocus = false;
   let schemaContextOpen = $state(true);
 
   const allOption = "all";
@@ -730,12 +731,14 @@
     renderGraph(graphElements);
     queueMicrotask(() => {
       applyGraphSelection();
+      focusPendingGraphSelection();
     });
   });
 
   $effect(() => {
     if (currentScreen === "graph") {
       applyGraphSelection();
+      focusPendingGraphSelection();
     }
   });
 
@@ -810,6 +813,10 @@
       bootstrap = envelope.data;
       projectLoadState = "ready";
       selectedObjectId = null;
+      if (currentScreen === "graph") {
+        selectDefaultGraphObject();
+        pendingGraphFocus = selectedGraphObjectId !== null;
+      }
     } catch (error) {
       projectLoadState = "error";
       projectErrorMessage = error instanceof Error ? error.message : String(error);
@@ -1066,7 +1073,8 @@
     graphShowInactive = false;
     selectedGraphObjectId = null;
     selectedGraphRelationId = null;
-    currentScreen = "memories";
+    pendingGraphFocus = false;
+    currentScreen = "graph";
     void loadBootstrap(registryId);
   }
 
@@ -1111,9 +1119,21 @@
     currentScreen = "graph";
     closeSidebarDrawer();
 
-    if (selectedGraphObjectId === null) {
-      selectedGraphObjectId = preferredGraphObjectId();
+    selectDefaultGraphObject();
+    pendingGraphFocus = selectedGraphObjectId !== null || selectedGraphRelationId !== null;
+  }
+
+  function showGraphObject(id: string): void {
+    if (!objectById.has(id)) {
+      return;
     }
+
+    selectedObjectId = id;
+    selectedGraphObjectId = id;
+    selectedGraphRelationId = null;
+    pendingGraphFocus = true;
+    currentScreen = "graph";
+    closeSidebarDrawer();
   }
 
   function showMaintenance(): void {
@@ -1294,6 +1314,26 @@
     graphShowInactive = showInactive;
     selectedGraphObjectId = null;
     selectedGraphRelationId = null;
+    pendingGraphFocus = false;
+  }
+
+  function selectDefaultGraphObject(): void {
+    if (selectedGraphRelationId !== null) {
+      return;
+    }
+
+    if (selectedObjectId !== null && graphVisibleObjectIds.has(selectedObjectId)) {
+      selectedGraphObjectId = selectedObjectId;
+      selectedGraphRelationId = null;
+      return;
+    }
+
+    if (selectedGraphObjectId !== null && graphVisibleObjectIds.has(selectedGraphObjectId)) {
+      return;
+    }
+
+    selectedGraphObjectId = preferredGraphObjectId();
+    selectedGraphRelationId = null;
   }
 
   function preferredGraphObjectId(): string | null {
@@ -1348,6 +1388,15 @@
     if (selectedGraphRelationId !== null) {
       focusGraphEdge(selectedGraphRelationId, true);
     }
+  }
+
+  function focusPendingGraphSelection(): void {
+    if (!pendingGraphFocus || graphInstance === null) {
+      return;
+    }
+
+    focusGraphSelection();
+    pendingGraphFocus = false;
   }
 
   function clearPagePreset(): void {
@@ -3251,55 +3300,38 @@
             {#if selectedObject !== null}
               <article class="memory-preview object-detail-panel" aria-label={selectedObject.title} data-testid="selected-object">
                 <header class="memory-preview-header">
-                  <button
-                    type="button"
-                    class="selected-object-back"
-                    onclick={closeSelectedObject}
-                    data-testid="selected-object-back"
-                  >
-                    Back
-                  </button>
-                  <div>
+                  <div class="memory-preview-title">
                     <p class="eyebrow">Selected object</p>
                     <h3>{selectedObject.title}</h3>
                     <p class="mono">{selectedObject.id}</p>
+                    <div class="selected-object-chips" aria-label="Selected object summary">
+                      <span>{selectedObject.type}</span>
+                      <span>{selectedObject.status}</span>
+                      <span>{facetCategoryLabel(selectedObject)}</span>
+                      <span>{directRelations.length} {directRelations.length === 1 ? "relation" : "relations"}</span>
+                    </div>
+                  </div>
+                  <div class="memory-preview-actions">
+                    <button
+                      type="button"
+                      class="selected-object-back"
+                      onclick={closeSelectedObject}
+                      data-testid="selected-object-back"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      class="selected-object-graph"
+                      onclick={() => showGraphObject(selectedObject.id)}
+                      data-testid="selected-object-graph"
+                    >
+                      Graph
+                    </button>
                   </div>
                 </header>
 
-                <dl class="notion-properties">
-                  <div><dt>Name</dt><dd>{selectedObject.title}</dd></div>
-                  <div><dt>ID</dt><dd class="mono">{selectedObject.id}</dd></div>
-                  <div><dt>Type</dt><dd>{selectedObject.type}</dd></div>
-                  <div><dt>Facet</dt><dd>{facetCategoryLabel(selectedObject)}</dd></div>
-                  <div><dt>Status</dt><dd>{selectedObject.status}</dd></div>
-                  <div><dt>Scope</dt><dd>{scopeLabel(selectedObject.scope)}</dd></div>
-                  <div><dt>Origin</dt><dd>{selectedObject.origin?.kind ?? "none"}</dd></div>
-                  <div><dt>Evidence</dt><dd>{selectedObject.evidence.length}</dd></div>
-                  <div><dt>Relations</dt><dd>{directRelations.length}</dd></div>
-                  <div><dt>Updated</dt><dd>{selectedObject.updated_at}</dd></div>
-                </dl>
-
                 <div class="notion-toggle-list">
-                  {#if selectedObjectFindings.length > 0}
-                    <details class="notion-toggle advisory-details" open data-testid="selected-object-advisories">
-                      <summary>Maintenance advisories</summary>
-                      <ul class="maintenance-findings compact">
-                        {#each selectedObjectFindings as finding (`${finding.rule}-${finding.message}`)}
-                          <li>
-                            <span class={`advisory-badge ${finding.severity}`}>{finding.severity}</span>
-                            <strong>{finding.rule}</strong>
-                            <p>{finding.message}</p>
-                            <small>
-                              {#each finding.evidence.slice(0, 6) as evidence, index (`${finding.rule}-${evidence.kind}-${evidence.id}-${index}`)}
-                                <code>{evidenceLabel(evidence)}</code>
-                              {/each}
-                            </small>
-                          </li>
-                        {/each}
-                      </ul>
-                    </details>
-                  {/if}
-
                   <details class="notion-toggle" open>
                     <summary>Memory</summary>
                     <section class="markdown-view" aria-label="Markdown body" data-testid="markdown-view">
@@ -3331,8 +3363,67 @@
                     </section>
                   </details>
 
+                  <details class="notion-toggle" open>
+                    <summary>Direct relations</summary>
+                    <section class="relation-columns">
+                      <div>
+                        <p class="eyebrow">Outgoing</p>
+                        <ul class="relation-list" data-testid="outgoing-relations">
+                          {#each outgoingRelations as relation (relation.id)}
+                            <li data-testid={`relation-card-${relation.id}`}>
+                              <span class="pill">{relation.predicate}</span>
+                              <button type="button" onclick={() => selectRelated(relation.to)}>
+                                {relationTargetLabel(relation, selectedObject.id)}
+                              </button>
+                              <small>{relationStatusLabel(relation)}</small>
+                            </li>
+                          {:else}
+                            <li class="empty-copy">No outgoing related memories.</li>
+                          {/each}
+                        </ul>
+                      </div>
+
+                      <div>
+                        <p class="eyebrow">Incoming</p>
+                        <ul class="relation-list" data-testid="incoming-relations">
+                          {#each incomingRelations as relation (relation.id)}
+                            <li data-testid={`relation-card-${relation.id}`}>
+                              <span class="pill">{relation.predicate}</span>
+                              <button type="button" onclick={() => selectRelated(relation.from)}>
+                                {relationTargetLabel(relation, selectedObject.id)}
+                              </button>
+                              <small>{relationStatusLabel(relation)}</small>
+                            </li>
+                          {:else}
+                            <li class="empty-copy">No incoming related memories.</li>
+                          {/each}
+                        </ul>
+                      </div>
+                    </section>
+                  </details>
+
+                  {#if selectedObjectFindings.length > 0}
+                    <details class="notion-toggle advisory-details" open data-testid="selected-object-advisories">
+                      <summary>Maintenance advisories</summary>
+                      <ul class="maintenance-findings compact">
+                        {#each selectedObjectFindings as finding (`${finding.rule}-${finding.message}`)}
+                          <li>
+                            <span class={`advisory-badge ${finding.severity}`}>{finding.severity}</span>
+                            <strong>{finding.rule}</strong>
+                            <p>{finding.message}</p>
+                            <small>
+                              {#each finding.evidence.slice(0, 6) as evidence, index (`${finding.rule}-${evidence.kind}-${evidence.id}-${index}`)}
+                                <code>{evidenceLabel(evidence)}</code>
+                              {/each}
+                            </small>
+                          </li>
+                        {/each}
+                      </ul>
+                    </details>
+                  {/if}
+
                   {#if selectedObject.tags.length > 0}
-                    <details class="notion-toggle" open>
+                    <details class="notion-toggle">
                       <summary>Tags</summary>
                       <ul class="tag-list" aria-label="Tags">
                         {#each selectedObject.tags as tag (tag)}
@@ -3342,20 +3433,23 @@
                     </details>
                   {/if}
 
-                  <details class="notion-toggle" open data-testid="facet-details">
-                    <summary>Facet category</summary>
-                    {#if selectedObject.facets === null}
-                      <p class="empty-copy">No facets saved on this object.</p>
-                    {:else}
-                      <dl class="facet-grid">
-                        <div><dt>Category</dt><dd>{selectedObject.facets.category}</dd></div>
-                        <div><dt>Applies to</dt><dd>{selectedObject.facets.applies_to?.join(", ") || "global"}</dd></div>
-                        <div><dt>Load modes</dt><dd>{selectedObject.facets.load_modes?.join(", ") || "all modes"}</dd></div>
-                      </dl>
-                    {/if}
+                  <details class="notion-toggle">
+                    <summary>Object properties</summary>
+                    <dl class="notion-properties">
+                      <div><dt>Name</dt><dd>{selectedObject.title}</dd></div>
+                      <div><dt>ID</dt><dd class="mono">{selectedObject.id}</dd></div>
+                      <div><dt>Type</dt><dd>{selectedObject.type}</dd></div>
+                      <div><dt>Facet</dt><dd>{facetCategoryLabel(selectedObject)}</dd></div>
+                      <div><dt>Status</dt><dd>{selectedObject.status}</dd></div>
+                      <div><dt>Scope</dt><dd>{scopeLabel(selectedObject.scope)}</dd></div>
+                      <div><dt>Origin</dt><dd>{selectedObject.origin?.kind ?? "none"}</dd></div>
+                      <div><dt>Evidence</dt><dd>{selectedObject.evidence.length}</dd></div>
+                      <div><dt>Relations</dt><dd>{directRelations.length}</dd></div>
+                      <div><dt>Updated</dt><dd>{selectedObject.updated_at}</dd></div>
+                    </dl>
                   </details>
 
-                  <details class="notion-toggle" open data-testid="provenance-links">
+                  <details class="notion-toggle" data-testid="provenance-links">
                     <summary>Provenance</summary>
                     <ul class="relation-list">
                       {#if selectedObject.origin !== null}
@@ -3407,43 +3501,17 @@
                     </ul>
                   </details>
 
-                  <details class="notion-toggle" open>
-                    <summary>Direct relations</summary>
-                    <section class="relation-columns">
-                      <div>
-                        <p class="eyebrow">Outgoing</p>
-                        <ul class="relation-list" data-testid="outgoing-relations">
-                          {#each outgoingRelations as relation (relation.id)}
-                            <li data-testid={`relation-card-${relation.id}`}>
-                              <span class="pill">{relation.predicate}</span>
-                              <button type="button" onclick={() => selectRelated(relation.to)}>
-                                {relationTargetLabel(relation, selectedObject.id)}
-                              </button>
-                              <small>{relationStatusLabel(relation)}</small>
-                            </li>
-                          {:else}
-                            <li class="empty-copy">No outgoing related memories.</li>
-                          {/each}
-                        </ul>
-                      </div>
-
-                      <div>
-                        <p class="eyebrow">Incoming</p>
-                        <ul class="relation-list" data-testid="incoming-relations">
-                          {#each incomingRelations as relation (relation.id)}
-                            <li data-testid={`relation-card-${relation.id}`}>
-                              <span class="pill">{relation.predicate}</span>
-                              <button type="button" onclick={() => selectRelated(relation.from)}>
-                                {relationTargetLabel(relation, selectedObject.id)}
-                              </button>
-                              <small>{relationStatusLabel(relation)}</small>
-                            </li>
-                          {:else}
-                            <li class="empty-copy">No incoming related memories.</li>
-                          {/each}
-                        </ul>
-                      </div>
-                    </section>
+                  <details class="notion-toggle" data-testid="facet-details">
+                    <summary>Facet category</summary>
+                    {#if selectedObject.facets === null}
+                      <p class="empty-copy">No facets saved on this object.</p>
+                    {:else}
+                      <dl class="facet-grid">
+                        <div><dt>Category</dt><dd>{selectedObject.facets.category}</dd></div>
+                        <div><dt>Applies to</dt><dd>{selectedObject.facets.applies_to?.join(", ") || "global"}</dd></div>
+                        <div><dt>Load modes</dt><dd>{selectedObject.facets.load_modes?.join(", ") || "all modes"}</dd></div>
+                      </dl>
+                    {/if}
                   </details>
 
                   <details class="notion-toggle technical-details" data-testid="technical-details">
@@ -6823,6 +6891,10 @@
     min-width: 0;
   }
 
+  .memory-preview-title {
+    min-width: 0;
+  }
+
   .memory-preview-header h3 {
     margin: 3px 0 0;
     color: #24231f;
@@ -6839,8 +6911,53 @@
     overflow-wrap: anywhere;
   }
 
+  .selected-object-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 12px;
+  }
+
+  .selected-object-chips span {
+    border: 1px solid #ded6ca;
+    border-radius: 999px;
+    padding: 4px 9px;
+    color: #59544c;
+    background: #f8f5ef;
+    font-size: 0.78rem;
+    line-height: 1.15;
+    font-weight: 700;
+  }
+
+  .memory-preview-actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
   .selected-object-back {
     display: none;
+  }
+
+  .selected-object-graph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    border: 1px solid #d8d0c3;
+    border-radius: 8px;
+    padding: 8px 13px;
+    background: #fffaf1;
+    color: #302e2a;
+    font-weight: 780;
+  }
+
+  .selected-object-graph:hover,
+  .selected-object-back:hover {
+    border-color: #cfc3b4;
+    background: #f7f1e7;
   }
 
   .memory-stage .object-list button.selected {
@@ -6856,6 +6973,74 @@
 
     .memory-workspace.has-preview .browser-workspace-grid {
       grid-template-columns: minmax(300px, 0.85fr) minmax(360px, 1.15fr);
+    }
+
+    .browser-workspace-grid,
+    .memory-workspace.has-preview .browser-workspace-grid {
+      display: block;
+    }
+
+    .object-detail-panel {
+      max-width: min(900px, 100%);
+      margin: 0 auto 24px;
+      padding: 24px clamp(18px, 4vw, 44px) 32px;
+    }
+
+    .memory-preview-header {
+      position: sticky;
+      top: 10px;
+      z-index: 3;
+      margin: -12px clamp(-44px, -4vw, -18px) 12px;
+      border-bottom: 1px solid #ece6dc;
+      padding: 14px clamp(18px, 4vw, 44px);
+      background: rgb(255 253 249 / 94%);
+      backdrop-filter: blur(12px);
+    }
+
+    .memory-preview-actions {
+      justify-content: flex-start;
+    }
+
+    .selected-object-back {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      border: 1px solid #d8d0c3;
+      border-radius: 8px;
+      padding: 8px 13px;
+      background: #fffaf1;
+      color: #302e2a;
+      font-weight: 780;
+    }
+
+    .main-stage.memory-stage.has-selected-object {
+      height: auto;
+      min-height: 100vh;
+      min-height: 100svh;
+      overflow: visible;
+    }
+
+    :global(body:has(.main-stage.memory-stage.has-selected-object)) {
+      overflow: auto;
+    }
+
+    .memory-stage.has-selected-object .memory-page,
+    .memory-stage.has-selected-object .schema-browser-layout,
+    .memory-stage.has-selected-object .memory-workspace,
+    .memory-stage.has-selected-object .browser-workspace-grid {
+      display: block;
+      height: auto;
+      min-height: 0;
+      overflow: visible;
+    }
+
+    .memory-stage.has-selected-object .list-controls,
+    .memory-stage.has-selected-object .schema-context-panel,
+    .memory-stage.has-selected-object .warnings,
+    .memory-stage.has-selected-object .onboarding-callout,
+    .memory-stage.has-selected-object .sectioned-memory {
+      display: none;
     }
   }
 

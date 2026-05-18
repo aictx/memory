@@ -105,6 +105,15 @@ describe("read-only viewer shell", () => {
       await expectText(page, '[data-testid="project-list"]', "Current");
       await expectCount(page, '[data-testid="memory-list-view"]', 0);
       await page.getByRole("button", { name: "Open project" }).first().click();
+      await expectText(page, '[data-testid="graph-view"]', "Graph");
+      await expectText(page, '[data-testid="graph-node-count"]', "11");
+      await expectText(page, '[data-testid="graph-relation-count"]', "6");
+      await expectText(page, '[data-testid="graph-unlinked-count"]', "2");
+      await expectText(page, '[data-testid="graph-inspector"]', "Agent Guidance Synthesis");
+      await expectText(page, '[data-testid="graph-inspector"]', "Source: docs/agent-integration.md");
+      await openSidebar(page);
+      await page.locator('[data-testid="nav-memories"]').click();
+      await expectSidebarClosed(page);
       await expectText(page, '[data-testid="memory-list-view"]', "Memory Viewer Shell Project");
       await expectText(page, '[data-testid="memory-list-view"]', "Memory Schema");
       await expectText(page, '[data-testid="memory-list-view"]', "Canonical objects");
@@ -296,6 +305,9 @@ describe("read-only viewer shell", () => {
       await expectText(page, '[data-testid="outgoing-relations"]', "No outgoing related memories.");
       await expectText(page, '[data-testid="incoming-relations"]', "No incoming related memories.");
       await expectCount(page, '[data-testid="relation-graph"]', 0);
+      await page.locator('[data-testid="selected-object-graph"]').click();
+      await expectText(page, '[data-testid="graph-view"]', "Graph");
+      await expectText(page, '[data-testid="graph-inspector"]', "Viewer Empty Neighborhood");
 
       expect(await page.evaluate("window.__MEMORY_HTML_EXECUTED")).toBeUndefined();
       expect(consoleErrors()).toEqual([]);
@@ -429,6 +441,10 @@ describe("read-only viewer shell", () => {
       await expectSidebarClosed(page);
       await page.getByRole("button", { name: "Open project" }).first().click();
 
+      await expectText(page, '[data-testid="graph-view"]', "Graph");
+      await openSidebar(page);
+      await page.locator('[data-testid="nav-memories"]').click();
+      await expectSidebarClosed(page);
       await expectText(page, '[data-testid="starter-memory-notice"]', "Starter memory only.");
       await expectText(page, '[data-testid="starter-memory-notice"]', "memory suggest --bootstrap --patch > bootstrap-memory.json");
       await expectText(page, '[data-testid="starter-memory-notice"]', "memory save --file bootstrap-memory.json");
@@ -440,12 +456,24 @@ describe("read-only viewer shell", () => {
       await page.locator('[data-testid="object-row-architecture.current"]').click();
       await expectCount(page, '[data-testid="selected-object"]', 1);
       await expectCount(page, '[data-testid="selected-object-back"]', 1);
+      await expectCount(page, '[data-testid="selected-object-graph"]', 1);
       await expect(page.locator('[data-testid="schema-context-toggle"]').isHidden()).resolves.toBe(true);
       await expectText(page, '[data-testid="incoming-relations"]', "related_to");
       await expectCount(page, '[data-testid="relation-graph"]', 0);
       await page.locator('[data-testid="selected-object-back"]').click();
       await expectCount(page, '[data-testid="selected-object"]', 0);
       await expectCount(page, '[data-testid="object-row-architecture.current"]', 1);
+
+      await page.setViewportSize({ width: 1024, height: 760 });
+      await page.locator('[data-testid="object-row-architecture.current"]').click();
+      await expectCount(page, '[data-testid="selected-object"]', 1);
+      await expectCount(page, '[data-testid="selected-object-back"]', 1);
+      await expectCount(page, '[data-testid="selected-object-graph"]', 1);
+      await expect(page.locator('[data-testid="schema-context-toggle"]').isHidden()).resolves.toBe(true);
+      await expect(page.locator('[data-testid="object-row-architecture.current"]').isHidden()).resolves.toBe(true);
+      await page.locator('[data-testid="selected-object-graph"]').click();
+      await expectText(page, '[data-testid="graph-view"]', "Graph");
+      await expectText(page, '[data-testid="graph-inspector"]', "Current Architecture");
 
       expect(consoleErrors()).toEqual([]);
     } finally {
