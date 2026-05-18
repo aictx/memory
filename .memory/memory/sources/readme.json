@@ -1,6 +1,6 @@
 {
   "body_path": "memory/sources/readme.md",
-  "content_hash": "sha256:83e8cde506e18bd74a0d7c3f1ad7cc9938628654e6af0174ecb92f501bc60a0b",
+  "content_hash": "sha256:6c339e4355265e5d4a216259a021f7f3a8d95aaa7d0f13b545a74976286eb8d3",
   "created_at": "2026-05-16T18:52:44+02:00",
   "evidence": [
     {
@@ -20,7 +20,7 @@
   },
   "id": "source.readme",
   "origin": {
-    "digest": "sha256:8b080a72c2f7ceb74a5ec30a2f030e62dce0ee53aa732218555896f2527e653d",
+    "digest": "sha256:8594e3eedae9f7824c939c298574b971fe4cfdd8d1f5febcdb24e7d4538d38ba",
     "kind": "file",
     "locator": "README.md",
     "media_type": "text/markdown"
@@ -41,5 +41,5 @@
   ],
   "title": "Source: README.md",
   "type": "source",
-  "updated_at": "2026-05-16T18:52:44+02:00"
+  "updated_at": "2026-05-18T14:02:38+02:00"
 }

@@ -72,8 +72,9 @@ does not need a save.
 
 Use `remember` for normal intent-first memory creation. Use `save` only when
 you need to submit a structured patch directly. In
-`suggest --after-task --json`, use `recommended_actions` as advice; the agent
-still writes the meaningful title, body, and reason from current evidence.
+`suggest --after-task --json`, use `recommended_actions` and
+`repair_candidates` as advice; the agent still writes the meaningful title,
+body, and reason from current evidence.
 
 ## Wiki-style source workflows
 
@@ -107,10 +108,16 @@ memory lens current-work
 memory handoff show
 ```
 
-`audit` includes role coverage gaps, but missing roles are not `check`
-failures. `stale` lists stale and superseded memory. `graph` shows a one-hop
+`audit` includes role coverage gaps and advisory stale/conflict findings, but
+missing roles and possible-stale findings are not `check` failures. `stale`
+lists only confirmed stale and superseded memory. `graph` shows a one-hop
 relation neighborhood. `lens` renders readable project views. `handoff`
 preserves unfinished current-branch state without making it project truth.
+
+`audit --json` is report-only by default. It can flag possible stale references,
+stale source origins, missing referenced files, unresolved active conflicts,
+and supersession chains that need review. Those findings do not mutate memory
+or prove a claim false; they tell the agent or human what to verify next.
 
 ## Maintenance
 

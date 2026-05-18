@@ -66,7 +66,8 @@ you re-teach the repo each time.
 
 Memory is not just hidden context for agents. The visual memory viewer is the
 wiki review surface: a local place where humans can inspect the same schema,
-objects, facets, relations, provenance, and graph context agents load.
+objects, facets, relations, provenance, audit advisories, and graph context
+agents load.
 
 <p align="center">
   <a href="https://demo.aictx.dev/?token=demo">
@@ -77,7 +78,7 @@ objects, facets, relations, provenance, and graph context agents load.
     >
   </a>
   <br>
-  <sub>Schema, stored objects, relation provenance, and graph context in one inspectable local viewer.</sub>
+  <sub>Schema, stored objects, relation provenance, maintenance advisories, and graph context in one inspectable local viewer.</sub>
 </p>
 
 ## What Gets Stored
@@ -181,7 +182,7 @@ Four surfaces ship today. Each one works locally and fits normal Git review.
 | --- | --- | --- |
 | One-time setup | Creates the local wiki memory and short repo guidance so future agents know when to load and save context. | `memory setup` |
 | Task-focused loading | Pulls relevant wiki context before coding, debugging, review, architecture, or onboarding work. | `memory load "change auth routes"` |
-| Visual memory viewer | Opens a local browser for the memory schema, canonical objects, facets, relation overview, provenance, and graph context. | `memory view` |
+| Visual memory viewer | Opens a local browser for the memory schema, canonical objects, facets, maintenance advisories, relation overview, provenance, and graph context. | `memory view` |
 | Save discipline | Saves only durable facts, decisions, workflows, gotchas, source records, and syntheses. | `memory remember --stdin` |
 
 ## Works With Your Agent

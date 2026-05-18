@@ -247,10 +247,14 @@ memory check
 
 `memory suggest --from-diff --json` creates a memory suggestion packet from
 current code changes. `memory suggest --after-task --json` includes ranked
-`recommended_actions`; treat them as advisory defaults, not authoritative
-semantic memory. Agents still fill in durable `title`, `body`, and `reason`
-fields from current evidence. `memory audit --json` reports grouped, actionable
-memory hygiene issues and role coverage gaps. Missing roles are not `memory
+`recommended_actions` and, when audit signals apply, `repair_candidates` for
+updates, stale marks, supersession review, or unresolved-conflict questions.
+Treat them as advisory defaults, not authoritative semantic memory. Agents
+still fill in durable `title`, `body`, and `reason` fields from current
+evidence.
+
+`memory audit --json` reports grouped, actionable memory hygiene issues and
+role coverage gaps. Missing roles and possible-stale findings are not `memory
 check` failures.
 
 For the full memory-quality loop, see [Demand-driven memory](/demand-driven-memory/).

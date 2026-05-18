@@ -31,3 +31,7 @@
 {"actor":"agent","event":"memory.created","id":"gotcha.homebrew-formula-output-must-avoid-pnpm-banners","timestamp":"2026-05-17T10:22:44+02:00"}
 {"actor":"agent","event":"memory.updated","id":"workflow.release-updates-homebrew-tap-from-npm-tarball","timestamp":"2026-05-17T11:17:58+02:00"}
 {"actor":"agent","event":"memory.created","id":"workflow.release-workflow-resolves-homebrew-tarball-from-npm-metadata","timestamp":"2026-05-17T11:55:54+02:00"}
+{"actor":"agent","event":"memory.updated","id":"synthesis.feature-map","timestamp":"2026-05-18T14:02:38+02:00"}
+{"actor":"agent","event":"memory.updated","id":"synthesis.agent-guidance","timestamp":"2026-05-18T14:02:38+02:00"}
+{"actor":"agent","event":"memory.updated","id":"source.readme","timestamp":"2026-05-18T14:02:38+02:00"}
+{"actor":"agent","event":"memory.updated","id":"source.docs-src-content-docs-agent-integration","timestamp":"2026-05-18T14:02:38+02:00"}

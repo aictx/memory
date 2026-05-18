@@ -30,9 +30,11 @@ memory docs --json
 ```
 
 `memory setup --dry-run` is read-only and does not initialize storage or write
-repo files. `memory audit` includes role coverage gaps, but missing roles are not
-`memory check` failures. `memory handoff show` returns only an active handoff for
-the current Git branch; closed handoffs remain historical memory.
+repo files. `memory audit` includes role coverage gaps and advisory stale,
+conflict, provenance, and referenced-file findings, but missing roles and
+possible-stale findings are not `memory check` failures. `memory handoff show`
+returns only an active handoff for the current Git branch; closed handoffs remain
+historical memory.
 
 ## MCP tools
 

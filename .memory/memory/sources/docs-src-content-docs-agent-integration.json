@@ -1,6 +1,6 @@
 {
   "body_path": "memory/sources/docs-src-content-docs-agent-integration.md",
-  "content_hash": "sha256:b23def777dc58de4b1ff49dd50805edb0ded9058efa754b8add1f49636b84a5a",
+  "content_hash": "sha256:687b01337b8892d3123656579ea55f7cd2d5d55f7955e108e81079be8ddf210f",
   "created_at": "2026-05-16T18:52:44+02:00",
   "evidence": [
     {
@@ -20,7 +20,7 @@
   },
   "id": "source.docs-src-content-docs-agent-integration",
   "origin": {
-    "digest": "sha256:03c5b9f0aef14bbe23c306c7b47dc9e25a4841d5e7b1271b2e1c8880e7829eb8",
+    "digest": "sha256:af00791acb10f1bed849b494f4e7467bcd068114f290ddf644c59e3bc6855e8b",
     "kind": "file",
     "locator": "docs/src/content/docs/agent-integration.md",
     "media_type": "text/markdown"
@@ -41,5 +41,5 @@
   ],
   "title": "Source: docs/src/content/docs/agent-integration.md",
   "type": "source",
-  "updated_at": "2026-05-16T18:52:44+02:00"
+  "updated_at": "2026-05-18T14:02:38+02:00"
 }

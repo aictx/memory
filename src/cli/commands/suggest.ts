@@ -7,6 +7,7 @@ import {
   type SuggestMemoryOptions
 } from "../../app/operations.js";
 import type {
+  MemoryRepairCandidate,
   SuggestBootstrapPatchProposal,
   SuggestedMemoryAction
 } from "../../discipline/suggest.js";
@@ -85,6 +86,9 @@ function renderSuggestData(data: SuggestMemoryData): string {
     renderList("Changed files", packet.changed_files),
     renderList("Related memory", packet.related_memory_ids),
     renderList("Possible stale memory", packet.possible_stale_ids),
+    ...(packet.repair_candidates === undefined
+      ? []
+      : [renderRepairCandidates(packet.repair_candidates)]),
     renderList("Recommended memory", packet.recommended_memory),
     renderList("Recommended facets", packet.recommended_facets ?? []),
     renderList("Save decision checklist", packet.save_decision_checklist ?? []),
@@ -93,6 +97,21 @@ function renderSuggestData(data: SuggestMemoryData): string {
       : "Remember template: available in --json output",
     renderList("Checklist", packet.agent_checklist)
   ].join("\n");
+}
+
+function renderRepairCandidates(
+  candidates: readonly MemoryRepairCandidate[] | undefined
+): string {
+  if (candidates === undefined || candidates.length === 0) {
+    return "Repair candidates:\n- none";
+  }
+
+  return `Repair candidates:\n${candidates
+    .slice(0, 6)
+    .map((candidate) =>
+      `- ${candidate.suggested_action} ${candidate.target_id} (${candidate.confidence}) from ${candidate.rule}`
+    )
+    .join("\n")}`;
 }
 
 function renderRecommendedActionSections(

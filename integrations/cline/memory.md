@@ -149,8 +149,11 @@ do not repeat the same mistake.
 
 Use `memory suggest --after-task "<task>" --json` when the right save/no-save
 decision is not obvious. It returns related memory, stale candidates, evidence,
-ranked `recommended_actions`, and a `remember_template` skeleton. Treat
-`recommended_actions` as the primary advisory decision aid. Memory does not infer durable project meaning from diffs; write the semantic title/body/reason fields yourself.
+ranked `recommended_actions`, optional `repair_candidates`, and a
+`remember_template` skeleton. Treat `recommended_actions` and repair candidates
+as advisory decision aids. Possible-stale signals mean "verify against current
+evidence," not "automatically wrong." Memory does not infer durable project
+meaning from diffs; write the semantic title/body/reason fields yourself.
 
 ## Safety
 

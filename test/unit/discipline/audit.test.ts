@@ -380,6 +380,250 @@ describe("audit discipline findings", () => {
     );
   });
 
+  it("reports missing object-level file references and stale source file origins", async () => {
+    const projectRoot = await createTempRoot("memory-discipline-audit-file-origin-");
+    await writeProjectFile(projectRoot, "docs/current.md", "# Current\n");
+    const storage = storageSnapshot({
+      projectRoot,
+      version: 4,
+      objects: [
+        memoryObject({
+          id: "decision.missing-object-files",
+          title: "Missing object files",
+          body: longBody("Decision mentions existing docs/current.md only."),
+          facets: {
+            category: "decision-rationale",
+            applies_to: ["docs/missing-facet.md", "src/"]
+          },
+          evidence: [{ kind: "file", id: "docs/missing-evidence.md" }]
+        }),
+        memoryObject({
+          id: "source.changed-origin",
+          type: "source",
+          title: "Changed source origin",
+          body: longBody("Source origin digest should match the source file."),
+          facets: { category: "source", applies_to: ["docs/current.md"] },
+          evidence: [{ kind: "file", id: "docs/current.md" }],
+          origin: {
+            kind: "file",
+            locator: "docs/current.md",
+            digest: `sha256:${"f".repeat(64)}`
+          }
+        }),
+        memoryObject({
+          id: "source.missing-origin",
+          type: "source",
+          title: "Missing source origin",
+          body: longBody("Source origin file was deleted or renamed."),
+          facets: { category: "source", applies_to: ["docs/deleted.md"] },
+          evidence: [{ kind: "file", id: "docs/deleted.md" }],
+          origin: { kind: "file", locator: "docs/deleted.md" }
+        })
+      ],
+      relations: []
+    });
+
+    const findings = await buildAuditFindings({ projectRoot, storage });
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        rule: "referenced_file_missing",
+        memory_id: "decision.missing-object-files",
+        evidence: [
+          { kind: "file", id: "docs/missing-evidence.md" },
+          { kind: "file", id: "docs/missing-facet.md" }
+        ]
+      })
+    );
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        rule: "source_origin_outdated",
+        memory_id: "source.changed-origin",
+        evidence: [{ kind: "file", id: "docs/current.md" }]
+      })
+    );
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        rule: "source_origin_outdated",
+        memory_id: "source.missing-origin",
+        evidence: [{ kind: "file", id: "docs/deleted.md" }]
+      })
+    );
+  });
+
+  it("reports possible stale references after repeated file changes", async () => {
+    const projectRoot = await createTempRoot("memory-discipline-audit-possible-stale-");
+    const storage = storageSnapshot({
+      projectRoot,
+      version: 4,
+      objects: [
+        memoryObject({
+          id: "decision.changed-file",
+          title: "Changed file behavior",
+          body: longBody("Decision references src/changed.ts for current behavior."),
+          facets: { category: "decision-rationale", applies_to: ["src/changed.ts"] },
+          evidence: [{ kind: "file", id: "src/changed.ts" }]
+        })
+      ],
+      relations: []
+    });
+
+    const findings = await buildAuditFindings({
+      projectRoot,
+      storage,
+      gitFileChanges: [
+        {
+          file: "src/changed.ts",
+          commit: "1111111111111111111111111111111111111111",
+          shortCommit: "1111111",
+          timestamp: "2026-04-25T14:01:00+02:00",
+          subject: "Change behavior"
+        },
+        {
+          file: "src/changed.ts",
+          commit: "2222222222222222222222222222222222222222",
+          shortCommit: "2222222",
+          timestamp: "2026-04-25T14:02:00+02:00",
+          subject: "Change behavior again"
+        }
+      ]
+    });
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        severity: "info",
+        rule: "possibly_stale_changed_reference",
+        memory_id: "decision.changed-file",
+        evidence: expect.arrayContaining([
+          { kind: "file", id: "src/changed.ts" },
+          { kind: "commit", id: "1111111111111111111111111111111111111111" },
+          { kind: "commit", id: "2222222222222222222222222222222222222222" }
+        ])
+      })
+    );
+  });
+
+  it("reports unresolved active conflicts and supersession chains that need review", async () => {
+    const projectRoot = await createTempRoot("memory-discipline-audit-conflict-chain-");
+    const storage = storageSnapshot({
+      projectRoot,
+      version: 4,
+      objects: [
+        memoryObject({
+          id: "decision.conflict-a",
+          title: "Conflict A",
+          body: longBody("First active memory conflicts with another active claim."),
+          facets: { category: "decision-rationale" }
+        }),
+        memoryObject({
+          id: "decision.conflict-b",
+          title: "Conflict B",
+          body: longBody("Second active memory conflicts with another active claim."),
+          facets: { category: "decision-rationale" }
+        }),
+        memoryObject({
+          id: "question.conflict-review",
+          type: "question",
+          status: "open",
+          title: "Conflict review",
+          body: longBody("This linked question tracks a known unresolved conflict."),
+          facets: { category: "unresolved-conflict" }
+        }),
+        memoryObject({
+          id: "decision.conflict-c",
+          title: "Conflict C",
+          body: longBody("Third active memory has a linked conflict question."),
+          facets: { category: "decision-rationale" }
+        }),
+        memoryObject({
+          id: "decision.old",
+          status: "superseded",
+          title: "Old decision",
+          body: longBody("Old decision was superseded."),
+          supersededBy: "decision.replacement"
+        }),
+        memoryObject({
+          id: "decision.replacement",
+          title: "Replacement decision",
+          body: longBody("Replacement decision itself points at a newer memory."),
+          supersededBy: "decision.current"
+        }),
+        memoryObject({
+          id: "decision.current",
+          title: "Current decision",
+          body: longBody("Current replacement.")
+        }),
+        memoryObject({
+          id: "decision.old-inactive",
+          status: "superseded",
+          title: "Old inactive decision",
+          body: longBody("Old inactive decision points at stale replacement."),
+          supersededBy: "decision.stale-replacement"
+        }),
+        memoryObject({
+          id: "decision.stale-replacement",
+          status: "stale",
+          title: "Stale replacement",
+          body: longBody("Stale replacement is not current.")
+        })
+      ],
+      relations: [
+        relation({
+          id: "rel.conflict-needs-resolution",
+          from: "decision.conflict-a",
+          predicate: "conflicts_with",
+          to: "decision.conflict-b",
+          evidence: []
+        }),
+        relation({
+          id: "rel.conflict-linked-question",
+          from: "question.conflict-review",
+          predicate: "mentions",
+          to: "decision.conflict-c"
+        }),
+        relation({
+          id: "rel.conflict-has-question",
+          from: "decision.conflict-a",
+          predicate: "challenges",
+          to: "decision.conflict-c",
+          evidence: []
+        })
+      ]
+    });
+
+    const findings = await buildAuditFindings({ projectRoot, storage });
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        rule: "active_conflict_needs_resolution",
+        memory_id: "decision.conflict-a",
+        evidence: expect.arrayContaining([
+          { kind: "relation", id: "rel.conflict-needs-resolution" }
+        ])
+      })
+    );
+    expect(findings).not.toContainEqual(
+      expect.objectContaining({
+        rule: "active_conflict_needs_resolution",
+        evidence: expect.arrayContaining([
+          { kind: "relation", id: "rel.conflict-has-question" }
+        ])
+      })
+    );
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        rule: "supersession_chain_needs_review",
+        memory_id: "decision.old"
+      })
+    );
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        rule: "supersession_chain_needs_review",
+        memory_id: "decision.old-inactive"
+      })
+    );
+  });
+
   it("reports weak connectivity, unlinked applicability overlap, related_to overuse, and missing rationale gaps", async () => {
     const projectRoot = await createTempRoot("memory-discipline-audit-connectivity-");
     const storage = storageSnapshot({

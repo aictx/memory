@@ -1,11 +1,31 @@
 {
   "body_path": "memory/syntheses/feature-map.md",
-  "content_hash": "sha256:82d5270adbbfeb49e3138ec2e80101d491743fe9d8757ab1961f1e2281812675",
+  "content_hash": "sha256:2c3815603a24684c18528f03db5b861d295e201e5b4d2c8ebd9e1814dce06455",
   "created_at": "2026-05-16T18:52:44+02:00",
   "evidence": [
     {
       "id": "source.package-json",
       "kind": "source"
+    },
+    {
+      "id": "source.readme",
+      "kind": "source"
+    },
+    {
+      "id": "source.docs-src-content-docs-agent-integration",
+      "kind": "source"
+    },
+    {
+      "id": "src/discipline/audit.ts",
+      "kind": "file"
+    },
+    {
+      "id": "src/discipline/suggest.ts",
+      "kind": "file"
+    },
+    {
+      "id": "viewer/src/App.svelte",
+      "kind": "file"
     }
   ],
   "facets": {
@@ -15,7 +35,12 @@
       "src/cli/commands/check.ts",
       "src/cli/commands/diff.ts",
       "src/cli/commands/docs.ts",
-      "src/cli/commands/export.ts"
+      "src/cli/commands/export.ts",
+      "src/cli/commands/suggest.ts",
+      "src/discipline/audit.ts",
+      "src/discipline/suggest.ts",
+      "src/app/operations.ts",
+      "viewer/src/App.svelte"
     ],
     "category": "feature-map",
     "load_modes": [
@@ -41,5 +66,5 @@
   ],
   "title": "Feature map",
   "type": "synthesis",
-  "updated_at": "2026-05-16T18:52:44+02:00"
+  "updated_at": "2026-05-18T14:02:38+02:00"
 }

@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import fg from "fast-glob";
 
+import type { ProjectFileChange } from "../core/git.js";
 import { generateObjectId, generateRelationId } from "../core/ids.js";
 import type {
   Evidence,
@@ -26,6 +27,7 @@ import type {
   RememberMemoryInput,
   RememberMemoryKind
 } from "../remember/types.js";
+import type { AuditFinding, AuditRule } from "./audit.js";
 
 export type SuggestMode = "from_diff" | "bootstrap" | "after_task";
 
@@ -39,6 +41,7 @@ export interface SuggestReviewPacket {
   recommended_relations?: SuggestedRelation[];
   recommended_facets?: FacetCategory[];
   recommended_actions?: SuggestedMemoryAction[];
+  repair_candidates?: MemoryRepairCandidate[];
   save_decision_checklist?: string[];
   remember_template?: RememberMemoryInput;
   task?: string;
@@ -73,6 +76,15 @@ export interface SuggestedRelation {
   reason: string;
 }
 
+export interface MemoryRepairCandidate {
+  target_id: ObjectId;
+  rule: AuditRule;
+  confidence: RelationConfidence;
+  suggested_action: SuggestedMemoryActionType;
+  reason: string;
+  evidence: Evidence[];
+}
+
 export interface BuildSuggestFromDiffPacketOptions {
   changedFiles: readonly string[];
   storage: CanonicalStorageSnapshot;
@@ -87,6 +99,8 @@ export interface BuildSuggestAfterTaskPacketOptions {
   task: string;
   changedFiles: readonly string[];
   storage: CanonicalStorageSnapshot;
+  auditFindings?: readonly AuditFinding[];
+  gitFileChanges?: readonly ProjectFileChange[];
 }
 
 export type BootstrapPatchChange =
@@ -403,8 +417,22 @@ export function buildSuggestAfterTaskPacket(
   options: BuildSuggestAfterTaskPacketOptions
 ): SuggestReviewPacket {
   const changedFiles = uniqueSorted(options.changedFiles);
-  const related = relatedMemoryIds(options.storage, changedFiles);
-  const possibleStale = possibleStaleIds(options.storage, changedFiles);
+  const repairCandidates = repairCandidatesForAfterTask({
+    storage: options.storage,
+    changedFiles,
+    auditFindings: options.auditFindings ?? [],
+    gitFileChanges: options.gitFileChanges ?? []
+  });
+  const related = uniqueSorted([
+    ...relatedMemoryIds(options.storage, changedFiles),
+    ...repairCandidates.map((candidate) => candidate.target_id)
+  ]);
+  const possibleStale = uniqueSorted([
+    ...possibleStaleIds(options.storage, changedFiles),
+    ...repairCandidates
+      .filter((candidate) => candidateSuggestsStale(candidate))
+      .map((candidate) => candidate.target_id)
+  ]);
   const recommendedRelationsForChanges = recommendedRelations(options.storage, changedFiles);
   const recommendedMemory = recommendedMemoryForTask(options.task, changedFiles);
   const recommendedFacets = recommendedFacetsForTask(options.task, changedFiles, options.storage);
@@ -427,8 +455,10 @@ export function buildSuggestAfterTaskPacket(
       possibleStaleIds: possibleStale,
       recommendedEvidence,
       recommendedRelations: recommendedRelationsForChanges,
+      repairCandidates,
       hasRelatedMemoryConflict: activeConflictsTouchRelatedMemory(options.storage, changedFiles)
     }),
+    ...(repairCandidates.length === 0 ? {} : { repair_candidates: repairCandidates }),
     save_decision_checklist: [...SAVE_DECISION_CHECKLIST],
     remember_template: rememberTemplateForAfterTask({
       task: options.task,
@@ -754,6 +784,7 @@ interface RecommendedActionsForAfterTaskOptions {
   possibleStaleIds: readonly ObjectId[];
   recommendedEvidence: readonly Evidence[];
   recommendedRelations: readonly SuggestedRelation[];
+  repairCandidates: readonly MemoryRepairCandidate[];
   hasRelatedMemoryConflict: boolean;
 }
 
@@ -830,6 +861,19 @@ function recommendedActionsForAfterTask(
     });
   }
 
+  for (const candidate of options.repairCandidates.slice(0, 8)) {
+    const action = memoryActionForRepairCandidate({
+      task: options.task,
+      changedFiles: options.changedFiles,
+      candidate,
+      fallbackEvidence: evidence
+    });
+
+    if (!hasEquivalentAction(actions, action)) {
+      actions.push(action);
+    }
+  }
+
   if (hasStaleOrConflictSignal) {
     for (const id of options.possibleStaleIds.slice(0, 5)) {
       actions.push({
@@ -857,7 +901,7 @@ function recommendedActionsForAfterTask(
   }
 
   for (const id of options.relatedMemoryIds.slice(0, 5)) {
-    actions.push({
+    const action: SuggestedMemoryAction = {
       rank: 0,
       action: "update_existing",
       confidence: "high",
@@ -876,7 +920,11 @@ function recommendedActionsForAfterTask(
           }
         ]
       }
-    });
+    };
+
+    if (!hasEquivalentAction(actions, action)) {
+      actions.push(action);
+    }
   }
 
   if (shouldCreateConflictQuestion) {
@@ -949,6 +997,107 @@ function recommendedActionsForAfterTask(
   }
 
   return rankSuggestedMemoryActions(actions);
+}
+
+function memoryActionForRepairCandidate(input: {
+  task: string;
+  changedFiles: readonly string[];
+  candidate: MemoryRepairCandidate;
+  fallbackEvidence: readonly Evidence[];
+}): SuggestedMemoryAction {
+  const evidence = input.candidate.evidence.length === 0
+    ? [...input.fallbackEvidence]
+    : [...input.candidate.evidence];
+  const appliesTo = appliesToForRepairCandidate(input.candidate, input.changedFiles);
+
+  if (input.candidate.suggested_action === "mark_stale") {
+    return {
+      rank: 0,
+      action: "mark_stale",
+      confidence: input.candidate.confidence,
+      target_id: input.candidate.target_id,
+      reason: input.candidate.reason,
+      guidance: "Use this only when current evidence confirms the target memory is wrong or no longer useful.",
+      ...(evidence.length === 0 ? {} : { evidence }),
+      remember_template: {
+        task: input.task,
+        stale: [{ id: input.candidate.target_id, reason: "" }]
+      }
+    };
+  }
+
+  if (input.candidate.suggested_action === "supersede_existing") {
+    return {
+      rank: 0,
+      action: "supersede_existing",
+      confidence: input.candidate.confidence,
+      target_id: input.candidate.target_id,
+      reason: input.candidate.reason,
+      guidance:
+        "Use this when a replacement memory already exists or will be created in the same repair.",
+      ...(evidence.length === 0 ? {} : { evidence })
+    };
+  }
+
+  if (input.candidate.suggested_action === "create_memory") {
+    return createMemoryAction({
+      task: input.task,
+      kind: "question",
+      category: "unresolved-conflict",
+      confidence: input.candidate.confidence,
+      evidence,
+      appliesTo,
+      reason: input.candidate.reason,
+      guidance:
+        "Use this only when current code and evidence cannot resolve the conflict during this task."
+    });
+  }
+
+  return {
+    rank: 0,
+    action: "update_existing",
+    confidence: input.candidate.confidence,
+    target_id: input.candidate.target_id,
+    reason: input.candidate.reason,
+    guidance:
+      "Review the advisory evidence and update the target memory with the current verified claim.",
+    ...(evidence.length === 0 ? {} : { evidence }),
+    remember_template: {
+      task: input.task,
+      updates: [
+        {
+          id: input.candidate.target_id,
+          body: "",
+          ...(appliesTo.length === 0 ? {} : { applies_to: appliesTo }),
+          ...(evidence.length === 0 ? {} : { evidence })
+        }
+      ]
+    }
+  };
+}
+
+function appliesToForRepairCandidate(
+  candidate: MemoryRepairCandidate,
+  changedFiles: readonly string[]
+): string[] {
+  const evidenceFiles = candidate.evidence
+    .filter((item) => item.kind === "file")
+    .map((item) => item.id);
+
+  return uniqueSorted([...changedFiles, ...evidenceFiles]);
+}
+
+function hasEquivalentAction(
+  actions: readonly SuggestedMemoryAction[],
+  candidate: SuggestedMemoryAction
+): boolean {
+  return actions.some(
+    (action) =>
+      action.action === candidate.action &&
+      action.target_id === candidate.target_id &&
+      action.memory_kind === candidate.memory_kind &&
+      action.category === candidate.category
+  );
 }
 
 function createMemoryAction(input: {
@@ -3505,6 +3654,206 @@ function possibleStaleIds(
     .sort();
 }
 
+function repairCandidatesForAfterTask(options: {
+  storage: CanonicalStorageSnapshot;
+  changedFiles: readonly string[];
+  auditFindings: readonly AuditFinding[];
+  gitFileChanges: readonly ProjectFileChange[];
+}): MemoryRepairCandidate[] {
+  const candidates = new Map<string, MemoryRepairCandidate>();
+
+  for (const finding of options.auditFindings) {
+    const candidate = repairCandidateForAuditFinding(finding, options.storage);
+
+    if (candidate === null) {
+      continue;
+    }
+
+    candidates.set(repairCandidateKey(candidate), candidate);
+  }
+
+  for (const candidate of repairCandidatesForRecentFileHistory(
+    options.storage,
+    options.gitFileChanges
+  )) {
+    candidates.set(repairCandidateKey(candidate), candidate);
+  }
+
+  return [...candidates.values()].sort(compareRepairCandidates).slice(0, 12);
+}
+
+function repairCandidateForAuditFinding(
+  finding: AuditFinding,
+  storage: CanonicalStorageSnapshot
+): MemoryRepairCandidate | null {
+  if (!isCurrentMemoryId(storage, finding.memory_id)) {
+    return null;
+  }
+
+  switch (finding.rule) {
+    case "possibly_stale_changed_reference":
+      return {
+        target_id: finding.memory_id,
+        rule: finding.rule,
+        confidence: "medium",
+        suggested_action: "update_existing",
+        reason: "Audit found referenced files with repeated changes after this memory was last updated.",
+        evidence: [...finding.evidence]
+      };
+    case "source_origin_outdated":
+      return {
+        target_id: finding.memory_id,
+        rule: finding.rule,
+        confidence: "high",
+        suggested_action: "update_existing",
+        reason: "Audit found source origin evidence that is missing or no longer matches the current file.",
+        evidence: [...finding.evidence]
+      };
+    case "referenced_file_missing":
+      return {
+        target_id: finding.memory_id,
+        rule: finding.rule,
+        confidence: "high",
+        suggested_action: "update_existing",
+        reason: "Audit found file references that no longer exist in the working tree.",
+        evidence: [...finding.evidence]
+      };
+    case "active_conflict_needs_resolution":
+      return {
+        target_id: finding.memory_id,
+        rule: finding.rule,
+        confidence: "high",
+        suggested_action: "create_memory",
+        reason:
+          "Audit found an active conflict relation without evidence or a linked unresolved-conflict question.",
+        evidence: [...finding.evidence]
+      };
+    case "supersession_chain_needs_review":
+      return {
+        target_id: finding.memory_id,
+        rule: finding.rule,
+        confidence: "medium",
+        suggested_action: "supersede_existing",
+        reason: "Audit found a supersession chain that should be reviewed or collapsed.",
+        evidence: [...finding.evidence]
+      };
+    case "missing_object_evidence":
+    case "missing_evidence":
+    case "synthesis_missing_source_provenance":
+      return {
+        target_id: finding.memory_id,
+        rule: finding.rule,
+        confidence: "medium",
+        suggested_action: "update_existing",
+        reason: "Audit found weak provenance that can usually be repaired by updating evidence or relations.",
+        evidence: [...finding.evidence]
+      };
+    default:
+      return null;
+  }
+}
+
+function repairCandidatesForRecentFileHistory(
+  storage: CanonicalStorageSnapshot,
+  gitFileChanges: readonly ProjectFileChange[]
+): MemoryRepairCandidate[] {
+  const candidates: MemoryRepairCandidate[] = [];
+  const changesByFile = new Map<string, ProjectFileChange[]>();
+
+  for (const change of gitFileChanges) {
+    changesByFile.set(change.file, [...(changesByFile.get(change.file) ?? []), change]);
+  }
+
+  for (const object of storage.objects
+    .filter((item) => STALE_CANDIDATE_STATUSES.has(item.sidecar.status))
+    .sort(compareObjectsById)) {
+    const updatedAt = timestampMillis(object.sidecar.updated_at);
+
+    if (updatedAt === null) {
+      continue;
+    }
+
+    for (const [file, changes] of [...changesByFile.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+      if (!objectMatchesFiles(object, [file])) {
+        continue;
+      }
+
+      const commits = uniqueSorted(
+        changes
+          .filter((change) => {
+            const changedAt = timestampMillis(change.timestamp);
+
+            return changedAt !== null && changedAt > updatedAt;
+          })
+          .map((change) => change.commit)
+      );
+
+      if (commits.length < 2) {
+        continue;
+      }
+
+      candidates.push({
+        target_id: object.sidecar.id,
+        rule: "possibly_stale_changed_reference",
+        confidence: "medium",
+        suggested_action: "update_existing",
+        reason: "Recent Git history changed files related to this memory multiple times after it was last updated.",
+        evidence: [
+          { kind: "file", id: file },
+          ...commits.slice(0, 4).map((commit) => ({ kind: "commit", id: commit }) satisfies Evidence)
+        ]
+      });
+      break;
+    }
+  }
+
+  return candidates;
+}
+
+function candidateSuggestsStale(candidate: MemoryRepairCandidate): boolean {
+  return new Set<SuggestedMemoryActionType>([
+    "update_existing",
+    "mark_stale",
+    "supersede_existing"
+  ]).has(candidate.suggested_action);
+}
+
+function isCurrentMemoryId(
+  storage: CanonicalStorageSnapshot,
+  id: ObjectId
+): boolean {
+  return storage.objects.some(
+    (object) => object.sidecar.id === id && STALE_CANDIDATE_STATUSES.has(object.sidecar.status)
+  );
+}
+
+function repairCandidateKey(candidate: MemoryRepairCandidate): string {
+  return `${candidate.target_id}\u001f${candidate.rule}\u001f${candidate.suggested_action}`;
+}
+
+function compareRepairCandidates(
+  left: MemoryRepairCandidate,
+  right: MemoryRepairCandidate
+): number {
+  return (
+    repairConfidenceRank(right.confidence) - repairConfidenceRank(left.confidence) ||
+    left.target_id.localeCompare(right.target_id) ||
+    left.rule.localeCompare(right.rule) ||
+    left.suggested_action.localeCompare(right.suggested_action)
+  );
+}
+
+function repairConfidenceRank(confidence: RelationConfidence): number {
+  switch (confidence) {
+    case "high":
+      return 2;
+    case "medium":
+      return 1;
+    case "low":
+      return 0;
+  }
+}
+
 function objectMatchesFiles(
   object: StoredMemoryObject,
   changedFiles: readonly string[]
@@ -3641,6 +3990,12 @@ function normalizeForSearch(value: string): string {
 
 function normalizePath(value: string): string {
   return value.replaceAll("\\", "/");
+}
+
+function timestampMillis(value: string): number | null {
+  const timestamp = Date.parse(value);
+
+  return Number.isNaN(timestamp) ? null : timestamp;
 }
 
 function uniqueSorted(values: readonly string[]): string[] {

@@ -51,6 +51,39 @@
     id: string;
   }
 
+  type AuditSeverity = "warning" | "info";
+  type AuditRule =
+    | "vague_memory"
+    | "duplicate_like_title_or_tags"
+    | "stale_or_superseded_cleanup"
+    | "referenced_file_missing"
+    | "missing_tags"
+    | "missing_facets"
+    | "missing_object_evidence"
+    | "source_missing_origin"
+    | "synthesis_missing_source_provenance"
+    | "task_diary_like_memory"
+    | "oversized_vague_memory"
+    | "duplicate_like_facet_category"
+    | "missing_evidence"
+    | "manifest_version_contradiction"
+    | "weakly_connected_memory"
+    | "unlinked_applicability_overlap"
+    | "excessive_related_to"
+    | "changed_file_missing_rationale"
+    | "possibly_stale_changed_reference"
+    | "source_origin_outdated"
+    | "active_conflict_needs_resolution"
+    | "supersession_chain_needs_review";
+
+  interface AuditFinding {
+    severity: AuditSeverity;
+    rule: AuditRule;
+    memory_id: string;
+    message: string;
+    evidence: Evidence[];
+  }
+
   interface ObjectFacets {
     category: FacetCategory;
     applies_to?: string[];
@@ -108,6 +141,7 @@
     };
     role_coverage: RoleCoverageData;
     lenses: MemoryLensData[];
+    audit_findings: AuditFinding[];
     storage_warnings: string[];
   }
 
@@ -193,7 +227,7 @@
   type LoadPreviewEnvelope = ViewerSuccessEnvelope<LoadPreviewData> | ViewerErrorEnvelope;
   type ProjectDeleteEnvelope = ViewerSuccessEnvelope<ViewerProjectDeleteData> | ViewerErrorEnvelope;
   type ViewerState = "loading" | "ready" | "error";
-  type ViewerScreen = "projects" | "memories" | "detail" | "graph" | "export";
+  type ViewerScreen = "projects" | "memories" | "detail" | "graph" | "maintenance" | "export";
   type ExportState = "idle" | "running" | "success" | "error";
   type PreviewState = "idle" | "running" | "success" | "error";
   type LayerFilter = "all" | "memories" | "syntheses" | "sources" | "inactive";
@@ -247,6 +281,14 @@
     label: string;
     value: string;
     detail: string;
+  }
+
+  interface MaintenanceGroup {
+    memoryId: string;
+    object: MemoryObjectSummary | null;
+    findings: AuditFinding[];
+    relations: MemoryRelationSummary[];
+    suggestedAction: string;
   }
 
   interface DocGraphNode {
@@ -544,12 +586,17 @@
   );
   const objects = $derived(bootstrap?.objects ?? []);
   const relations = $derived(bootstrap?.relations ?? []);
+  const auditFindings = $derived(bootstrap?.audit_findings ?? []);
   const objectById = $derived(new Map(objects.map((object) => [object.id, object])));
+  const auditFindingsByMemory = $derived.by(() => groupAuditFindingsByMemory(auditFindings));
   const filteredObjects = $derived.by(() =>
     objects.filter((object) => objectMatchesFilters(object))
   );
   const selectedObject = $derived.by(() =>
     selectedObjectId === null ? null : objectById.get(selectedObjectId) ?? null
+  );
+  const selectedObjectFindings = $derived(
+    selectedObject === null ? [] : auditFindingsByMemory.get(selectedObject.id) ?? []
   );
   const graphObjects = $derived.by(() =>
     objects.filter((object) =>
@@ -644,6 +691,10 @@
   const activeMemoryCount = $derived(objects.filter((object) => isCurrentStatus(object.status)).length);
   const facetCategoryCount = $derived(facetCategoryOptions.length);
   const staleMemoryCount = $derived(objects.filter((object) => object.status === "stale" || object.status === "superseded").length);
+  const advisoryMemoryCount = $derived(auditFindingsByMemory.size);
+  const maintenanceGroups = $derived.by(() =>
+    buildMaintenanceGroups(auditFindings, objectById, relations)
+  );
   const trustLabel = $derived.by(() => selectedProject === null ? "No project" : gitLabel(selectedProject));
   const trustDescription = $derived.by(() =>
     selectedProject === null ? "No project is selected." : gitDescription(selectedProject)
@@ -1063,6 +1114,11 @@
     if (selectedGraphObjectId === null) {
       selectedGraphObjectId = preferredGraphObjectId();
     }
+  }
+
+  function showMaintenance(): void {
+    currentScreen = selectedProjectId === null ? "projects" : "maintenance";
+    closeSidebarDrawer();
   }
 
   function showExport(): void {
@@ -1952,6 +2008,107 @@
       : `${relation.status} / ${relation.confidence} confidence`;
   }
 
+  function groupAuditFindingsByMemory(
+    findings: readonly AuditFinding[]
+  ): Map<string, AuditFinding[]> {
+    const groups = new Map<string, AuditFinding[]>();
+
+    for (const finding of findings) {
+      groups.set(finding.memory_id, [...(groups.get(finding.memory_id) ?? []), finding]);
+    }
+
+    return groups;
+  }
+
+  function buildMaintenanceGroups(
+    findings: readonly AuditFinding[],
+    memoryObjects: Map<string, MemoryObjectSummary>,
+    relationList: readonly MemoryRelationSummary[]
+  ): MaintenanceGroup[] {
+    return [...groupAuditFindingsByMemory(findings).entries()]
+      .map(([memoryId, memoryFindings]) => ({
+        memoryId,
+        object: memoryObjects.get(memoryId) ?? null,
+        findings: [...memoryFindings].sort(compareAuditFindings),
+        relations: relationList
+          .filter((relation) => relation.from === memoryId || relation.to === memoryId)
+          .sort(compareRelations),
+        suggestedAction: suggestedMaintenanceAction(memoryFindings)
+      }))
+      .sort(compareMaintenanceGroups);
+  }
+
+  function compareMaintenanceGroups(left: MaintenanceGroup, right: MaintenanceGroup): number {
+    return (
+      maintenanceSeverityRank(right.findings) - maintenanceSeverityRank(left.findings) ||
+      left.memoryId.localeCompare(right.memoryId)
+    );
+  }
+
+  function maintenanceSeverityRank(findings: readonly AuditFinding[]): number {
+    return findings.some((finding) => finding.severity === "warning") ? 1 : 0;
+  }
+
+  function compareAuditFindings(left: AuditFinding, right: AuditFinding): number {
+    return (
+      auditSeverityOrder(left.severity) - auditSeverityOrder(right.severity) ||
+      left.rule.localeCompare(right.rule) ||
+      left.message.localeCompare(right.message)
+    );
+  }
+
+  function auditSeverityOrder(severity: AuditSeverity): number {
+    return severity === "warning" ? 0 : 1;
+  }
+
+  function advisoryLabel(findings: readonly AuditFinding[]): string {
+    if (findings.some((finding) => finding.rule === "possibly_stale_changed_reference")) {
+      return "possibly stale";
+    }
+
+    if (findings.some((finding) => finding.rule === "source_origin_outdated")) {
+      return "source changed";
+    }
+
+    if (findings.some((finding) => finding.rule === "active_conflict_needs_resolution")) {
+      return "conflict";
+    }
+
+    if (findings.some((finding) => finding.rule === "referenced_file_missing")) {
+      return "missing file";
+    }
+
+    return findings.some((finding) => finding.severity === "warning") ? "needs review" : "advisory";
+  }
+
+  function suggestedMaintenanceAction(findings: readonly AuditFinding[]): string {
+    if (findings.some((finding) => finding.rule === "active_conflict_needs_resolution")) {
+      return "Add evidence or create a linked unresolved-conflict question.";
+    }
+
+    if (findings.some((finding) => finding.rule === "source_origin_outdated")) {
+      return "Refresh the source record and any syntheses derived from it.";
+    }
+
+    if (findings.some((finding) => finding.rule === "referenced_file_missing")) {
+      return "Update, supersede, or mark stale after checking current files.";
+    }
+
+    if (findings.some((finding) => finding.rule === "supersession_chain_needs_review")) {
+      return "Review the replacement chain and collapse it when a current replacement is known.";
+    }
+
+    if (findings.some((finding) => finding.rule === "possibly_stale_changed_reference")) {
+      return "Verify the memory against current code before relying on it.";
+    }
+
+    return "Review the audit evidence and repair only if current evidence supports the change.";
+  }
+
+  function evidenceLabel(evidence: Evidence): string {
+    return `${evidence.kind}:${evidence.id}`;
+  }
+
   function parsePreviewTokenBudget(raw: string): { ok: true; value: number | null } | { ok: false; message: string } {
     const trimmed = raw.trim();
 
@@ -2273,7 +2430,7 @@
             <div><dt>{activeMemoryCount}</dt><dd>active</dd></div>
             <div><dt>{relations.length}</dt><dd>links</dd></div>
             <div><dt>{facetCategoryCount}</dt><dd>facets</dd></div>
-            <div><dt>{staleMemoryCount}</dt><dd>stale</dd></div>
+            <div><dt>{advisoryMemoryCount}</dt><dd>review</dd></div>
           </dl>
         {/if}
 
@@ -2322,6 +2479,17 @@
             >
               <span class="nav-row-icon" aria-hidden="true">◎</span>
               <span>Graph</span>
+            </button>
+            <button
+              type="button"
+              class:active={currentScreen === "maintenance"}
+              aria-current={currentScreen === "maintenance" ? "page" : undefined}
+              data-testid="nav-maintenance"
+              disabled={selectedProjectId === null}
+              onclick={showMaintenance}
+            >
+              <span class="nav-row-icon" aria-hidden="true">!</span>
+              <span>Maintenance</span>
             </button>
             {#if !isDemoMode}
               <button
@@ -2696,6 +2864,78 @@
             </section>
           </section>
         </article>
+      {:else if currentScreen === "maintenance"}
+        <article class="maintenance-page" aria-labelledby="maintenance-title" data-testid="maintenance-view">
+          <header class="page-header compact">
+            <div>
+              <p class="eyebrow">Review queue</p>
+              <h2 id="maintenance-title">Maintenance</h2>
+              <p>
+                {auditFindings.length} audit findings across {advisoryMemoryCount} memories. Possible staleness is advisory; repair memory only after checking current evidence.
+              </p>
+            </div>
+            <dl class="graph-counts" aria-label="Maintenance counts">
+              <div><dt>Review</dt><dd>{advisoryMemoryCount}</dd></div>
+              <div><dt>Findings</dt><dd>{auditFindings.length}</dd></div>
+              <div><dt>Inactive</dt><dd>{staleMemoryCount}</dd></div>
+            </dl>
+          </header>
+
+          <section class="maintenance-list" aria-label="Audit findings by memory">
+            {#each maintenanceGroups as group (group.memoryId)}
+              <article class="maintenance-card" data-testid={`maintenance-card-${group.memoryId}`}>
+                <div class="maintenance-card-header">
+                  <div>
+                    <p class="eyebrow">{advisoryLabel(group.findings)}</p>
+                    <h3>{group.object?.title ?? group.memoryId}</h3>
+                    <p class="mono">{group.memoryId}</p>
+                  </div>
+                  {#if group.object !== null}
+                    <button type="button" class="ghost-action" onclick={() => selectRelated(group.memoryId)}>
+                      Open object
+                    </button>
+                  {/if}
+                </div>
+                <p class="maintenance-action">{group.suggestedAction}</p>
+                <ul class="maintenance-findings">
+                  {#each group.findings as finding (`${finding.rule}-${finding.message}`)}
+                    <li>
+                      <span class={`advisory-badge ${finding.severity}`}>{finding.severity}</span>
+                      <strong>{finding.rule}</strong>
+                      <p>{finding.message}</p>
+                      <small>
+                        {#each finding.evidence.slice(0, 6) as evidence, index (`${finding.rule}-${evidence.kind}-${evidence.id}-${index}`)}
+                          <code>{evidenceLabel(evidence)}</code>
+                        {/each}
+                      </small>
+                    </li>
+                  {/each}
+                </ul>
+                {#if group.relations.length > 0}
+                  <details class="notion-toggle">
+                    <summary>Relation chain</summary>
+                    <ul class="relation-list">
+                      {#each group.relations as relation (relation.id)}
+                        <li>
+                          <span class="pill">{relation.predicate}</span>
+                          <button type="button" onclick={() => selectRelated(relationCounterpart(relation, group.memoryId))}>
+                            {relationTargetLabel(relation, group.memoryId)}
+                          </button>
+                          <small>{relationStatusLabel(relation)}</small>
+                        </li>
+                      {/each}
+                    </ul>
+                  </details>
+                {/if}
+              </article>
+            {:else}
+              <section class="empty-panel" data-testid="maintenance-empty">
+                <h3>No audit findings</h3>
+                <p>Current deterministic checks do not flag stale, conflicting, or weakly evidenced memory.</p>
+              </section>
+            {/each}
+          </section>
+        </article>
       {:else if currentScreen === "export" && !isDemoMode}
         <section class="export-page" aria-labelledby="export-title" data-testid="export-view">
           <header class="page-header compact">
@@ -2994,6 +3234,9 @@
                             <span>{facetCategoryLabel(object)}</span>
                             <span>{scopeLabel(object.scope)}</span>
                             <span>{editedDateLabel(object)}</span>
+                            {#if auditFindingsByMemory.has(object.id)}
+                              <span class="advisory-chip">{advisoryLabel(auditFindingsByMemory.get(object.id) ?? [])}</span>
+                            {/if}
                           </span>
                           <small>{bodyPreview(object)}</small>
                         </span>
@@ -3037,6 +3280,26 @@
                 </dl>
 
                 <div class="notion-toggle-list">
+                  {#if selectedObjectFindings.length > 0}
+                    <details class="notion-toggle advisory-details" open data-testid="selected-object-advisories">
+                      <summary>Maintenance advisories</summary>
+                      <ul class="maintenance-findings compact">
+                        {#each selectedObjectFindings as finding (`${finding.rule}-${finding.message}`)}
+                          <li>
+                            <span class={`advisory-badge ${finding.severity}`}>{finding.severity}</span>
+                            <strong>{finding.rule}</strong>
+                            <p>{finding.message}</p>
+                            <small>
+                              {#each finding.evidence.slice(0, 6) as evidence, index (`${finding.rule}-${evidence.kind}-${evidence.id}-${index}`)}
+                                <code>{evidenceLabel(evidence)}</code>
+                              {/each}
+                            </small>
+                          </li>
+                        {/each}
+                      </ul>
+                    </details>
+                  {/if}
+
                   <details class="notion-toggle" open>
                     <summary>Memory</summary>
                     <section class="markdown-view" aria-label="Markdown body" data-testid="markdown-view">
@@ -5524,6 +5787,12 @@
     font-weight: 760;
   }
 
+  .object-meta .advisory-chip {
+    border-color: #d99b69;
+    color: #8a461a;
+    background: #fff4e8;
+  }
+
   .object-list small {
     display: block;
     margin-top: 7px;
@@ -5540,6 +5809,95 @@
     font-style: normal;
     font-weight: 620;
     text-align: right;
+  }
+
+  .maintenance-page {
+    display: grid;
+    gap: 22px;
+    padding: 28px;
+  }
+
+  .maintenance-list {
+    display: grid;
+    gap: 14px;
+  }
+
+  .maintenance-card {
+    display: grid;
+    gap: 14px;
+    border: 1px solid #e4dfd6;
+    border-radius: 8px;
+    padding: 18px;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgb(16 24 40 / 4%);
+  }
+
+  .maintenance-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: flex-start;
+  }
+
+  .maintenance-card h3 {
+    margin: 2px 0 4px;
+    color: #25231f;
+    font-size: 1.2rem;
+    line-height: 1.2;
+  }
+
+  .maintenance-action {
+    margin: 0;
+    color: #5b5650;
+  }
+
+  .maintenance-findings {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .maintenance-findings li {
+    display: grid;
+    gap: 5px;
+    border-left: 3px solid #ded7cc;
+    padding: 2px 0 2px 12px;
+  }
+
+  .maintenance-findings.compact li {
+    border-left-color: #d99b69;
+  }
+
+  .maintenance-findings p,
+  .maintenance-findings small {
+    margin: 0;
+    color: #665f56;
+  }
+
+  .maintenance-findings small {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .advisory-badge {
+    width: max-content;
+    border: 1px solid #d6cec2;
+    border-radius: 999px;
+    padding: 2px 8px;
+    color: #675f56;
+    background: #f7f3ec;
+    font-size: 0.72rem;
+    font-weight: 780;
+    text-transform: uppercase;
+  }
+
+  .advisory-badge.warning {
+    border-color: #d99b69;
+    color: #8a461a;
+    background: #fff4e8;
   }
 
   .memory-preview {

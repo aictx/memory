@@ -12,6 +12,7 @@ import {
   buildSuggestAfterTaskPacket,
   buildSuggestFromDiffPacket
 } from "../../../src/discipline/suggest.js";
+import type { AuditFinding } from "../../../src/discipline/audit.js";
 import type { ObjectId, ObjectStatus, ObjectType } from "../../../src/core/types.js";
 import type { MemoryObjectSidecar, StoredMemoryObject } from "../../../src/storage/objects.js";
 import type { CanonicalStorageSnapshot } from "../../../src/storage/read.js";
@@ -243,6 +244,79 @@ describe("suggest discipline packets", () => {
     expect(packet.recommended_actions?.some((action) => action.action === "save_nothing")).toBe(
       true
     );
+  });
+
+  it("adds repair candidates from audit findings and ranks repair actions before new memory", () => {
+    const storage = storageSnapshot({
+      objects: [
+        memoryObject({
+          id: "source.readme",
+          type: "source",
+          status: "active",
+          title: "Source README",
+          body: "README source record references README.md."
+        }),
+        memoryObject({
+          id: "decision.retry",
+          type: "decision",
+          status: "active",
+          title: "Retry behavior",
+          body: "Retry behavior is documented in src/retry.ts."
+        })
+      ],
+      relations: []
+    });
+    const auditFindings: AuditFinding[] = [
+      {
+        severity: "warning",
+        rule: "source_origin_outdated",
+        memory_id: "source.readme",
+        message: "Source origin digest no longer matches.",
+        evidence: [{ kind: "file", id: "README.md" }]
+      },
+      {
+        severity: "info",
+        rule: "possibly_stale_changed_reference",
+        memory_id: "decision.retry",
+        message: "Referenced file changed repeatedly.",
+        evidence: [{ kind: "file", id: "src/retry.ts" }]
+      }
+    ];
+
+    const packet = buildSuggestAfterTaskPacket({
+      task: "Add a product feature and repair stale memory",
+      changedFiles: ["src/feature.ts"],
+      storage,
+      auditFindings
+    });
+
+    expect(packet.repair_candidates).toEqual([
+      expect.objectContaining({
+        target_id: "source.readme",
+        rule: "source_origin_outdated",
+        suggested_action: "update_existing",
+        confidence: "high"
+      }),
+      expect.objectContaining({
+        target_id: "decision.retry",
+        rule: "possibly_stale_changed_reference",
+        suggested_action: "update_existing",
+        confidence: "medium"
+      })
+    ]);
+    expect(packet.related_memory_ids).toEqual(["decision.retry", "source.readme"]);
+    expect(packet.possible_stale_ids).toEqual(["decision.retry", "source.readme"]);
+    expect(packet.recommended_actions?.[0]).toMatchObject({
+      action: "update_existing",
+      target_id: "source.readme",
+      confidence: "high"
+    });
+    expect(packet.recommended_actions?.[1]).toMatchObject({
+      action: "update_existing",
+      target_id: "decision.retry"
+    });
+    expect(packet.recommended_actions?.findIndex((action) => action.action === "create_memory"))
+      .toBeGreaterThan(1);
   });
 
   it("ranks save-nothing first when no durable after-task signal is detected", () => {

@@ -4,4 +4,6 @@ This source records that durable Memory can be derived from `README.md`.
 
 Captured signals:
 - README title: Memory
-- README summary: <p align="center"> <a href="https://aictx.dev"><img alt="Website" src="https://img.shields.io/badge/website-aictx.dev-111214?style=for-the-badge"></a> <a href="https://docs.aictx.dev"><img alt="Docs" src="https://img.shields.io/badge/docs-.
+- README positions Memory as a local wiki for AI coding agents: agents load repo context, keep it current, and humans review file-based changes.
+- README describes the viewer as an inspectable local review surface for schema, objects, relation provenance, maintenance advisories, and graph context.
+- README keeps the product promise local-first, Git-reviewable, and free of embeddings or hosted infrastructure for core behavior.

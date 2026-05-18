@@ -90,8 +90,9 @@ memory wiki lint --json
 
 `wiki lint` is a wiki-language alias over audit semantics. It reports stale or
 superseded cleanup, weak provenance, missing source origin, excessive
-`related_to`, active contradiction signals, role coverage gaps, and other
-deterministic memory hygiene findings. It does not mutate canonical files.
+`related_to`, active contradiction signals, stale file-origin digests, missing
+referenced files, role coverage gaps, and other deterministic memory hygiene
+findings. It does not mutate canonical files.
 
 ## Log
 
@@ -114,4 +115,4 @@ The same mechanics also work for research notebooks, personal knowledge bases,
 competitive analysis, course notes, and team knowledge bases. In those cases,
 keep source records explicit, link syntheses back to sources, and use
 `wiki lint` periodically to find stale claims, contradiction signals, missing
-origins, and unlinked concepts.
+origins, changed source files, and unlinked concepts.

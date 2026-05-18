@@ -7,6 +7,9 @@ are called out in the release notes.
 
 ## Unreleased
 
+- Added advisory stale/conflict maintenance signals to `memory audit`,
+  repair-oriented candidates to `memory suggest --after-task`, and a viewer
+  Maintenance screen for reviewable memory hygiene.
 - Added storage v4 source `origin` metadata, `supports`/`challenges` relation
   predicates, and the CLI-only `memory wiki` workflow for source-backed ingest,
   filing, linting, and event logs.

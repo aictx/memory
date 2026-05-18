@@ -48,6 +48,26 @@ Common repairs use the same memory types as normal work:
 Facets such as `domain`, `bounded-context`, `capability`, `business-rule`, and
 `unresolved-conflict` are optional retrieval hints. Keep them plain-language.
 
+## Common repair patterns
+
+- User correction: update the active memory if the corrected claim should
+  remain, or mark the old memory stale when it should not be loaded again.
+- Code contradicts loaded memory: trust current code and tests, then update,
+  supersede, or mark stale based on the verified behavior.
+- Architecture change: update the maintained synthesis or decision and add
+  file/source evidence for the changed area.
+- Deleted or renamed file: repair `applies_to`, object evidence, source
+  origin, or relation evidence; mark stale only when the underlying claim is no
+  longer useful.
+- Duplicate or competing memories: prefer updating one canonical memory,
+  linking a real conflict with evidence, or creating an open
+  `unresolved-conflict` question when current evidence cannot decide.
+
+`memory audit` and `memory suggest --after-task --json` can surface possible
+repairs, including possible stale references and stale source origins. Treat
+those as review prompts. Memory does not automatically prove a stored claim is
+wrong.
+
 ## When to save nothing
 
 Save nothing when the task produced no durable future value. Passing tests,

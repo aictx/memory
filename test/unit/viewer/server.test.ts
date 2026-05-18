@@ -425,6 +425,7 @@ describe("viewer local server", () => {
           project: { id: string; name: string };
           objects: unknown[];
           relations: unknown[];
+          audit_findings: unknown[];
           counts: {
             objects: number;
             relations: number;
@@ -442,6 +443,7 @@ describe("viewer local server", () => {
       expect(envelope.data.project.id).toMatch(/^project\./);
       expect(envelope.data.objects.length).toBe(envelope.data.counts.objects);
       expect(envelope.data.relations.length).toBe(envelope.data.counts.relations);
+      expect(Array.isArray(envelope.data.audit_findings)).toBe(true);
       expect(envelope.data.counts).toMatchObject({
         stale_objects: expect.any(Number),
         superseded_objects: expect.any(Number),

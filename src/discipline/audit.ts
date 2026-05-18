@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { access, lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -29,7 +30,11 @@ export type AuditRule =
   | "weakly_connected_memory"
   | "unlinked_applicability_overlap"
   | "excessive_related_to"
-  | "changed_file_missing_rationale";
+  | "changed_file_missing_rationale"
+  | "possibly_stale_changed_reference"
+  | "source_origin_outdated"
+  | "active_conflict_needs_resolution"
+  | "supersession_chain_needs_review";
 
 export interface AuditFinding {
   severity: AuditSeverity;
@@ -77,11 +82,20 @@ const RELATED_TO_WARNING_MINIMUM = 5;
 const RELATED_TO_WARNING_RATIO = 0.5;
 const REPEATED_CHANGE_MINIMUM = 2;
 const RATIONALE_TYPES = new Set(["decision", "fact", "gotcha", "synthesis"]);
+const CONFLICT_PREDICATES = new Set(["conflicts_with", "challenges"]);
 const SOURCE_PROVENANCE_PREDICATES = new Set([
   "derived_from",
   "summarizes",
   "documents",
   "supports"
+]);
+const GENERIC_MANIFEST_APPLICABILITY = new Set([
+  "package.json",
+  "pnpm-lock.yaml",
+  "package-lock.json",
+  "yarn.lock",
+  "bun.lock",
+  "bun.lockb"
 ]);
 const SEVERITY_ORDER = new Map<AuditSeverity, number>([
   ["warning", 0],
@@ -119,9 +133,23 @@ export async function buildAuditFindings(
     })
   );
   findings.push(
+    ...possiblyStaleChangedReferenceFindings({
+      storage: options.storage,
+      gitFileChanges: options.gitFileChanges ?? []
+    })
+  );
+  findings.push(...activeConflictNeedsResolutionFindings(options.storage));
+  findings.push(...supersessionChainNeedsReviewFindings(options.storage));
+  findings.push(
     ...(await referencedFileMissingFindings({
       projectRoot: options.projectRoot,
       storage: options.storage
+    }))
+  );
+  findings.push(
+    ...(await sourceOriginOutdatedFindings({
+      projectRoot: options.projectRoot,
+      objects: options.storage.objects
     }))
   );
   findings.push(
@@ -459,10 +487,11 @@ function unlinkedApplicabilityOverlapFindings(
         continue;
       }
 
-      findings.push(
-        applicabilityOverlapFinding(left, right, overlap),
-        applicabilityOverlapFinding(right, left, overlap)
-      );
+      if (isSuppressedApplicabilityOverlap(left, right, overlap)) {
+        continue;
+      }
+
+      findings.push(applicabilityOverlapFinding(left, right, overlap));
     }
   }
 
@@ -555,17 +584,153 @@ function changedFileMissingRationaleFindings(options: {
   ];
 }
 
+function possiblyStaleChangedReferenceFindings(options: {
+  storage: CanonicalStorageSnapshot;
+  gitFileChanges: readonly ProjectFileChange[];
+}): AuditFinding[] {
+  if (options.gitFileChanges.length === 0) {
+    return [];
+  }
+
+  const changesByFile = groupGitChangesByFile(options.gitFileChanges);
+  const findings: AuditFinding[] = [];
+
+  for (const object of currentObjects(options.storage.objects, CURRENT_STATUSES)) {
+    const objectUpdatedAt = timestampMillis(object.sidecar.updated_at);
+
+    if (objectUpdatedAt === null) {
+      continue;
+    }
+
+    const matchingEvidence: Evidence[] = [];
+
+    for (const [file, changes] of [...changesByFile.entries()].sort(compareEntriesByKey)) {
+      if (!objectReferencesFile(object, file)) {
+        continue;
+      }
+
+      const laterChanges = changes.filter((change) => {
+        const changedAt = timestampMillis(change.timestamp);
+
+        return changedAt !== null && changedAt > objectUpdatedAt;
+      });
+      const commits = uniqueSorted(laterChanges.map((change) => change.commit));
+
+      if (commits.length < REPEATED_CHANGE_MINIMUM) {
+        continue;
+      }
+
+      matchingEvidence.push(
+        { kind: "file", id: file },
+        ...commits.slice(0, 4).map((commit) => ({ kind: "commit", id: commit }) satisfies Evidence)
+      );
+    }
+
+    if (matchingEvidence.length === 0) {
+      continue;
+    }
+
+    findings.push({
+      severity: "info",
+      rule: "possibly_stale_changed_reference",
+      memory_id: object.sidecar.id,
+      message:
+        "Memory references files with repeated Git changes after this memory was last updated; review against current code before relying on it.",
+      evidence: matchingEvidence
+    });
+  }
+
+  return findings;
+}
+
+function activeConflictNeedsResolutionFindings(
+  storage: CanonicalStorageSnapshot
+): AuditFinding[] {
+  const findings: AuditFinding[] = [];
+
+  for (const relation of [...storage.relations].sort(compareRelationsById)) {
+    if (
+      relation.relation.status !== "active" ||
+      !CONFLICT_PREDICATES.has(relation.relation.predicate) ||
+      (relation.relation.evidence ?? []).length > 0 ||
+      hasLinkedOpenConflictQuestion(storage, relation)
+    ) {
+      continue;
+    }
+
+    findings.push({
+      severity: "warning",
+      rule: "active_conflict_needs_resolution",
+      memory_id: relation.relation.from,
+      message:
+        "Active conflict/challenge relation has no evidence and no linked open unresolved-conflict question.",
+      evidence: [
+        { kind: "relation", id: relation.relation.id },
+        { kind: "memory", id: relation.relation.to }
+      ]
+    });
+  }
+
+  return findings;
+}
+
+function supersessionChainNeedsReviewFindings(
+  storage: CanonicalStorageSnapshot
+): AuditFinding[] {
+  const byId = new Map(storage.objects.map((object) => [object.sidecar.id, object]));
+  const findings: AuditFinding[] = [];
+
+  for (const object of currentObjects(storage.objects, new Set<ObjectStatus>(["superseded"]))) {
+    const replacements = replacementIdsForObject(storage, object.sidecar.id);
+
+    for (const replacementId of replacements) {
+      const replacement = byId.get(replacementId);
+
+      if (replacement === undefined || !CURRENT_STATUSES.has(replacement.sidecar.status)) {
+        findings.push({
+          severity: "warning",
+          rule: "supersession_chain_needs_review",
+          memory_id: object.sidecar.id,
+          message: "Superseded memory points to a missing or inactive replacement.",
+          evidence: [{ kind: "memory", id: replacementId }]
+        });
+        continue;
+      }
+
+      const replacementReplacements = replacementIdsForObject(storage, replacementId);
+
+      if (replacementReplacements.length > 0) {
+        findings.push({
+          severity: "info",
+          rule: "supersession_chain_needs_review",
+          memory_id: object.sidecar.id,
+          message:
+            "Supersession chain has multiple hops; review whether the old memory should point directly at the current replacement.",
+          evidence: [
+            { kind: "memory", id: replacementId },
+            ...replacementReplacements
+              .slice(0, 4)
+              .map((id) => ({ kind: "memory", id }) satisfies Evidence)
+          ]
+        });
+      }
+    }
+  }
+
+  return findings;
+}
+
 async function referencedFileMissingFindings(options: {
   projectRoot: string;
   storage: CanonicalStorageSnapshot;
 }): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
-  const missingBodyPaths = await missingBodyReferenceEvidence(
+  const missingObjectPaths = await missingObjectFileReferenceEvidence(
     options.projectRoot,
     options.storage.objects
   );
 
-  for (const [memoryId, evidence] of [...missingBodyPaths.entries()].sort(compareEntriesByKey)) {
+  for (const [memoryId, evidence] of [...missingObjectPaths.entries()].sort(compareEntriesByKey)) {
     findings.push({
       severity: "warning",
       rule: "referenced_file_missing",
@@ -592,6 +757,55 @@ async function referencedFileMissingFindings(options: {
       message: "Relation references file evidence that does not exist.",
       evidence: [{ kind: "relation", id: relation.relation.id }, ...missingEvidence]
     });
+  }
+
+  return findings;
+}
+
+async function sourceOriginOutdatedFindings(options: {
+  projectRoot: string;
+  objects: readonly StoredMemoryObject[];
+}): Promise<AuditFinding[]> {
+  const findings: AuditFinding[] = [];
+
+  for (const object of currentObjects(options.objects, CURRENT_STATUSES)) {
+    if (object.sidecar.type !== "source" || object.sidecar.origin?.kind !== "file") {
+      continue;
+    }
+
+    const locator = normalizeProjectFileReference(object.sidecar.origin.locator);
+
+    if (locator === null) {
+      continue;
+    }
+
+    const currentDigest = await projectFileDigest(options.projectRoot, locator);
+
+    if (currentDigest === null) {
+      findings.push({
+        severity: "warning",
+        rule: "source_origin_outdated",
+        memory_id: object.sidecar.id,
+        message:
+          "Source memory origin file is missing or unreadable; review whether the source record is stale.",
+        evidence: [{ kind: "file", id: locator }]
+      });
+      continue;
+    }
+
+    if (
+      object.sidecar.origin.digest !== undefined &&
+      object.sidecar.origin.digest !== currentDigest
+    ) {
+      findings.push({
+        severity: "warning",
+        rule: "source_origin_outdated",
+        memory_id: object.sidecar.id,
+        message:
+          "Source memory origin digest no longer matches the current file; update the source record or related syntheses.",
+        evidence: [{ kind: "file", id: locator }]
+      });
+    }
   }
 
   return findings;
@@ -760,6 +974,65 @@ function hasActiveDirectRelation(
   );
 }
 
+function hasLinkedOpenConflictQuestion(
+  storage: CanonicalStorageSnapshot,
+  conflict: StoredMemoryRelation
+): boolean {
+  const conflictEndpoints = new Set([conflict.relation.from, conflict.relation.to]);
+  const questionIds = new Set(
+    storage.objects
+      .filter(
+        (object) =>
+          object.sidecar.type === "question" &&
+          object.sidecar.status === "open" &&
+          object.sidecar.facets?.category === "unresolved-conflict"
+      )
+      .map((object) => object.sidecar.id)
+  );
+
+  if (questionIds.size === 0) {
+    return false;
+  }
+
+  return storage.relations.some((relation) => {
+    if (relation.relation.status !== "active") {
+      return false;
+    }
+
+    const fromQuestion = questionIds.has(relation.relation.from);
+    const toQuestion = questionIds.has(relation.relation.to);
+
+    return (
+      (fromQuestion && conflictEndpoints.has(relation.relation.to)) ||
+      (toQuestion && conflictEndpoints.has(relation.relation.from))
+    );
+  });
+}
+
+function replacementIdsForObject(
+  storage: CanonicalStorageSnapshot,
+  supersededId: ObjectId
+): ObjectId[] {
+  const ids = new Set<ObjectId>();
+  const object = storage.objects.find((item) => item.sidecar.id === supersededId);
+
+  if (object?.sidecar.superseded_by != null) {
+    ids.add(object.sidecar.superseded_by);
+  }
+
+  for (const relation of storage.relations) {
+    if (
+      relation.relation.status === "active" &&
+      relation.relation.predicate === "supersedes" &&
+      relation.relation.to === supersededId
+    ) {
+      ids.add(relation.relation.from);
+    }
+  }
+
+  return [...ids].sort();
+}
+
 function overlappingApplicability(
   left: StoredMemoryObject,
   right: StoredMemoryObject
@@ -776,6 +1049,22 @@ function normalizedApplicabilityValues(object: StoredMemoryObject): string[] {
       .map(normalizeApplicabilityValue)
       .filter((value) => value !== "")
   );
+}
+
+function isSuppressedApplicabilityOverlap(
+  left: StoredMemoryObject,
+  right: StoredMemoryObject,
+  overlap: readonly string[]
+): boolean {
+  return (
+    overlap.length > 0 &&
+    overlap.every((value) => GENERIC_MANIFEST_APPLICABILITY.has(value)) &&
+    (isBroadSourceOrSynthesis(left) || isBroadSourceOrSynthesis(right))
+  );
+}
+
+function isBroadSourceOrSynthesis(object: StoredMemoryObject): boolean {
+  return object.sidecar.type === "source" || object.sidecar.type === "synthesis";
 }
 
 function normalizeApplicabilityValue(value: string): string {
@@ -803,6 +1092,12 @@ function applicabilityOverlapFinding(
 
 function isFileLikeApplicability(value: string): boolean {
   return value.includes("/") || /\.[A-Za-z0-9]+$/u.test(value);
+}
+
+function isFileLikeApplicabilityReference(value: string): boolean {
+  const normalized = value.trim().replace(/\\/gu, "/");
+
+  return !normalized.endsWith("/") && /\.[A-Za-z0-9]+$/u.test(normalized);
 }
 
 function groupGitChangesByFile(
@@ -849,7 +1144,7 @@ function objectLinkedFiles(object: StoredMemoryObject): string[] {
   );
 }
 
-async function missingBodyReferenceEvidence(
+async function missingObjectFileReferenceEvidence(
   projectRoot: string,
   objects: readonly StoredMemoryObject[]
 ): Promise<Map<ObjectId, Evidence[]>> {
@@ -858,7 +1153,7 @@ async function missingBodyReferenceEvidence(
   for (const object of [...objects].sort(compareObjectsById)) {
     const missingPaths = await missingProjectFilePaths(
       projectRoot,
-      extractProjectFileReferences(object.body)
+      objectFileReferences(object)
     );
 
     if (missingPaths.length > 0) {
@@ -870,6 +1165,17 @@ async function missingBodyReferenceEvidence(
   }
 
   return evidenceById;
+}
+
+function objectFileReferences(object: StoredMemoryObject): string[] {
+  return uniqueSorted([
+    ...extractProjectFileReferences(object.body),
+    ...(object.sidecar.evidence ?? [])
+      .filter((item) => item.kind === "file")
+      .map((item) => item.id),
+    ...(object.sidecar.facets?.applies_to ?? []).filter(isFileLikeApplicabilityReference),
+    ...(object.sidecar.origin?.kind === "file" ? [object.sidecar.origin.locator] : [])
+  ]);
 }
 
 async function missingRelationFileEvidence(
@@ -944,6 +1250,28 @@ async function projectFileExists(projectRoot: string, path: string): Promise<boo
   } catch {
     return false;
   }
+}
+
+async function projectFileDigest(projectRoot: string, path: string): Promise<string | null> {
+  const resolved = resolveInsideRoot(projectRoot, path);
+
+  if (!resolved.ok) {
+    return null;
+  }
+
+  try {
+    const bytes = await readFile(resolved.data);
+
+    return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+  } catch {
+    return null;
+  }
+}
+
+function timestampMillis(value: string): number | null {
+  const timestamp = Date.parse(value);
+
+  return Number.isNaN(timestamp) ? null : timestamp;
 }
 
 async function readPackageJsonVersion(projectRoot: string): Promise<string | null> {

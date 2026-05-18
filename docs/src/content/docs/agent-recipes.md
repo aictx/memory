@@ -81,6 +81,23 @@ When this is done, report:
 - the review command `memory diff`
 ```
 
+## Repair prompt
+
+Use this after a task exposed stale, conflicting, or weakly evidenced memory:
+
+```text
+Review Memory after this task.
+
+Run:
+memory suggest --after-task "<task summary>" --json
+memory audit --json
+
+Use current code, tests, docs, and my correction as higher-priority evidence.
+If existing memory is wrong or outdated, update it, mark it stale, supersede it,
+or create an open unresolved-conflict question. Do not save a task diary.
+Report whether Memory changed and how I can inspect the diff.
+```
+
 ## Codex
 
 Instruction file: `AGENTS.md`

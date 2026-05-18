@@ -1,10 +1,28 @@
 {
   "body_path": "memory/syntheses/agent-guidance.md",
-  "content_hash": "sha256:d0632441e4feb4c647c95994ae0a3006701e3103a1c2e8f04760b1c8ebb0c157",
+  "content_hash": "sha256:07a68f3d1cbe3e833ecbeadc9f4bf82d8f87ce1cf820c9bb9186d4830f95a557",
   "created_at": "2026-05-16T18:52:44+02:00",
-  "evidence": [],
+  "evidence": [
+    {
+      "id": "integrations/templates/agent-guidance.md",
+      "kind": "file"
+    },
+    {
+      "id": "docs/src/content/docs/agent-integration.md",
+      "kind": "file"
+    },
+    {
+      "id": "docs/src/content/docs/cli.md",
+      "kind": "file"
+    }
+  ],
   "facets": {
-    "applies_to": [],
+    "applies_to": [
+      "integrations/templates/agent-guidance.md",
+      "docs/src/content/docs/agent-integration.md",
+      "docs/src/content/docs/cli.md",
+      "docs/src/content/docs/demand-driven-memory.md"
+    ],
     "category": "agent-guidance",
     "load_modes": [
       "coding",
@@ -31,5 +49,5 @@
   ],
   "title": "Agent guidance",
   "type": "synthesis",
-  "updated_at": "2026-05-16T18:52:44+02:00"
+  "updated_at": "2026-05-18T14:02:38+02:00"
 }

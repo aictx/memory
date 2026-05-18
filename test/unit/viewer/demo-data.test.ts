@@ -102,6 +102,7 @@ describe("viewer demo data seed", () => {
         relations: Array<{ id: string; from: string; predicate: string; to: string }>;
         role_coverage: { roles: unknown[]; counts: { populated: number } };
         lenses: Array<{ name: string; included_memory_ids: string[] }>;
+        audit_findings: unknown[];
       };
     };
     const serialized = JSON.stringify(data);
@@ -159,6 +160,7 @@ describe("viewer demo data seed", () => {
     });
     expect(data.bootstrap.role_coverage.roles.length).toBeGreaterThan(0);
     expect(data.bootstrap.role_coverage.counts.populated).toBeGreaterThan(0);
+    expect(data.bootstrap.audit_findings).toEqual([]);
     expect(data.bootstrap.lenses.map((lens) => lens.name)).toEqual([
       "project-map",
       "current-work",

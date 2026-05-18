@@ -186,6 +186,16 @@ describe("read-only viewer shell", () => {
       await page.locator('[data-testid="graph-inspector"] button', { hasText: "Open in schema browser" }).click();
       await assertSelectedObject(page, "Viewer Shell Layout", "decision.viewer-shell");
 
+      await openSidebar(page);
+      await page.locator('[data-testid="nav-maintenance"]').click();
+      await expectSidebarClosed(page);
+      await expectText(page, '[data-testid="maintenance-view"]', "Maintenance");
+      await expectText(page, '[data-testid="maintenance-view"]', "source changed");
+      await expectText(page, '[data-testid="maintenance-view"]', "source.agent-integration");
+      await expectText(page, '[data-testid="maintenance-view"]', "source_origin_outdated");
+      await page.locator('[data-testid="maintenance-card-source.agent-integration"] button', { hasText: "Open object" }).click();
+      await assertSelectedObject(page, "Source: docs/agent-integration.md", "source.agent-integration");
+
       await page.selectOption('[data-testid="viewer-type-filter"]', "decision");
       await expectCount(page, '[data-testid="object-row-decision.viewer-shell"]', 1);
       await expectCount(page, '[data-testid="object-row-constraint.viewer-markdown"]', 0);

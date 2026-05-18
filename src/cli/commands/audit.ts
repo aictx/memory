@@ -62,7 +62,7 @@ function renderAuditData(data: AuditMemoryData): string {
   return [
     ...(data.findings.length === 0
       ? []
-      : ["Memory audit findings:", ...data.findings.map(renderFinding)]),
+      : ["Memory audit findings:", ...renderFindingGroups(data.findings)]),
     ...(data.role_gaps.length === 0
       ? []
       : [
@@ -71,6 +71,19 @@ function renderAuditData(data: AuditMemoryData): string {
           ...data.role_gaps.map(renderRoleGap)
         ])
   ].join("\n");
+}
+
+function renderFindingGroups(findings: readonly AuditFinding[]): string[] {
+  const groups = new Map<string, AuditFinding[]>();
+
+  for (const finding of findings) {
+    groups.set(finding.rule, [...(groups.get(finding.rule) ?? []), finding]);
+  }
+
+  return [...groups.entries()].flatMap(([rule, ruleFindings]) => [
+    `${rule}:`,
+    ...ruleFindings.map(renderFinding)
+  ]);
 }
 
 function renderFinding(finding: AuditFinding): string {

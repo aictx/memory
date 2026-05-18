@@ -354,6 +354,7 @@ function buildDemoData() {
     },
     role_coverage: roleCoverage,
     lenses: buildLenses(objects, relations, roleCoverage),
+    audit_findings: [],
     storage_warnings: []
   };
   const meta = {

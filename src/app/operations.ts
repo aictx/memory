@@ -568,6 +568,7 @@ export interface ViewerBootstrapData {
   };
   role_coverage: RoleCoverageData;
   lenses: MemoryLensData[];
+  audit_findings: AuditFinding[];
   storage_warnings: string[];
 }
 
@@ -1425,6 +1426,16 @@ export async function getViewerBootstrap(
   const objects = [...prepared.storage.objects].sort(compareStoredObjectsById);
   const relations = [...prepared.storage.relations].sort(compareStoredRelationsById);
   const lenses = buildAllMemoryLenses(prepared.storage, prepared.meta.git);
+  const gitFileChanges = await recentGitFileChangesForIndex(
+    prepared.storage.projectRoot,
+    prepared.meta,
+    options
+  );
+  const auditFindings = await buildAuditFindings({
+    projectRoot: prepared.storage.projectRoot,
+    storage: prepared.storage,
+    gitFileChanges: gitFileChanges.ok ? gitFileChanges.data : []
+  });
 
   return {
     ok: true,
@@ -1448,9 +1459,13 @@ export async function getViewerBootstrap(
       },
       role_coverage: buildRoleCoverage(prepared.storage, prepared.meta.git),
       lenses: lenses.map(summarizeMemoryLens),
+      audit_findings: auditFindings,
       storage_warnings: prepared.storageWarnings
     },
-    warnings: prepared.storageWarnings,
+    warnings: [
+      ...prepared.storageWarnings,
+      ...(gitFileChanges.ok ? gitFileChanges.warnings : [])
+    ],
     meta: prepared.meta
   };
 }
@@ -2062,16 +2077,28 @@ export async function suggestMemory(
       };
     }
 
+    const gitFileChanges = meta.meta.git.available
+      ? await recentGitFileChangesForIndex(paths.data.projectRoot, meta.meta, options)
+      : ok([] as ProjectFileChange[]);
+    const auditFindings = await buildAuditFindings({
+      projectRoot: paths.data.projectRoot,
+      storage: storage.data,
+      gitFileChanges: gitFileChanges.ok ? gitFileChanges.data : []
+    });
+
     return {
       ok: true,
       data: buildSuggestAfterTaskPacket({
         task: options.afterTask ?? "",
         changedFiles: changed.data.changedFiles,
-        storage: storage.data
+        storage: storage.data,
+        auditFindings,
+        gitFileChanges: gitFileChanges.ok ? gitFileChanges.data : []
       }),
       warnings: [
         ...storage.warnings,
         ...changed.warnings,
+        ...(gitFileChanges.ok ? gitFileChanges.warnings : []),
         ...(meta.meta.git.available
           ? []
           : ["Git is unavailable; after-task changed_files is empty."])
