@@ -85,7 +85,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@astrojs/starlight": "^0.38.4",
+    "@astrojs/starlight": "^0.39.2",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.2.4",
