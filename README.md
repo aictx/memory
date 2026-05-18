@@ -139,6 +139,32 @@ conservative first-run memory, runs checks, and starts the local viewer. Use
 
 Memory writes local files and never commits automatically.
 
+## Project Status and Upgrade Recovery
+
+Memory is not ready for production use yet. Breaking changes should be expected
+across package versions while the schema and local storage format are still
+evolving.
+
+If you update to the latest package version and later see errors from existing
+local Memory storage, reset and re-run setup from the project root:
+
+```bash
+memory reset
+memory setup
+```
+
+`memory reset` creates a backup archive under `.memory/.backup/` before clearing
+local Memory storage. If useful context is missing after setup, ask your coding
+agent to inspect the newest backup and add back only relevant durable project
+knowledge. For example:
+
+```text
+Memory was reset after a package upgrade. Inspect the newest archive in
+.memory/.backup/, compare it with the current .memory/ contents, and add back
+only relevant durable project knowledge that was lost. Do not restore stale
+schema files blindly; use current Memory commands and validate with memory check.
+```
+
 ## Ask an Agent to Activate It
 
 Paste this into Codex, Claude Code, OpenCode, Cursor, Cline, or another
