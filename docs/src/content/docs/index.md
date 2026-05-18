@@ -1,10 +1,10 @@
 ---
-title: Memory by Aictx documentation
+title: Memory documentation
 description: Public documentation for local, reviewable, auto-maintained project memory for AI coding agents and assistants.
 ---
 
-Memory by Aictx provides local, reviewable, auto-maintained project memory for
-AI coding agents. It is distributed through the open source npm package
+Memory provides local, reviewable, auto-maintained project memory for AI coding
+agents. It is distributed through the open source npm package
 `@aictx/memory` and the Aictx Homebrew tap, then runs through the `memory` CLI
 and optional `memory-mcp` server.
 
