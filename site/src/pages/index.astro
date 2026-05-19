@@ -98,53 +98,69 @@ const viewerUrl = "https://demo.aictx.dev/?token=demo";
     >
       <div class="payoff-inner">
         <div class="payoff-heading">
-          <p class="section-kicker">When it pays off</p>
-          <h2 id="payoff-title">When context starts repeating, Memory becomes leverage.</h2>
+          <p class="section-kicker">Use Memory when</p>
+          <h2 id="payoff-title">Context should survive the agent session.</h2>
           <p>
-            It is useful long before a repo is huge: whenever decisions,
-            corrections, and workflows should outlive one agent session.
+            Memory is for durable, local, reviewable project knowledge: the
+            parts agents and humans should not have to rediscover.
           </p>
         </div>
 
         <div class="payoff-grid" aria-label="When Memory is useful">
           <article>
-            <span>Same repo, new session</span>
-            <strong>Agents stop starting from a blank chat.</strong>
+            <span>Many sessions</span>
+            <strong>You work across repos, branches, or agents.</strong>
             <p>
-              The next session can load the project shape, active constraints,
-              setup path, and sharp edges before touching code.
+              Keep durable project state from disappearing when the next
+              session starts.
             </p>
           </article>
           <article>
-            <span>Scattered decisions</span>
-            <strong>Project knowledge gets one reviewable home.</strong>
+            <span>Real delegation</span>
+            <strong>Agents make decisions you need to carry forward.</strong>
             <p>
-              Product notes, architecture choices, and user corrections do not
-              have to live across prompts, docs, and old transcripts.
+              Save the workflows, setup paths, constraints, and known traps
+              worth inheriting.
             </p>
           </article>
           <article>
-            <span>Several agent tools</span>
-            <strong>Different clients can share the same context.</strong>
+            <span>Large codebases</span>
+            <strong>Architecture should not be rediscovered every time.</strong>
             <p>
-              Codex, Claude Code, Cursor, Cline, OpenCode, and MCP-capable tools
-              can all work from the same local project memory.
+              Maintain conventions, boundaries, and source-backed summaries
+              agents can load on demand.
             </p>
           </article>
           <article>
-            <span>Useful discoveries</span>
-            <strong>The next agent inherits the durable parts.</strong>
+            <span>Local wiki</span>
+            <strong>Project knowledge stays local and reviewable.</strong>
             <p>
-              Save the reusable fact, workflow, gotcha, or synthesis instead of
-              asking future agents to mine the whole chat.
+              Store wiki-like memory in the repo instead of an opaque hosted
+              memory layer.
+            </p>
+          </article>
+          <article>
+            <span>Agent-built work</span>
+            <strong>Verify what changed without reading everything.</strong>
+            <p>
+              Inspect decisions, sources, open questions, and syntheses before
+              trusting the result.
+            </p>
+          </article>
+          <article>
+            <span>Small instruction files</span>
+            <strong>Keep AGENTS.md and CLAUDE.md focused.</strong>
+            <p>
+              Rules files stay operating manuals while changing project facts
+              live in Memory.
             </p>
           </article>
         </div>
 
         <div class="payoff-strip" aria-label="Memory value stack">
-          <span>Better starting context</span>
-          <span>Less repeated briefing</span>
-          <span>Reviewable memory trail</span>
+          <span>Parallel project state</span>
+          <span>Reviewable agent decisions</span>
+          <span>Small instruction files</span>
         </div>
       </div>
     </section>

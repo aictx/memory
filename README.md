@@ -29,17 +29,18 @@ the pages that matter for the current task.
 
 Use Memory when:
 
-- You open new AI coding sessions on the same repo and keep repeating the same
-  product intent, architecture choices, setup steps, or known traps.
-- Your projects are growing past one-off experiments and the useful discoveries
-  from agent work need to survive into the next session.
-- You use more than one agent or assistant and do not want to maintain separate
-  project facts in `AGENTS.md`, `CLAUDE.md`, Cursor rules, prompt snippets, and
-  chat history.
-- You want agents to load focused context for the task instead of spending
-  tokens on broad rebriefing or stale instruction files.
-- You want durable project memory to stay local, inspectable, and reviewable in
-  Git instead of disappearing into hosted memory or an opaque retrieval service.
+- You work across many repos, branches, or agent sessions and keep losing the
+  durable project state between them.
+- You delegate real coding work to AI agents and want decisions, workflows,
+  setup paths, and known traps to survive the chat.
+- You maintain large or long-lived codebases where architecture and conventions
+  keep getting rediscovered.
+- You want a local wiki agents can maintain from source-backed project
+  knowledge.
+- You want to understand and verify agent-built work without reading every
+  transcript or every file.
+- You want `AGENTS.md`, `CLAUDE.md`, and rules files to stay short instead of
+  becoming stale project encyclopedias.
 
 This repository publishes the npm package `@aictx/memory` and the Homebrew
 formula `aictx/tap/memory`.
