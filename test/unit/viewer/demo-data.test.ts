@@ -100,9 +100,6 @@ describe("viewer demo data seed", () => {
           } | null;
         }>;
         relations: Array<{ id: string; from: string; predicate: string; to: string }>;
-        role_coverage: { roles: unknown[]; counts: { populated: number } };
-        lenses: Array<{ name: string; included_memory_ids: string[] }>;
-        audit_findings: unknown[];
       };
     };
     const serialized = JSON.stringify(data);
@@ -158,19 +155,6 @@ describe("viewer demo data seed", () => {
       registry_id: "demo",
       project_root: "demo://todo-app"
     });
-    expect(data.bootstrap.role_coverage.roles.length).toBeGreaterThan(0);
-    expect(data.bootstrap.role_coverage.counts.populated).toBeGreaterThan(0);
-    expect(data.bootstrap.audit_findings).toEqual([]);
-    expect(data.bootstrap.lenses.map((lens) => lens.name)).toEqual([
-      "project-map",
-      "current-work",
-      "review-risk",
-      "provenance",
-      "maintenance"
-    ]);
-    for (const lens of data.bootstrap.lenses) {
-      expect(lens.included_memory_ids.length).toBeGreaterThan(0);
-    }
     expect(data.bootstrap.relations.length).toBeGreaterThan(0);
     for (const id of relationEndpointIds) {
       expect(objectIds).toContain(id);

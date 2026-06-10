@@ -51,14 +51,6 @@ interface InitErrorEnvelope {
   };
 }
 
-interface SaveSuccessEnvelope {
-  ok: true;
-  data: {
-    memory_created: string[];
-    memory_updated: string[];
-  };
-}
-
 interface CheckSuccessEnvelope {
   ok: true;
   data: {
@@ -155,7 +147,7 @@ describe("memory init CLI", () => {
     );
 
     output = createCapturedOutput();
-    expect(await main(["node", "memory", "load", "legacy migration", "--json"], {
+    expect(await main(["node", "memory", "search", "legacy migration", "--json"], {
       ...output.writers,
       cwd: projectRoot,
       registry: { enabled: false }
@@ -305,26 +297,6 @@ describe("memory init CLI", () => {
     const forceEnvelope = parseInitSuccessEnvelope(output.stdout());
     expect(forceEnvelope.data.created).toBe(true);
     expect(forceEnvelope.data.index_built).toBe(true);
-
-    output = createCapturedOutput();
-    expect(await main(["node", "memory", "suggest", "--bootstrap", "--patch"], {
-      ...output.writers,
-      cwd: repo
-    })).toBe(0);
-    await writeFile(join(repo, "bootstrap-memory.json"), output.stdout(), "utf8");
-
-    output = createCapturedOutput();
-    expect(await main(["node", "memory", "save", "--file", "bootstrap-memory.json", "--json"], {
-      ...output.writers,
-      cwd: repo
-    })).toBe(0);
-    const saveEnvelope = JSON.parse(output.stdout()) as SaveSuccessEnvelope;
-    expect(saveEnvelope.data.memory_updated).toEqual(
-      expect.arrayContaining(["architecture.current"])
-    );
-    expect(saveEnvelope.data.memory_created).toEqual(
-      expect.arrayContaining(["workflow.package-scripts", "constraint.node-engine"])
-    );
 
     output = createCapturedOutput();
     expect(await main(["node", "memory", "check", "--json"], {

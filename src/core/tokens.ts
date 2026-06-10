@@ -1,5 +1,5 @@
-import { memoryError, type JsonValue } from "../core/errors.js";
-import { err, ok, type Result } from "../core/result.js";
+import { memoryError, type JsonValue } from "./errors.js";
+import { err, ok, type Result } from "./result.js";
 
 export const MIN_TOKEN_BUDGET_EXCLUSIVE = 500;
 export const MAX_TOKEN_BUDGET = 50000;

@@ -71,22 +71,6 @@ interface InspectEnvelope {
   };
 }
 
-interface StaleEnvelope {
-  ok: true;
-  data: {
-    objects: ObjectSummary[];
-  };
-}
-
-interface GraphEnvelope {
-  ok: true;
-  data: {
-    root_id: string;
-    objects: ObjectSummary[];
-    relations: RelationSummary[];
-  };
-}
-
 interface ErrorEnvelope {
   ok: false;
   error: {
@@ -155,106 +139,30 @@ describe("memory read-only CLI commands", () => {
     ]);
   });
 
-  it("lists stale and superseded memory only", async () => {
-    const projectRoot = await createReadOnlyFixtureProject("memory-cli-stale-");
-
-    const output = await runCli(["node", "memory", "stale", "--json"], projectRoot);
-
-    expect(output.exitCode).toBe(0);
-    expect(output.stderr).toBe("");
-    const envelope = JSON.parse(output.stdout) as StaleEnvelope;
-    const ids = envelope.data.objects.map((object) => object.id);
-
-    expect(envelope.ok).toBe(true);
-    expect(ids).toEqual([
-      "decision.old-queue",
-      "note.stale-memory",
-      "constraint.old-api"
-    ]);
-    expect(ids).not.toContain("decision.billing-retries");
-    expect(ids).not.toContain("note.active-memory");
-    expect(ids).not.toContain("question.open-memory");
-    expect(ids).not.toContain("question.closed-memory");
-  });
-
-  it("returns a one-hop relation neighborhood for graph debugging", async () => {
-    const projectRoot = await createReadOnlyFixtureProject("memory-cli-graph-");
-
-    const output = await runCli(
-      ["node", "memory", "graph", "decision.billing-retries", "--json"],
-      projectRoot
-    );
-
-    expect(output.exitCode).toBe(0);
-    expect(output.stderr).toBe("");
-    const envelope = JSON.parse(output.stdout) as GraphEnvelope;
-    const objectIds = envelope.data.objects.map((object) => object.id);
-    const relationIds = envelope.data.relations.map((relation) => relation.id);
-
-    expect(envelope.ok).toBe(true);
-    expect(envelope.data.root_id).toBe("decision.billing-retries");
-    expect(objectIds).toEqual([
-      "constraint.webhook-idempotency",
-      "decision.billing-retries",
-      "note.worker-details"
-    ]);
-    expect(objectIds).not.toContain("fact.second-hop-only");
-    expect(relationIds).toEqual([
-      "rel.decision-requires-idempotency",
-      "rel.worker-affects-decision"
-    ]);
-    expect(relationIds).not.toContain("rel.idempotency-mentions-second-hop");
-  });
-
-  it("prints compact human output for inspect, stale, and graph", async () => {
+  it("prints compact human output for inspect", async () => {
     const projectRoot = await createReadOnlyFixtureProject("memory-cli-readonly-human-");
     const inspect = await runCli(
       ["node", "memory", "inspect", "decision.billing-retries"],
       projectRoot
     );
-    const stale = await runCli(["node", "memory", "stale"], projectRoot);
-    const graph = await runCli(
-      ["node", "memory", "graph", "decision.billing-retries"],
-      projectRoot
-    );
 
     expect(inspect.exitCode).toBe(0);
-    expect(stale.exitCode).toBe(0);
-    expect(graph.exitCode).toBe(0);
     expect(inspect.stdout).toContain("decision.billing-retries");
     expect(inspect.stdout).toContain("Outgoing relations:");
-    expect(stale.stdout).toContain("decision.old-queue");
-    expect(stale.stdout).toContain("note.stale-memory");
-    expect(graph.stdout).toContain("Relation neighborhood for decision.billing-retries");
-    expect(graph.stdout).toContain("rel.worker-affects-decision");
     expect(() => JSON.parse(inspect.stdout) as unknown).toThrow();
-    expect(() => JSON.parse(stale.stdout) as unknown).toThrow();
-    expect(() => JSON.parse(graph.stdout) as unknown).toThrow();
   });
 
-  it("returns MemoryObjectNotFound for missing inspect and graph roots", async () => {
+  it("returns MemoryObjectNotFound for missing inspect roots", async () => {
     const projectRoot = await createReadOnlyFixtureProject("memory-cli-readonly-missing-");
     const inspect = await runCli(
       ["node", "memory", "inspect", "decision.missing", "--json"],
       projectRoot
     );
-    const graph = await runCli(
-      ["node", "memory", "graph", "decision.missing", "--json"],
-      projectRoot
-    );
 
     expect(inspect.exitCode).toBe(1);
-    expect(graph.exitCode).toBe(1);
     const inspectEnvelope = JSON.parse(inspect.stdout) as ErrorEnvelope;
-    const graphEnvelope = JSON.parse(graph.stdout) as ErrorEnvelope;
 
     expect(inspectEnvelope.error).toMatchObject({
-      code: "MemoryObjectNotFound",
-      details: {
-        id: "decision.missing"
-      }
-    });
-    expect(graphEnvelope.error).toMatchObject({
       code: "MemoryObjectNotFound",
       details: {
         id: "decision.missing"
@@ -268,12 +176,6 @@ describe("memory read-only CLI commands", () => {
 
     await expect(
       runCli(["node", "memory", "inspect", "decision.billing-retries", "--json"], projectRoot)
-    ).resolves.toMatchObject({ exitCode: 0 });
-    await expect(runCli(["node", "memory", "stale", "--json"], projectRoot)).resolves.toMatchObject({
-      exitCode: 0
-    });
-    await expect(
-      runCli(["node", "memory", "graph", "decision.billing-retries", "--json"], projectRoot)
     ).resolves.toMatchObject({ exitCode: 0 });
 
     await expect(readCanonicalFiles(projectRoot)).resolves.toEqual(before);

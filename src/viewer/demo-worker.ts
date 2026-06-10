@@ -10,8 +10,7 @@ type DemoJson =
 
 type DemoEnvelopeData =
   | typeof demoData.projects
-  | typeof demoData.bootstrap
-  | ReturnType<typeof buildLoadPreviewData>;
+  | typeof demoData.bootstrap;
 
 export interface DemoWorkerEnv {
   ASSETS: {
@@ -25,13 +24,6 @@ interface DemoError {
   details?: DemoJson;
 }
 
-interface LoadPreviewRequestBody {
-  task?: unknown;
-  mode?: unknown;
-  token_budget?: unknown;
-}
-
-const DEMO_MODES = ["coding", "debugging", "review", "architecture", "onboarding"] as const;
 const DEMO_ROUTE_PREFIX = `/api/projects/${demoData.registry_id}`;
 const API_HEADERS = {
   "cache-control": "no-store",
@@ -59,10 +51,6 @@ export default {
 
     if (url.pathname === `${DEMO_ROUTE_PREFIX}/bootstrap`) {
       return methodGuard(request, "GET", () => jsonOk(demoData.bootstrap));
-    }
-
-    if (url.pathname === `${DEMO_ROUTE_PREFIX}/load-preview`) {
-      return methodGuard(request, "POST", async () => handleLoadPreview(request));
     }
 
     if (isReadOnlyBlockedRoute(url.pathname, request.method)) {
@@ -110,207 +98,8 @@ function methodGuard(
   return handler();
 }
 
-async function handleLoadPreview(request: Request): Promise<Response> {
-  const parsed = await readLoadPreviewBody(request);
-
-  if (!parsed.ok) {
-    return jsonError(400, parsed.error);
-  }
-
-  const body = parsed.body;
-  const task = typeof body.task === "string" ? body.task.trim() : "";
-
-  if (task === "") {
-    return jsonError(400, {
-      code: "MemoryValidationFailed",
-      message: "Task is required."
-    });
-  }
-
-  const mode = normalizeMode(body.mode);
-
-  if (mode === null) {
-    return jsonError(400, {
-      code: "MemoryValidationFailed",
-      message: "Load mode is not supported.",
-      details: {
-        mode: typeof body.mode === "string" ? body.mode : null
-      }
-    });
-  }
-
-  const tokenBudget = normalizeTokenBudget(body.token_budget);
-
-  if (!tokenBudget.ok) {
-    return jsonError(400, tokenBudget.error);
-  }
-
-  return jsonOk(buildLoadPreviewData({
-    task,
-    mode,
-    tokenBudget: tokenBudget.value,
-    tokenTargetSource: tokenBudget.source,
-    wasCapped: tokenBudget.wasCapped
-  }));
-}
-
-async function readLoadPreviewBody(
-  request: Request
-): Promise<{ ok: true; body: LoadPreviewRequestBody } | { ok: false; error: DemoError }> {
-  try {
-    const value: unknown = await request.json();
-
-    if (value === null || typeof value !== "object" || Array.isArray(value)) {
-      return {
-        ok: false,
-        error: {
-          code: "MemoryValidationFailed",
-          message: "JSON request body must be an object."
-        }
-      };
-    }
-
-    return {
-      ok: true,
-      body: value
-    };
-  } catch {
-    return {
-      ok: false,
-      error: {
-        code: "MemoryValidationFailed",
-        message: "Request body must be valid JSON."
-      }
-    };
-  }
-}
-
-function normalizeMode(value: unknown): (typeof DEMO_MODES)[number] | null {
-  if (value === undefined) {
-    return demoData.defaults.mode as (typeof DEMO_MODES)[number];
-  }
-
-  return typeof value === "string" && isDemoMode(value) ? value : null;
-}
-
-function isDemoMode(value: string): value is (typeof DEMO_MODES)[number] {
-  return (DEMO_MODES as readonly string[]).includes(value);
-}
-
-function normalizeTokenBudget(
-  value: unknown
-):
-  | { ok: true; value: number; source: "explicit" | "fallback_default"; wasCapped: boolean }
-  | { ok: false; error: DemoError } {
-  if (value === undefined) {
-    return {
-      ok: true,
-      value: demoData.defaults.token_budget,
-      source: "fallback_default",
-      wasCapped: false
-    };
-  }
-
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 500) {
-    return {
-      ok: false,
-      error: {
-        code: "MemoryValidationFailed",
-        message: "Token budget must be an integer greater than 500.",
-        details: {
-          field: "token_budget",
-          minimumExclusive: 500,
-          actual: typeof value === "number" ? value : null
-        }
-      }
-    };
-  }
-
-  return {
-    ok: true,
-    value: Math.min(value, 50000),
-    source: "explicit",
-    wasCapped: value > 50000
-  };
-}
-
-function buildLoadPreviewData(input: {
-  task: string;
-  mode: (typeof DEMO_MODES)[number];
-  tokenBudget: number;
-  tokenTargetSource: "explicit" | "fallback_default";
-  wasCapped: boolean;
-}) {
-  const includedObjects = demoData.bootstrap.objects
-    .filter((object) => object.status === "active" && object.type !== "source")
-    .slice(0, 8);
-  const includedIds = includedObjects.map((object) => object.id);
-  const omittedIds = demoData.bootstrap.objects
-    .filter((object) => !includedIds.includes(object.id))
-    .map((object) => object.id);
-  const contextPack = renderDemoContextPack(input.task, includedObjects);
-  const estimatedTokens = estimateTokens(contextPack);
-
-  return {
-    task: input.task,
-    token_budget: input.tokenBudget,
-    mode: input.mode,
-    context_pack: contextPack,
-    source: {
-      project: demoData.bootstrap.project.id,
-      git_available: demoData.meta.git.available,
-      branch: demoData.meta.git.branch,
-      commit: demoData.meta.git.commit
-    },
-    token_target: {
-      value: input.tokenBudget,
-      source: input.tokenTargetSource,
-      enforced: true,
-      was_capped: input.wasCapped
-    },
-    estimated_tokens: estimatedTokens,
-    budget_status: estimatedTokens <= input.tokenBudget ? "within_target" : "over_target",
-    truncated: false,
-    included_ids: includedIds,
-    excluded_ids: [],
-    omitted_ids: omittedIds
-  };
-}
-
-function renderDemoContextPack(
-  task: string,
-  objects: readonly (typeof demoData.bootstrap.objects)[number][]
-): string {
-  const sections = objects.map((object) => [
-    `## ${object.title}`,
-    "",
-    object.body.trim()
-  ].join("\n"));
-
-  return [
-    "# AI Context Pack",
-    "",
-    `Task: ${task}`,
-    "Generated from: curated public Todo App demo memory",
-    "",
-    "## Must know",
-    "",
-    "- The demo project is a local-first Todo App, not the Memory repository itself.",
-    "- Memory stores this durable project memory as local, reviewable files.",
-    "- This public demo is read-only and uses sanitized seed data.",
-    "",
-    ...sections
-  ].join("\n");
-}
-
-function estimateTokens(text: string): number {
-  return Math.max(1, Math.ceil(text.length / 4));
-}
-
 function isReadOnlyBlockedRoute(pathname: string, method: string): boolean {
-  return pathname === "/api/export/obsidian" ||
-    pathname.endsWith("/export/obsidian") ||
-    (method === "DELETE" && isProjectDeleteRoute(pathname));
+  return method === "DELETE" && isProjectDeleteRoute(pathname);
 }
 
 function isProjectDeleteRoute(pathname: string): boolean {

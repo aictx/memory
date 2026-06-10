@@ -2,23 +2,15 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
   deleteViewerProject,
-  exportObsidianProjection,
-  exportViewerProjectObsidian,
   getViewerProjectBootstrap,
   getViewerBootstrap,
   getViewerProjects,
-  previewViewerProjectLoad,
   type AppResult,
-  type ExportObsidianProjectionData,
   type ViewerBootstrapData,
   type ViewerProjectDeleteData,
   type ViewerProjectsData
 } from "../app/operations.js";
-import type { LoadMemoryData } from "../context/compile.js";
 import { memoryError, type MemoryError, type JsonValue } from "../core/errors.js";
-import { err, ok, type Result } from "../core/result.js";
-
-const MAX_API_BODY_BYTES = 64 * 1024;
 
 export interface ViewerApiContext {
   cwd: string;
@@ -29,9 +21,7 @@ export interface ViewerApiContext {
 type ViewerApiResult =
   | AppResult<ViewerBootstrapData>
   | AppResult<ViewerProjectsData>
-  | AppResult<ViewerProjectDeleteData>
-  | AppResult<ExportObsidianProjectionData>
-  | AppResult<LoadMemoryData>;
+  | AppResult<ViewerProjectDeleteData>;
 
 export async function handleViewerApiRequest(
   request: IncomingMessage,
@@ -67,25 +57,6 @@ export async function handleViewerApiRequest(
 
   if (projectBootstrap !== null) {
     await handleProjectBootstrapRequest(request, response, context, projectBootstrap);
-    return;
-  }
-
-  const projectExport = matchProjectRoute(url.pathname, "export/obsidian");
-
-  if (projectExport !== null) {
-    await handleProjectExportObsidianRequest(request, response, context, projectExport);
-    return;
-  }
-
-  const projectLoadPreview = matchProjectRoute(url.pathname, "load-preview");
-
-  if (projectLoadPreview !== null) {
-    await handleProjectLoadPreviewRequest(request, response, context, projectLoadPreview);
-    return;
-  }
-
-  if (url.pathname === "/api/export/obsidian") {
-    await handleExportObsidianRequest(request, response, context);
     return;
   }
 
@@ -197,110 +168,6 @@ async function handleProjectDeleteRequest(
   writeAppResult(response, result);
 }
 
-async function handleExportObsidianRequest(
-  request: IncomingMessage,
-  response: ServerResponse,
-  context: ViewerApiContext
-): Promise<void> {
-  if (request.method !== "POST") {
-    writeMethodNotAllowed(response, "POST");
-    return;
-  }
-
-  const body = await readJsonBody(request);
-
-  if (!body.ok) {
-    writeViewerJsonResponse(response, 400, viewerErrorBody(body.error));
-    return;
-  }
-
-  const outDir = parseExportOutDir(body.data);
-
-  if (!outDir.ok) {
-    writeViewerJsonResponse(response, 400, viewerErrorBody(outDir.error));
-    return;
-  }
-
-  const result = await exportObsidianProjection({
-    cwd: context.cwd,
-    ...(outDir.data === undefined ? {} : { outDir: outDir.data })
-  });
-
-  writeAppResult(response, result);
-}
-
-async function handleProjectExportObsidianRequest(
-  request: IncomingMessage,
-  response: ServerResponse,
-  context: ViewerApiContext,
-  registryId: string
-): Promise<void> {
-  if (request.method !== "POST") {
-    writeMethodNotAllowed(response, "POST");
-    return;
-  }
-
-  const body = await readJsonBody(request);
-
-  if (!body.ok) {
-    writeViewerJsonResponse(response, 400, viewerErrorBody(body.error));
-    return;
-  }
-
-  const outDir = parseExportOutDir(body.data);
-
-  if (!outDir.ok) {
-    writeViewerJsonResponse(response, 400, viewerErrorBody(outDir.error));
-    return;
-  }
-
-  const result = await exportViewerProjectObsidian({
-    cwd: context.cwd,
-    registryId,
-    ...(outDir.data === undefined ? {} : { outDir: outDir.data }),
-    ...(context.memoryHome === undefined ? {} : { memoryHome: context.memoryHome })
-  });
-
-  writeAppResult(response, result);
-}
-
-async function handleProjectLoadPreviewRequest(
-  request: IncomingMessage,
-  response: ServerResponse,
-  context: ViewerApiContext,
-  registryId: string
-): Promise<void> {
-  if (request.method !== "POST") {
-    writeMethodNotAllowed(response, "POST");
-    return;
-  }
-
-  const body = await readJsonBody(request);
-
-  if (!body.ok) {
-    writeViewerJsonResponse(response, 400, viewerErrorBody(body.error));
-    return;
-  }
-
-  const input = parseLoadPreviewInput(body.data);
-
-  if (!input.ok) {
-    writeViewerJsonResponse(response, 400, viewerErrorBody(input.error));
-    return;
-  }
-
-  const result = await previewViewerProjectLoad({
-    cwd: context.cwd,
-    registryId,
-    task: input.data.task,
-    ...(input.data.mode === undefined ? {} : { mode: input.data.mode }),
-    ...(input.data.token_budget === undefined ? {} : { token_budget: input.data.token_budget }),
-    ...(context.memoryHome === undefined ? {} : { memoryHome: context.memoryHome })
-  });
-
-  writeAppResult(response, result);
-}
-
 function writeMethodNotAllowed(response: ServerResponse, allow: string): void {
   response.setHeader("Allow", allow);
   writeViewerJsonResponse(response, 405, viewerErrorBody(
@@ -374,138 +241,3 @@ function matchProjectDeleteRoute(pathname: string): string | null {
   }
 }
 
-function readJsonBody(request: IncomingMessage): Promise<Result<unknown>> {
-  return new Promise((resolve) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    let settled = false;
-
-    request.on("data", (chunk: Buffer) => {
-      size += chunk.byteLength;
-
-      if (size > MAX_API_BODY_BYTES) {
-        settled = true;
-        request.destroy();
-        resolve(err(
-          memoryError("MemoryValidationFailed", "Viewer API request body is too large.", {
-            max_bytes: MAX_API_BODY_BYTES
-          })
-        ));
-        return;
-      }
-
-      chunks.push(chunk);
-    });
-
-    request.on("error", (error: Error) => {
-      if (!settled) {
-        settled = true;
-        resolve(err(
-          memoryError("MemoryInternalError", "Viewer API request body could not be read.", {
-            message: error.message
-          })
-        ));
-      }
-    });
-
-    request.on("end", () => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      const raw = Buffer.concat(chunks).toString("utf8");
-
-      if (raw.trim() === "") {
-        resolve(ok({}));
-        return;
-      }
-
-      try {
-        resolve(ok(JSON.parse(raw) as unknown));
-      } catch (error) {
-        resolve(err(
-          memoryError("MemoryInvalidJson", "Invalid JSON.", {
-            message: messageFromUnknown(error)
-          })
-        ));
-      }
-    });
-  });
-}
-
-function parseExportOutDir(value: unknown): Result<string | undefined> {
-  if (!isRecord(value)) {
-    return err(
-      memoryError("MemoryValidationFailed", "Viewer export request body must be a JSON object.")
-    );
-  }
-
-  if (value.outDir === undefined) {
-    return ok(undefined);
-  }
-
-  if (typeof value.outDir !== "string") {
-    return err(
-      memoryError("MemoryValidationFailed", "Viewer export outDir must be a string.")
-    );
-  }
-
-  return ok(value.outDir);
-}
-
-function parseLoadPreviewInput(value: unknown): Result<{
-  task: string;
-  mode?: string;
-  token_budget?: number;
-}> {
-  if (!isRecord(value)) {
-    return err(
-      memoryError("MemoryValidationFailed", "Viewer load preview request body must be a JSON object.")
-    );
-  }
-
-  if (typeof value.task !== "string") {
-    return err(
-      memoryError("MemoryValidationFailed", "Viewer load preview task must be a string.")
-    );
-  }
-
-  const task = value.task.trim();
-
-  if (task === "") {
-    return err(
-      memoryError("MemoryValidationFailed", "Viewer load preview task must be non-empty.")
-    );
-  }
-
-  if (value.mode !== undefined && typeof value.mode !== "string") {
-    return err(
-      memoryError("MemoryValidationFailed", "Viewer load preview mode must be a string.")
-    );
-  }
-
-  if (value.token_budget !== undefined && typeof value.token_budget !== "number") {
-    return err(
-      memoryError("MemoryValidationFailed", "Viewer load preview token_budget must be a number.")
-    );
-  }
-
-  return ok({
-    task,
-    ...(value.mode === undefined ? {} : { mode: value.mode }),
-    ...(value.token_budget === undefined ? {} : { token_budget: value.token_budget })
-  });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function messageFromUnknown(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
-}

@@ -33,16 +33,13 @@ import {
 } from "../../fixtures/time.js";
 import {
   cleanupParityTempRoots,
-  createInitializedParityProject,
   createInitializedParityRepo,
   createParityTempRoot,
   parseParityCliEnvelope,
-  parseParityCliErrorEnvelope,
   parseParityToolEnvelope,
   rebuildParityProject,
   runParityCli,
   startParityMcpClient,
-  writeParityDiffChanges,
   writeParityReadFixtures
 } from "./parity-fixtures.js";
 
@@ -62,29 +59,6 @@ interface CliRunResult {
   exitCode: number;
   stdout: string;
   stderr: string;
-}
-
-interface LoadEnvelope {
-  ok: true;
-  data: {
-    task: string;
-    mode: string;
-    token_budget: number | null;
-    context_pack: string;
-    token_target: number | null;
-    estimated_tokens: number;
-    budget_status: "not_requested" | "within_target" | "over_target";
-    truncated: boolean;
-    source: {
-      project: string;
-      git_available: boolean;
-      branch: string | null;
-      commit: string | null;
-    };
-    included_ids: string[];
-    excluded_ids: string[];
-    omitted_ids: string[];
-  };
 }
 
 interface SearchEnvelope {
@@ -130,17 +104,6 @@ interface InspectErrorEnvelope {
     details?: {
       id?: string;
     };
-  };
-}
-
-interface DiffEnvelope {
-  ok: true;
-  data: {
-    diff: string;
-    changed_files: string[];
-    untracked_files: string[];
-    changed_memory_ids: string[];
-    changed_relation_ids: string[];
   };
 }
 
@@ -216,15 +179,15 @@ describe("memory MCP read tools", () => {
       const toolNames = result.tools.map((tool) => tool.name).sort();
 
       expect(toolNames).toEqual([
-        "diff_memory",
         "inspect_memory",
-        "load_memory",
         "remember_memory",
-        "save_memory_patch",
         "search_memory"
       ]);
       expect(toolNames).not.toEqual(
         expect.arrayContaining([
+          "load_memory",
+          "save_memory_patch",
+          "diff_memory",
           "init",
           "check",
           "rebuild",
@@ -271,23 +234,6 @@ describe("memory MCP read tools", () => {
     try {
       const invalidCalls = await Promise.all([
         started.client.callTool({
-          name: "load_memory",
-          arguments: {
-            task: "Schema validation",
-            unexpected: true
-          }
-        }),
-        started.client.callTool({
-          name: "load_memory",
-          arguments: {
-            task: "Schema validation",
-            hints: {
-              files: [],
-              unexpected_hint: true
-            }
-          }
-        }),
-        started.client.callTool({
           name: "search_memory",
           arguments: {
             query: "Schema validation",
@@ -310,12 +256,6 @@ describe("memory MCP read tools", () => {
             id: "decision.schema-validation",
             unexpected: true
           }
-        }),
-        started.client.callTool({
-          name: "diff_memory",
-          arguments: {
-            unexpected: true
-          }
         })
       ]);
 
@@ -328,217 +268,6 @@ describe("memory MCP read tools", () => {
 
     expect(started.stderr()).toBe("");
     await expect(readdir(projectRoot)).resolves.toEqual([]);
-  });
-
-  it("returns load_memory data matching CLI load JSON without an explicit token budget", async () => {
-    const projectRoot = await createInitializedProject("memory-mcp-load-default-");
-    await writeLoadSearchFixtures(projectRoot);
-    await rebuildProject(projectRoot);
-    const started = await startMcpClient(projectRoot);
-
-    try {
-      const cli = await runCli(
-        ["node", "memory", "load", "Stripe webhook idempotency", "--json"],
-        projectRoot
-      );
-      const mcp = await started.client.callTool({
-        name: "load_memory",
-        arguments: {
-          task: "Stripe webhook idempotency"
-        }
-      });
-      const cliEnvelope = parseCliEnvelope<LoadEnvelope>(cli);
-      const mcpEnvelope = parseToolEnvelope<LoadEnvelope>(mcp);
-
-      expect(mcpEnvelope).toEqual(cliEnvelope);
-      expect(mcpEnvelope.data).toMatchObject({
-        mode: "coding",
-        token_budget: null,
-        token_target: null,
-        budget_status: "not_requested",
-        truncated: false
-      });
-      expect(mcpEnvelope.data.included_ids).toContain("constraint.webhook-idempotency");
-      expect(mcpEnvelope.data.included_ids).toContain("synthesis.webhook-context");
-      expect(mcpEnvelope.data.omitted_ids).toEqual([]);
-    } finally {
-      await started.close();
-    }
-
-    expect(started.stderr()).toBe("");
-  });
-
-  it("returns load_memory mode data matching CLI load --mode JSON", async () => {
-    const projectRoot = await createInitializedProject("memory-mcp-load-mode-");
-    await writeModeFixtures(projectRoot);
-    await rebuildProject(projectRoot);
-    const started = await startMcpClient(projectRoot);
-
-    try {
-      const cli = await runCli(
-        [
-          "node",
-          "memory",
-          "load",
-          "Mode service overview",
-          "--mode",
-          "debugging",
-          "--json"
-        ],
-        projectRoot
-      );
-      const mcp = await started.client.callTool({
-        name: "load_memory",
-        arguments: {
-          task: "Mode service overview",
-          mode: "debugging"
-        }
-      });
-      const cliEnvelope = parseCliEnvelope<LoadEnvelope>(cli);
-      const mcpEnvelope = parseToolEnvelope<LoadEnvelope>(mcp);
-
-      expect(mcpEnvelope).toEqual(cliEnvelope);
-      expect(mcpEnvelope.data.mode).toBe("debugging");
-      expect(mcpEnvelope.data.context_pack).toContain("## Must know");
-      expect(mcpEnvelope.data.context_pack).toContain("Mode service overview gotcha");
-      expect(mcpEnvelope.data.included_ids).toContain("gotcha.mode-service");
-    } finally {
-      await started.close();
-    }
-
-    expect(started.stderr()).toBe("");
-  });
-
-  it("loads facet-aware memory through MCP", async () => {
-    const projectRoot = await createInitializedProject("memory-mcp-load-facets-");
-    await writeMemoryObject(projectRoot, {
-      id: "decision.facet-aware-context",
-      type: "decision",
-      status: "active",
-      title: "Facet-aware context",
-      bodyPath: "memory/decisions/facet-aware-context.md",
-      body: "# Facet-aware context\n\nRelevant testing memory applies to MCP load behavior.\n",
-      tags: ["mcp", "testing"],
-      facets: {
-        category: "testing",
-        applies_to: ["src/mcp/tools/load-memory.ts"],
-        load_modes: ["review"]
-      },
-      evidence: [{ kind: "file", id: "src/mcp/tools/load-memory.ts" }],
-      updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
-    });
-    await rebuildProject(projectRoot);
-    const started = await startMcpClient(projectRoot);
-
-    try {
-      const cli = await runCli(
-        [
-          "node",
-          "memory",
-          "load",
-          "Review src/mcp/tools/load-memory.ts testing behavior",
-          "--mode",
-          "review",
-          "--json"
-        ],
-        projectRoot
-      );
-      const mcp = await started.client.callTool({
-        name: "load_memory",
-        arguments: {
-          task: "Review src/mcp/tools/load-memory.ts testing behavior",
-          mode: "review"
-        }
-      });
-      const cliEnvelope = parseCliEnvelope<LoadEnvelope>(cli);
-      const mcpEnvelope = parseToolEnvelope<LoadEnvelope>(mcp);
-
-      expect(mcpEnvelope).toEqual(cliEnvelope);
-      expect(mcpEnvelope.data.included_ids).toContain("decision.facet-aware-context");
-      expect(mcpEnvelope.data.context_pack).toContain("## Must know");
-      expect(mcpEnvelope.data.context_pack).toContain("Relevant testing memory applies");
-      expect(mcpEnvelope.data.context_pack).toContain("src/mcp/tools/load-memory.ts");
-    } finally {
-      await started.close();
-    }
-
-    expect(started.stderr()).toBe("");
-  });
-
-  it("returns the shared validation envelope for invalid load_memory modes", async () => {
-    const projectRoot = await createInitializedProject("memory-mcp-load-invalid-mode-");
-    const started = await startMcpClient(projectRoot);
-
-    try {
-      const cli = await runCli(
-        ["node", "memory", "load", "Architecture", "--mode", "triage", "--json"],
-        projectRoot
-      );
-      const mcp = await started.client.callTool({
-        name: "load_memory",
-        arguments: {
-          task: "Architecture",
-          mode: "triage"
-        }
-      });
-      const cliEnvelope = parseCliErrorEnvelope<ErrorEnvelope>(cli);
-      const mcpEnvelope = parseToolEnvelope<ErrorEnvelope>(mcp);
-
-      expect(mcpEnvelope).toEqual(cliEnvelope);
-      expect(mcpEnvelope.error.code).toBe("MemoryValidationFailed");
-      expect(mcpEnvelope.error.details).toMatchObject({
-        field: "mode",
-        actual: "triage"
-      });
-    } finally {
-      await started.close();
-    }
-
-    expect(started.stderr()).toBe("");
-  });
-
-  it("preserves load_memory token metadata and omitted IDs when packaging truncates", async () => {
-    const projectRoot = await createInitializedProject("memory-mcp-load-budget-");
-    await writeManyBudgetFixtures(projectRoot, 18);
-    await rebuildProject(projectRoot);
-    const started = await startMcpClient(projectRoot);
-
-    try {
-      const cli = await runCli(
-        [
-          "node",
-          "memory",
-          "load",
-          "budget compiler context",
-          "--token-budget",
-          "501",
-          "--json"
-        ],
-        projectRoot
-      );
-      const mcp = await started.client.callTool({
-        name: "load_memory",
-        arguments: {
-          task: "budget compiler context",
-          token_budget: 501
-        }
-      });
-      const cliEnvelope = parseCliEnvelope<LoadEnvelope>(cli);
-      const mcpEnvelope = parseToolEnvelope<LoadEnvelope>(mcp);
-
-      expect(mcpEnvelope).toEqual(cliEnvelope);
-      expect(mcpEnvelope.data.token_budget).toBe(501);
-      expect(mcpEnvelope.data.token_target).toBe(501);
-      expect(["within_target", "over_target"]).toContain(
-        mcpEnvelope.data.budget_status
-      );
-      expect(mcpEnvelope.data.truncated).toBe(true);
-      expect(mcpEnvelope.data.omitted_ids.length).toBeGreaterThan(0);
-    } finally {
-      await started.close();
-    }
-
-    expect(started.stderr()).toBe("");
   });
 
   it("returns search_memory data matching CLI search JSON", async () => {
@@ -756,90 +485,10 @@ describe("memory MCP read tools", () => {
     expect(started.stderr()).toBe("");
   });
 
-  it("returns diff_memory Git precondition errors matching CLI diff JSON", async () => {
-    const projectRoot = await createInitializedProject("memory-mcp-diff-no-git-");
-    const started = await startMcpClient(projectRoot);
-
-    try {
-      const cli = await runCli(["node", "memory", "diff", "--json"], projectRoot);
-      const mcp = await started.client.callTool({
-        name: "diff_memory",
-        arguments: {}
-      });
-      const cliEnvelope = parseCliErrorEnvelope<ErrorEnvelope>(cli);
-      const mcpEnvelope = parseToolEnvelope<ErrorEnvelope>(mcp);
-
-      expect(mcpEnvelope).toEqual(cliEnvelope);
-      expect(mcpEnvelope.error.code).toBe("MemoryGitRequired");
-    } finally {
-      await started.close();
-    }
-
-    expect(started.stderr()).toBe("");
-  });
-
-  it("returns diff_memory data matching CLI diff JSON", async () => {
-    const repo = await createInitializedGitProject("memory-mcp-diff-");
-    const projectId = await readJsonId(join(repo, ".memory", "memory", "project.json"));
-    await writeFile(
-      join(repo, ".memory", "memory", "project.md"),
-      "# Updated Project\n\nChanged Memory.\n",
-      "utf8"
-    );
-    await mkdir(join(repo, ".memory", "memory", "notes"), { recursive: true });
-    await writeFile(
-      join(repo, ".memory", "memory", "notes", "mcp-untracked-note.json"),
-      `${JSON.stringify({ id: "note.mcp-untracked-note" }, null, 2)}\n`,
-      "utf8"
-    );
-    await writeFile(
-      join(repo, ".memory", "memory", "notes", "mcp-untracked-note.md"),
-      "# MCP Untracked Note\n\nMCP diff should match CLI diff for untracked memory.\n",
-      "utf8"
-    );
-    await writeFile(join(repo, "src.ts"), "changed outside memory\n", "utf8");
-    const started = await startMcpClient(repo);
-
-    try {
-      const cli = await runCli(["node", "memory", "diff", "--json"], repo);
-      const mcp = await started.client.callTool({
-        name: "diff_memory",
-        arguments: {}
-      });
-      const cliEnvelope = parseCliEnvelope<DiffEnvelope>(cli);
-      const mcpEnvelope = parseToolEnvelope<DiffEnvelope>(mcp);
-
-      expect(mcpEnvelope).toEqual(cliEnvelope);
-      expect(mcpEnvelope.data.diff).toContain(".memory/memory/project.md");
-      expect(mcpEnvelope.data.diff).toContain(".memory/memory/notes/mcp-untracked-note.md");
-      expect(mcpEnvelope.data.diff).not.toContain("src.ts");
-      expect(mcpEnvelope.data.changed_files).toEqual([
-        ".memory/memory/notes/mcp-untracked-note.json",
-        ".memory/memory/notes/mcp-untracked-note.md",
-        ".memory/memory/project.md"
-      ]);
-      expect(mcpEnvelope.data.untracked_files).toEqual([
-        ".memory/memory/notes/mcp-untracked-note.json",
-        ".memory/memory/notes/mcp-untracked-note.md"
-      ]);
-      expect(mcpEnvelope.data.changed_memory_ids).toEqual([
-        "note.mcp-untracked-note",
-        projectId
-      ]);
-      expect(mcpEnvelope.data.changed_relation_ids).toEqual([]);
-    } finally {
-      await started.close();
-    }
-
-    expect(started.stderr()).toBe("");
-  });
 
   it("keeps globally targeted CLI and MCP read envelopes in parity", async () => {
     const serverRoot = await createParityTempRoot("memory-mcp-read-parity-server-");
     const gitProject = await createInitializedParityRepo("memory-mcp-read-parity-git-");
-    const nonGitProject = await createInitializedParityProject(
-      "memory-mcp-read-parity-nongit-"
-    );
 
     await writeParityReadFixtures(gitProject);
     await rebuildParityProject(gitProject);
@@ -847,25 +496,6 @@ describe("memory MCP read tools", () => {
     const started = await startParityMcpClient(serverRoot);
 
     try {
-      const cliLoad = parseParityCliEnvelope<LoadEnvelope>(
-        await runParityCli(
-          ["node", "memory", "load", "shared adapter parity", "--json"],
-          gitProject
-        )
-      );
-      const mcpLoad = parseParityToolEnvelope<LoadEnvelope>(
-        await started.client.callTool({
-          name: "load_memory",
-          arguments: {
-            project_root: gitProject,
-            task: "shared adapter parity"
-          }
-        })
-      );
-
-      expect(mcpLoad).toEqual(cliLoad);
-      expect(mcpLoad.data.included_ids).toContain("decision.parity-shared-read");
-
       const cliSearch = parseParityCliEnvelope<SearchEnvelope>(
         await runParityCli(
           [
@@ -916,40 +546,6 @@ describe("memory MCP read tools", () => {
       expect(mcpInspect.data.relations.outgoing.map((relation) => relation.id)).toEqual([
         "rel.parity-read-requires-targeting"
       ]);
-
-      const projectId = await writeParityDiffChanges(gitProject);
-      const cliDiff = parseParityCliEnvelope<DiffEnvelope>(
-        await runParityCli(["node", "memory", "diff", "--json"], gitProject)
-      );
-      const mcpDiff = parseParityToolEnvelope<DiffEnvelope>(
-        await started.client.callTool({
-          name: "diff_memory",
-          arguments: {
-            project_root: gitProject
-          }
-        })
-      );
-
-      expect(mcpDiff).toEqual(cliDiff);
-      expect(mcpDiff.data.diff).not.toContain("src.ts");
-      expect(mcpDiff.data.changed_memory_ids).toEqual(
-        expect.arrayContaining(["note.parity-untracked-note", projectId])
-      );
-
-      const cliNonGitDiff = parseParityCliErrorEnvelope<ErrorEnvelope>(
-        await runParityCli(["node", "memory", "diff", "--json"], nonGitProject)
-      );
-      const mcpNonGitDiff = parseParityToolEnvelope<ErrorEnvelope>(
-        await started.client.callTool({
-          name: "diff_memory",
-          arguments: {
-            project_root: nonGitProject
-          }
-        })
-      );
-
-      expect(mcpNonGitDiff).toEqual(cliNonGitDiff);
-      expect(mcpNonGitDiff.error.code).toBe("MemoryGitRequired");
     } finally {
       await started.close();
     }
@@ -1402,12 +998,6 @@ function parseToolEnvelope<T>(result: unknown): T {
 }
 
 function expectToolAnnotations(tools: unknown[]): void {
-  expectToolAnnotation(tools, "load_memory", {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false
-  });
   expectToolAnnotation(tools, "search_memory", {
     readOnlyHint: true,
     destructiveHint: false,
@@ -1420,13 +1010,7 @@ function expectToolAnnotations(tools: unknown[]): void {
     idempotentHint: true,
     openWorldHint: false
   });
-  expectToolAnnotation(tools, "diff_memory", {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false
-  });
-  expectToolAnnotation(tools, "save_memory_patch", {
+  expectToolAnnotation(tools, "remember_memory", {
     readOnlyHint: false,
     destructiveHint: true,
     idempotentHint: false,

@@ -1,0 +1,33 @@
+{
+  "body_path": "memory/gotchas/viewer-shell-tests-run-against-dist-viewer-and-need-a-rebuild-after-viewer-changes.md",
+  "content_hash": "sha256:f02e14aed723b3a4dacad12da3870628a1129b1697626c3f4c512a7ada2890b4",
+  "created_at": "2026-06-10T22:25:45+02:00",
+  "evidence": [],
+  "facets": {
+    "applies_to": [
+      "test/integration/viewer/shell.test.ts",
+      "viewer/src/App.svelte"
+    ],
+    "category": "gotcha"
+  },
+  "id": "gotcha.viewer-shell-tests-run-against-dist-viewer-and-need-a-rebuild-after-viewer-changes",
+  "scope": {
+    "branch": null,
+    "kind": "project",
+    "project": "project.aictx",
+    "task": null
+  },
+  "source": {
+    "kind": "agent",
+    "task": "M1 rework: make repo green after deleting dead product surface"
+  },
+  "status": "active",
+  "tags": [
+    "testing",
+    "viewer",
+    "build"
+  ],
+  "title": "Viewer shell tests run against dist/viewer and need a rebuild after viewer changes",
+  "type": "gotcha",
+  "updated_at": "2026-06-10T22:25:45+02:00"
+}

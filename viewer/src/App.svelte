@@ -51,39 +51,6 @@
     id: string;
   }
 
-  type AuditSeverity = "warning" | "info";
-  type AuditRule =
-    | "vague_memory"
-    | "duplicate_like_title_or_tags"
-    | "stale_or_superseded_cleanup"
-    | "referenced_file_missing"
-    | "missing_tags"
-    | "missing_facets"
-    | "missing_object_evidence"
-    | "source_missing_origin"
-    | "synthesis_missing_source_provenance"
-    | "task_diary_like_memory"
-    | "oversized_vague_memory"
-    | "duplicate_like_facet_category"
-    | "missing_evidence"
-    | "manifest_version_contradiction"
-    | "weakly_connected_memory"
-    | "unlinked_applicability_overlap"
-    | "excessive_related_to"
-    | "changed_file_missing_rationale"
-    | "possibly_stale_changed_reference"
-    | "source_origin_outdated"
-    | "active_conflict_needs_resolution"
-    | "supersession_chain_needs_review";
-
-  interface AuditFinding {
-    severity: AuditSeverity;
-    rule: AuditRule;
-    memory_id: string;
-    message: string;
-    evidence: Evidence[];
-  }
-
   interface ObjectFacets {
     category: FacetCategory;
     applies_to?: string[];
@@ -139,9 +106,6 @@
       synthesis_objects: number;
       active_relations: number;
     };
-    role_coverage: RoleCoverageData;
-    lenses: MemoryLensData[];
-    audit_findings: AuditFinding[];
     storage_warnings: string[];
   }
 
@@ -175,16 +139,6 @@
       unavailable: number;
     };
     current_project_registry_id: string | null;
-  }
-
-  interface ExportObsidianProjectionData {
-    format: "obsidian";
-    output_dir: string;
-    manifest_path: string;
-    objects_exported: number;
-    relations_linked: number;
-    files_written: string[];
-    files_removed: string[];
   }
 
   interface ViewerProjectDeleteData {
@@ -223,46 +177,12 @@
 
   type ViewerEnvelope = ViewerSuccessEnvelope<ViewerBootstrapData> | ViewerErrorEnvelope;
   type ViewerProjectsEnvelope = ViewerSuccessEnvelope<ViewerProjectsData> | ViewerErrorEnvelope;
-  type ExportEnvelope = ViewerSuccessEnvelope<ExportObsidianProjectionData> | ViewerErrorEnvelope;
-  type LoadPreviewEnvelope = ViewerSuccessEnvelope<LoadPreviewData> | ViewerErrorEnvelope;
   type ProjectDeleteEnvelope = ViewerSuccessEnvelope<ViewerProjectDeleteData> | ViewerErrorEnvelope;
   type ViewerState = "loading" | "ready" | "error";
-  type ViewerScreen = "projects" | "memories" | "detail" | "graph" | "maintenance" | "export";
-  type ExportState = "idle" | "running" | "success" | "error";
-  type PreviewState = "idle" | "running" | "success" | "error";
+  type ViewerScreen = "projects" | "memories" | "detail" | "graph";
   type LayerFilter = "all" | "memories" | "syntheses" | "sources" | "inactive";
   type PagePreset = "all" | "atomic-memory" | "syntheses" | "sources" | "inactive";
   type ObjectSort = "type" | "updated-desc" | "updated-asc";
-  type LoadMemoryMode = "coding" | "debugging" | "review" | "architecture" | "onboarding";
-  type MemoryLensName = "project-map" | "current-work" | "review-risk" | "provenance" | "maintenance";
-  type RoleCoverageStatus = "populated" | "thin" | "missing" | "stale" | "conflicted";
-
-  interface RoleCoverageItem {
-    key: string;
-    label: string;
-    description: string;
-    status: RoleCoverageStatus;
-    optional: boolean;
-    memory_ids: string[];
-    relation_ids: string[];
-    gap: string | null;
-  }
-
-  interface RoleCoverageData {
-    roles: RoleCoverageItem[];
-    counts: Record<RoleCoverageStatus, number>;
-  }
-
-  interface MemoryLensData {
-    name: MemoryLensName;
-    title: string;
-    markdown: string;
-    role_coverage: RoleCoverageData;
-    included_memory_ids: string[];
-    relation_ids: string[];
-    relations: MemoryRelationSummary[];
-    generated_gaps: string[];
-  }
 
   interface MarkdownBlock {
     kind: "heading" | "paragraph" | "list" | "quote" | "code";
@@ -281,14 +201,6 @@
     label: string;
     value: string;
     detail: string;
-  }
-
-  interface MaintenanceGroup {
-    memoryId: string;
-    object: MemoryObjectSummary | null;
-    findings: AuditFinding[];
-    relations: MemoryRelationSummary[];
-    suggestedAction: string;
   }
 
   interface DocGraphNode {
@@ -330,35 +242,6 @@
     hiddenRelationCount: number;
   }
 
-  interface TokenTarget {
-    value: number;
-    source: "explicit" | "config_default" | "fallback_default";
-    enforced: boolean;
-    was_capped: boolean;
-  }
-
-  interface LoadMemorySource {
-    project: string;
-    git_available: boolean;
-    branch: string | null;
-    commit: string | null;
-  }
-
-  interface LoadPreviewData {
-    task: string;
-    token_budget: number;
-    mode: LoadMemoryMode;
-    context_pack: string;
-    source: LoadMemorySource;
-    token_target: TokenTarget;
-    estimated_tokens: number;
-    budget_status: "within_target" | "over_target";
-    truncated: boolean;
-    included_ids: string[];
-    excluded_ids: string[];
-    omitted_ids: string[];
-  }
-
   let loadState = $state<ViewerState>("loading");
   let projectLoadState = $state<ViewerState>("loading");
   let projectsData = $state<ViewerProjectsData | null>(null);
@@ -377,22 +260,7 @@
   let tagFilter = $state("all");
   let pagePreset = $state<PagePreset>("all");
   let objectSort = $state<ObjectSort>("type");
-  let activeLensName = $state<MemoryLensName>("project-map");
   let sidebarDrawerOpen = $state(false);
-  let exportOutDir = $state("");
-  let exportState = $state<ExportState>("idle");
-  let exportMessage = $state("");
-  let exportErrorCode = $state("");
-  let exportFilesWritten = $state(0);
-  let exportManifestPath = $state("");
-  let previewTask = $state("");
-  let previewMode = $state<LoadMemoryMode>("coding");
-  let previewTokenBudget = $state("");
-  let previewState = $state<PreviewState>("idle");
-  let previewMessage = $state("");
-  let previewErrorCode = $state("");
-  let previewData = $state<LoadPreviewData | null>(null);
-  let copiedPreviewTarget = $state<"command" | "context" | null>(null);
   let pendingDeleteProjectId = $state<string | null>(null);
   let deleteConfirmText = $state("");
   let deletingProjectId = $state<string | null>(null);
@@ -421,13 +289,6 @@
     { value: "type", label: "Type order" },
     { value: "updated-desc", label: "Edited newest" },
     { value: "updated-asc", label: "Edited oldest" }
-  ];
-  const loadModeOptions: Array<{ value: LoadMemoryMode; label: string }> = [
-    { value: "coding", label: "Coding" },
-    { value: "debugging", label: "Debugging" },
-    { value: "review", label: "Review" },
-    { value: "architecture", label: "Architecture" },
-    { value: "onboarding", label: "Onboarding" }
   ];
   const graphTypeLegend: Array<{
     label: string;
@@ -587,17 +448,12 @@
   );
   const objects = $derived(bootstrap?.objects ?? []);
   const relations = $derived(bootstrap?.relations ?? []);
-  const auditFindings = $derived(bootstrap?.audit_findings ?? []);
   const objectById = $derived(new Map(objects.map((object) => [object.id, object])));
-  const auditFindingsByMemory = $derived.by(() => groupAuditFindingsByMemory(auditFindings));
   const filteredObjects = $derived.by(() =>
     objects.filter((object) => objectMatchesFilters(object))
   );
   const selectedObject = $derived.by(() =>
     selectedObjectId === null ? null : objectById.get(selectedObjectId) ?? null
-  );
-  const selectedObjectFindings = $derived(
-    selectedObject === null ? [] : auditFindingsByMemory.get(selectedObject.id) ?? []
   );
   const graphObjects = $derived.by(() =>
     objects.filter((object) =>
@@ -668,17 +524,6 @@
   const markdownBlocks = $derived(
     selectedObject === null ? [] : parseMarkdownBlocks(selectedObject.body)
   );
-  const previewMarkdownBlocks = $derived(
-    previewData === null ? [] : parseMarkdownBlocks(previewData.context_pack)
-  );
-  const guidedLenses = $derived(bootstrap?.lenses ?? []);
-  const activeGuidedLens = $derived.by(() =>
-    guidedLenses.find((lens) => lens.name === activeLensName) ?? guidedLenses[0] ?? null
-  );
-  const activeLensMarkdownBlocks = $derived(
-    activeGuidedLens === null ? [] : parseMarkdownBlocks(activeGuidedLens.markdown)
-  );
-  const roleCoverage = $derived(bootstrap?.role_coverage ?? emptyRoleCoverage());
   const selectedJson = $derived(
     selectedObject === null ? "" : JSON.stringify(sidecarJsonForObject(selectedObject), null, 2)
   );
@@ -691,19 +536,11 @@
   const memorySnapshot = $derived.by(() => buildMemorySnapshot(objects, relations));
   const activeMemoryCount = $derived(objects.filter((object) => isCurrentStatus(object.status)).length);
   const facetCategoryCount = $derived(facetCategoryOptions.length);
-  const staleMemoryCount = $derived(objects.filter((object) => object.status === "stale" || object.status === "superseded").length);
-  const advisoryMemoryCount = $derived(auditFindingsByMemory.size);
-  const maintenanceGroups = $derived.by(() =>
-    buildMaintenanceGroups(auditFindings, objectById, relations)
-  );
   const trustLabel = $derived.by(() => selectedProject === null ? "No project" : gitLabel(selectedProject));
   const trustDescription = $derived.by(() =>
     selectedProject === null ? "No project is selected." : gitDescription(selectedProject)
   );
   const memorySections = $derived.by(() => buildMemorySections(filteredObjects, objectSort));
-  const previewCommandTask = $derived.by(() => previewTask.trim() || (previewData?.task ?? ""));
-  const showPreviewCommand = $derived(previewCommandTask.trim() !== "");
-  const previewCommand = $derived.by(() => buildPreviewCommand(previewCommandTask, previewMode, previewTokenBudget));
   const docGraphOverview = $derived.by(() => buildDocGraphOverview(graphObjects, graphRelations));
   const docGraphPreviewRelations = $derived(docGraphOverview.relations.slice(0, 3));
   const docGraphOverflowCount = $derived(
@@ -823,141 +660,6 @@
     }
   }
 
-  async function exportObsidian(): Promise<void> {
-    if (isDemoMode) {
-      exportState = "error";
-      exportErrorCode = "MemoryValidationFailed";
-      exportMessage = "The public demo viewer is read-only.";
-      return;
-    }
-
-    if (selectedProjectId === null) {
-      exportState = "error";
-      exportErrorCode = "MemoryValidationFailed";
-      exportMessage = "Select a project before exporting.";
-      return;
-    }
-
-    exportState = "running";
-    exportMessage = "Exporting Obsidian projection.";
-    exportErrorCode = "";
-    exportFilesWritten = 0;
-    exportManifestPath = "";
-
-    try {
-      const trimmedOutDir = exportOutDir.trim();
-      const response = await fetch(`/api/projects/${encodeURIComponent(selectedProjectId)}/export/obsidian?token=${encodeURIComponent(token)}`, {
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json"
-        },
-        body: JSON.stringify(trimmedOutDir === "" ? {} : { outDir: trimmedOutDir })
-      });
-      const envelope = (await response.json()) as ExportEnvelope;
-
-      warnings = uniqueSorted([...warnings, ...(envelope.warnings ?? [])]);
-
-      if (!response.ok || !envelope.ok) {
-        exportState = "error";
-        exportErrorCode = envelope.ok ? "" : envelope.error.code;
-        exportMessage = envelope.ok
-          ? `Viewer export request failed with HTTP ${response.status}.`
-          : `${envelope.error.code}: ${envelope.error.message}`;
-        return;
-      }
-
-      exportState = "success";
-      exportMessage = "Export complete.";
-      exportFilesWritten = envelope.data.files_written.length;
-      exportManifestPath = envelope.data.manifest_path;
-    } catch (error) {
-      exportState = "error";
-      exportErrorCode = "MemoryInternalError";
-      exportMessage = error instanceof Error ? error.message : String(error);
-    }
-  }
-
-  async function previewContext(): Promise<void> {
-    if (selectedProjectId === null) {
-      previewState = "error";
-      previewErrorCode = "MemoryValidationFailed";
-      previewMessage = "Select a project before previewing context.";
-      return;
-    }
-
-    const task = previewTask.trim();
-
-    if (task === "") {
-      previewState = "error";
-      previewErrorCode = "MemoryValidationFailed";
-      previewMessage = "Enter a task to preview the context an agent would load.";
-      return;
-    }
-
-    const parsedBudget = parsePreviewTokenBudget(previewTokenBudget);
-
-    if (!parsedBudget.ok) {
-      previewState = "error";
-      previewErrorCode = "MemoryValidationFailed";
-      previewMessage = parsedBudget.message;
-      return;
-    }
-
-    previewState = "running";
-    previewMessage = "Compiling the same context pack an agent would load.";
-    previewErrorCode = "";
-    copiedPreviewTarget = null;
-
-    try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(selectedProjectId)}/load-preview?token=${encodeURIComponent(token)}`, {
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          task,
-          mode: previewMode,
-          ...(parsedBudget.value === null ? {} : { token_budget: parsedBudget.value })
-        })
-      });
-      const envelope = (await response.json()) as LoadPreviewEnvelope;
-
-      warnings = uniqueSorted([...warnings, ...(envelope.warnings ?? [])]);
-
-      if (!response.ok || !envelope.ok) {
-        previewState = "error";
-        previewData = null;
-        previewErrorCode = envelope.ok ? "" : envelope.error.code;
-        previewMessage = envelope.ok
-          ? `Viewer load preview request failed with HTTP ${response.status}.`
-          : previewErrorMessage(envelope.error.code, envelope.error.message);
-        return;
-      }
-
-      previewState = "success";
-      previewMessage = "Context preview ready.";
-      previewData = envelope.data;
-    } catch (error) {
-      previewState = "error";
-      previewData = null;
-      previewErrorCode = "MemoryInternalError";
-      previewMessage = error instanceof Error ? error.message : String(error);
-    }
-  }
-
-  async function copyPreview(kind: "command" | "context"): Promise<void> {
-    const text = kind === "command" ? previewCommand : previewData?.context_pack ?? "";
-
-    if (text === "") {
-      return;
-    }
-
-    await navigator.clipboard.writeText(text);
-    copiedPreviewTarget = kind;
-  }
-
   function requestProjectDelete(registryId: string): void {
     pendingDeleteProjectId = registryId;
     deleteConfirmText = "";
@@ -1035,11 +737,6 @@
     projectLoadState = "loading";
     currentScreen = "projects";
     objectSort = "type";
-    exportState = "idle";
-    previewState = "idle";
-    previewData = null;
-    previewMessage = "";
-    previewErrorCode = "";
     selectedGraphObjectId = null;
     selectedGraphRelationId = null;
   }
@@ -1064,12 +761,6 @@
     tagFilter = allOption;
     pagePreset = "all";
     objectSort = "type";
-    activeLensName = "project-map";
-    exportState = "idle";
-    previewState = "idle";
-    previewData = null;
-    previewMessage = "";
-    previewErrorCode = "";
     graphShowInactive = false;
     selectedGraphObjectId = null;
     selectedGraphRelationId = null;
@@ -1133,21 +824,6 @@
     selectedGraphRelationId = null;
     pendingGraphFocus = true;
     currentScreen = "graph";
-    closeSidebarDrawer();
-  }
-
-  function showMaintenance(): void {
-    currentScreen = selectedProjectId === null ? "projects" : "maintenance";
-    closeSidebarDrawer();
-  }
-
-  function showExport(): void {
-    if (isDemoMode) {
-      showMemories();
-      return;
-    }
-
-    currentScreen = selectedProjectId === null ? "projects" : "export";
     closeSidebarDrawer();
   }
 
@@ -2020,23 +1696,6 @@
     return "project";
   }
 
-  function emptyRoleCoverage(): RoleCoverageData {
-    return {
-      roles: [],
-      counts: {
-        populated: 0,
-        thin: 0,
-        missing: 0,
-        stale: 0,
-        conflicted: 0
-      }
-    };
-  }
-
-  function roleStatusClass(status: RoleCoverageStatus): string {
-    return `status-${status}`;
-  }
-
   function relationCounterpart(relation: MemoryRelationSummary, objectId: string): string {
     return relation.from === objectId ? relation.to : relation.from;
   }
@@ -2055,159 +1714,6 @@
     return relation.confidence === null
       ? relation.status
       : `${relation.status} / ${relation.confidence} confidence`;
-  }
-
-  function groupAuditFindingsByMemory(
-    findings: readonly AuditFinding[]
-  ): Map<string, AuditFinding[]> {
-    const groups = new Map<string, AuditFinding[]>();
-
-    for (const finding of findings) {
-      groups.set(finding.memory_id, [...(groups.get(finding.memory_id) ?? []), finding]);
-    }
-
-    return groups;
-  }
-
-  function buildMaintenanceGroups(
-    findings: readonly AuditFinding[],
-    memoryObjects: Map<string, MemoryObjectSummary>,
-    relationList: readonly MemoryRelationSummary[]
-  ): MaintenanceGroup[] {
-    return [...groupAuditFindingsByMemory(findings).entries()]
-      .map(([memoryId, memoryFindings]) => ({
-        memoryId,
-        object: memoryObjects.get(memoryId) ?? null,
-        findings: [...memoryFindings].sort(compareAuditFindings),
-        relations: relationList
-          .filter((relation) => relation.from === memoryId || relation.to === memoryId)
-          .sort(compareRelations),
-        suggestedAction: suggestedMaintenanceAction(memoryFindings)
-      }))
-      .sort(compareMaintenanceGroups);
-  }
-
-  function compareMaintenanceGroups(left: MaintenanceGroup, right: MaintenanceGroup): number {
-    return (
-      maintenanceSeverityRank(right.findings) - maintenanceSeverityRank(left.findings) ||
-      left.memoryId.localeCompare(right.memoryId)
-    );
-  }
-
-  function maintenanceSeverityRank(findings: readonly AuditFinding[]): number {
-    return findings.some((finding) => finding.severity === "warning") ? 1 : 0;
-  }
-
-  function compareAuditFindings(left: AuditFinding, right: AuditFinding): number {
-    return (
-      auditSeverityOrder(left.severity) - auditSeverityOrder(right.severity) ||
-      left.rule.localeCompare(right.rule) ||
-      left.message.localeCompare(right.message)
-    );
-  }
-
-  function auditSeverityOrder(severity: AuditSeverity): number {
-    return severity === "warning" ? 0 : 1;
-  }
-
-  function advisoryLabel(findings: readonly AuditFinding[]): string {
-    if (findings.some((finding) => finding.rule === "possibly_stale_changed_reference")) {
-      return "possibly stale";
-    }
-
-    if (findings.some((finding) => finding.rule === "source_origin_outdated")) {
-      return "source changed";
-    }
-
-    if (findings.some((finding) => finding.rule === "active_conflict_needs_resolution")) {
-      return "conflict";
-    }
-
-    if (findings.some((finding) => finding.rule === "referenced_file_missing")) {
-      return "missing file";
-    }
-
-    return findings.some((finding) => finding.severity === "warning") ? "needs review" : "advisory";
-  }
-
-  function suggestedMaintenanceAction(findings: readonly AuditFinding[]): string {
-    if (findings.some((finding) => finding.rule === "active_conflict_needs_resolution")) {
-      return "Add evidence or create a linked unresolved-conflict question.";
-    }
-
-    if (findings.some((finding) => finding.rule === "source_origin_outdated")) {
-      return "Refresh the source record and any syntheses derived from it.";
-    }
-
-    if (findings.some((finding) => finding.rule === "referenced_file_missing")) {
-      return "Update, supersede, or mark stale after checking current files.";
-    }
-
-    if (findings.some((finding) => finding.rule === "supersession_chain_needs_review")) {
-      return "Review the replacement chain and collapse it when a current replacement is known.";
-    }
-
-    if (findings.some((finding) => finding.rule === "possibly_stale_changed_reference")) {
-      return "Verify the memory against current code before relying on it.";
-    }
-
-    return "Review the audit evidence and repair only if current evidence supports the change.";
-  }
-
-  function evidenceLabel(evidence: Evidence): string {
-    return `${evidence.kind}:${evidence.id}`;
-  }
-
-  function parsePreviewTokenBudget(raw: string): { ok: true; value: number | null } | { ok: false; message: string } {
-    const trimmed = raw.trim();
-
-    if (trimmed === "") {
-      return { ok: true, value: null };
-    }
-
-    const value = Number(trimmed);
-
-    if (!Number.isSafeInteger(value) || value <= 500) {
-      return { ok: false, message: "Token budget must be an integer greater than 500." };
-    }
-
-    return { ok: true, value };
-  }
-
-  function previewErrorMessage(code: string, message: string): string {
-    if (code === "MemoryIndexUnavailable") {
-      return `${code}: ${message} Run memory rebuild, then preview again.`;
-    }
-
-    return `${code}: ${message}`;
-  }
-
-  function buildPreviewCommand(task: string, mode: LoadMemoryMode, tokenBudget: string): string {
-    const parts = ["memory", "load", shellQuote(task.trim())];
-
-    if (mode !== "coding") {
-      parts.push("--mode", mode);
-    }
-
-    const parsedBudget = parsePreviewTokenBudget(tokenBudget);
-
-    if (parsedBudget.ok && parsedBudget.value !== null) {
-      parts.push("--token-budget", String(parsedBudget.value));
-    }
-
-    return parts.join(" ");
-  }
-
-  function shellQuote(value: string): string {
-    return `"${value.replace(/["\\$`]/g, "\\$&")}"`;
-  }
-
-  function previewSourceLabel(source: LoadMemorySource): string {
-    if (!source.git_available) {
-      return `${source.project}, Git unavailable`;
-    }
-
-    return `${source.project}, ${source.branch ?? "detached HEAD"}@${source.commit ?? "unknown commit"}`;
   }
 
   function gitLabel(project: ViewerProjectSummary): string {
@@ -2479,7 +1985,6 @@
             <div><dt>{activeMemoryCount}</dt><dd>active</dd></div>
             <div><dt>{relations.length}</dt><dd>links</dd></div>
             <div><dt>{facetCategoryCount}</dt><dd>facets</dd></div>
-            <div><dt>{advisoryMemoryCount}</dt><dd>review</dd></div>
           </dl>
         {/if}
 
@@ -2529,30 +2034,6 @@
               <span class="nav-row-icon" aria-hidden="true">◎</span>
               <span>Graph</span>
             </button>
-            <button
-              type="button"
-              class:active={currentScreen === "maintenance"}
-              aria-current={currentScreen === "maintenance" ? "page" : undefined}
-              data-testid="nav-maintenance"
-              disabled={selectedProjectId === null}
-              onclick={showMaintenance}
-            >
-              <span class="nav-row-icon" aria-hidden="true">!</span>
-              <span>Maintenance</span>
-            </button>
-            {#if !isDemoMode}
-              <button
-                type="button"
-                class:active={currentScreen === "export"}
-                aria-current={currentScreen === "export" ? "page" : undefined}
-                data-testid="nav-export"
-                disabled={selectedProjectId === null}
-                onclick={showExport}
-              >
-                <span class="nav-row-icon" aria-hidden="true">↗</span>
-                <span>Export</span>
-              </button>
-            {/if}
           </section>
 
           <section class="nav-section" aria-labelledby="memory-views-heading">
@@ -2580,33 +2061,6 @@
           </section>
         </nav>
 
-        {#if !isDemoMode}
-          <details class="sidebar-export">
-            <summary>Obsidian export</summary>
-            <button
-              type="button"
-              onclick={() => window.print()}
-            >
-              Print/PDF
-            </button>
-            <label class="obsidian-field">
-              <span>Obsidian vault</span>
-              <input
-                type="text"
-                bind:value={exportOutDir}
-                placeholder=".memory/exports/obsidian"
-                autocomplete="off"
-              />
-            </label>
-            <button
-              type="button"
-              disabled={exportState === "running" || selectedProjectId === null}
-              onclick={() => void exportObsidian()}
-            >
-              {exportState === "running" ? "Exporting" : "Export Obsidian"}
-            </button>
-          </details>
-        {/if}
       </div>
     </aside>
     {/if}
@@ -2958,136 +2412,6 @@
             </section>
           </section>
         </article>
-      {:else if currentScreen === "maintenance"}
-        <article class="maintenance-page" aria-labelledby="maintenance-title" data-testid="maintenance-view">
-          <header class="page-header compact">
-            <div>
-              <p class="eyebrow">Review queue</p>
-              <h2 id="maintenance-title">Maintenance</h2>
-              <p>
-                {auditFindings.length} audit findings across {advisoryMemoryCount} memories. Possible staleness is advisory; repair memory only after checking current evidence.
-              </p>
-            </div>
-            <dl class="graph-counts" aria-label="Maintenance counts">
-              <div><dt>Review</dt><dd>{advisoryMemoryCount}</dd></div>
-              <div><dt>Findings</dt><dd>{auditFindings.length}</dd></div>
-              <div><dt>Inactive</dt><dd>{staleMemoryCount}</dd></div>
-            </dl>
-          </header>
-
-          <section class="maintenance-list" aria-label="Audit findings by memory">
-            {#each maintenanceGroups as group (group.memoryId)}
-              <article class="maintenance-card" data-testid={`maintenance-card-${group.memoryId}`}>
-                <div class="maintenance-card-header">
-                  <div>
-                    <p class="eyebrow">{advisoryLabel(group.findings)}</p>
-                    <h3>{group.object?.title ?? group.memoryId}</h3>
-                    <p class="mono">{group.memoryId}</p>
-                  </div>
-                  {#if group.object !== null}
-                    <button type="button" class="ghost-action" onclick={() => selectRelated(group.memoryId)}>
-                      Open object
-                    </button>
-                  {/if}
-                </div>
-                <p class="maintenance-action">{group.suggestedAction}</p>
-                <ul class="maintenance-findings">
-                  {#each group.findings as finding (`${finding.rule}-${finding.message}`)}
-                    <li>
-                      <span class={`advisory-badge ${finding.severity}`}>{finding.severity}</span>
-                      <strong>{finding.rule}</strong>
-                      <p>{finding.message}</p>
-                      <small>
-                        {#each finding.evidence.slice(0, 6) as evidence, index (`${finding.rule}-${evidence.kind}-${evidence.id}-${index}`)}
-                          <code>{evidenceLabel(evidence)}</code>
-                        {/each}
-                      </small>
-                    </li>
-                  {/each}
-                </ul>
-                {#if group.relations.length > 0}
-                  <details class="notion-toggle">
-                    <summary>Relation chain</summary>
-                    <ul class="relation-list">
-                      {#each group.relations as relation (relation.id)}
-                        <li>
-                          <span class="pill">{relation.predicate}</span>
-                          <button type="button" onclick={() => selectRelated(relationCounterpart(relation, group.memoryId))}>
-                            {relationTargetLabel(relation, group.memoryId)}
-                          </button>
-                          <small>{relationStatusLabel(relation)}</small>
-                        </li>
-                      {/each}
-                    </ul>
-                  </details>
-                {/if}
-              </article>
-            {:else}
-              <section class="empty-panel" data-testid="maintenance-empty">
-                <h3>No audit findings</h3>
-                <p>Current deterministic checks do not flag stale, conflicting, or weakly evidenced memory.</p>
-              </section>
-            {/each}
-          </section>
-        </article>
-      {:else if currentScreen === "export" && !isDemoMode}
-        <section class="export-page" aria-labelledby="export-title" data-testid="export-view">
-          <header class="page-header compact">
-            <p class="eyebrow">Generated projection</p>
-            <h2 id="export-title">Obsidian Export</h2>
-            <p>Write the current project memory into a linked vault-shaped projection.</p>
-          </header>
-
-          <form
-            class="export-form"
-            aria-label="Obsidian export"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void exportObsidian();
-            }}
-          >
-            <label class="field">
-              <span>Output directory</span>
-              <input
-                type="text"
-                bind:value={exportOutDir}
-                placeholder=".memory/exports/obsidian"
-                autocomplete="off"
-                disabled={exportState === "running"}
-                data-testid="obsidian-export-out-dir"
-              />
-            </label>
-            <button
-              type="submit"
-              class="primary-action"
-              disabled={exportState === "running"}
-              data-testid="obsidian-export-submit"
-            >
-              {exportState === "running" ? "Exporting" : "Export Obsidian"}
-            </button>
-            {#if exportState !== "idle"}
-              <section
-                class:error={exportState === "error"}
-                class:success={exportState === "success"}
-                class="export-status"
-                role={exportState === "error" ? "alert" : "status"}
-                aria-live="polite"
-                data-testid="obsidian-export-status"
-              >
-                <p>{exportMessage}</p>
-                {#if exportState === "error" && exportErrorCode !== ""}
-                  <p class="mono">{exportErrorCode}</p>
-                {/if}
-                {#if exportState === "success"}
-                  <dl class="mini-stats">
-                    <div><dt>Files written</dt><dd data-testid="obsidian-export-files-written">{exportFilesWritten}</dd></div>
-                    <div><dt>Manifest</dt><dd data-testid="obsidian-export-manifest-path">{exportManifestPath}</dd></div>
-                  </dl>
-                {/if}
-              </section>
-            {/if}
-          </form>
-        </section>
       {:else}
         <article
           class={`memory-page ${hasSelectedObject ? "has-selected-object" : ""}`}
@@ -3328,9 +2652,6 @@
                             <span>{facetCategoryLabel(object)}</span>
                             <span>{scopeLabel(object.scope)}</span>
                             <span>{editedDateLabel(object)}</span>
-                            {#if auditFindingsByMemory.has(object.id)}
-                              <span class="advisory-chip">{advisoryLabel(auditFindingsByMemory.get(object.id) ?? [])}</span>
-                            {/if}
                           </span>
                           <small>{bodyPreview(object)}</small>
                         </span>
@@ -3446,26 +2767,6 @@
                       </div>
                     </section>
                   </details>
-
-                  {#if selectedObjectFindings.length > 0}
-                    <details class="notion-toggle advisory-details" open data-testid="selected-object-advisories">
-                      <summary>Maintenance advisories</summary>
-                      <ul class="maintenance-findings compact">
-                        {#each selectedObjectFindings as finding (`${finding.rule}-${finding.message}`)}
-                          <li>
-                            <span class={`advisory-badge ${finding.severity}`}>{finding.severity}</span>
-                            <strong>{finding.rule}</strong>
-                            <p>{finding.message}</p>
-                            <small>
-                              {#each finding.evidence.slice(0, 6) as evidence, index (`${finding.rule}-${evidence.kind}-${evidence.id}-${index}`)}
-                                <code>{evidenceLabel(evidence)}</code>
-                              {/each}
-                            </small>
-                          </li>
-                        {/each}
-                      </ul>
-                    </details>
-                  {/if}
 
                   {#if selectedObject.tags.length > 0}
                     <details class="notion-toggle">
@@ -3762,8 +3063,7 @@
   }
 
   .projects-page,
-  .memory-page,
-  .export-page {
+  .memory-page {
     width: min(1180px, 100%);
     margin: 0 auto;
   }
@@ -3791,7 +3091,6 @@
   .empty-panel,
   .markdown-view,
   .object-list,
-  .export-form,
   .project-delete-status,
   .warnings,
   .onboarding-callout {
@@ -4022,8 +3321,7 @@
     font-weight: 800;
   }
 
-  .markdown-view,
-  .export-form {
+  .markdown-view {
     padding: 16px;
   }
 
@@ -4100,29 +3398,6 @@
     margin: 0;
     overflow-wrap: anywhere;
     color: #667085;
-  }
-
-  .export-page {
-    width: min(760px, 100%);
-  }
-
-  .export-form {
-    display: grid;
-    gap: 14px;
-  }
-
-  .export-status {
-    border-radius: 7px;
-    padding: 12px;
-    background: #f8fafc;
-  }
-
-  .export-status.success {
-    background: #f7f5f0;
-  }
-
-  .export-status.error {
-    background: #fff1f0;
   }
 
   .empty-copy {
@@ -4206,14 +3481,12 @@
     white-space: nowrap;
   }
 
-  .sidebar-search,
-  .obsidian-field {
+  .sidebar-search {
     display: grid;
     gap: 6px;
   }
 
   .sidebar-search span,
-  .obsidian-field span,
   .nav-heading {
     margin: 0;
     color: #8a8880;
@@ -4223,7 +3496,6 @@
   }
 
   .sidebar-search input,
-  .obsidian-field input,
   .list-controls select {
     min-height: 32px;
     border: 1px solid transparent;
@@ -4238,8 +3510,7 @@
     padding: 0 10px;
   }
 
-  .sidebar-search input:focus,
-  .obsidian-field input:focus {
+  .sidebar-search input:focus {
     border-color: #d1cdc4;
     background: #ffffff;
     outline: 0;
@@ -4308,43 +3579,12 @@
     background: transparent;
   }
 
-  .sidebar-export {
-    display: grid;
-    gap: 9px;
-    border-top: 1px solid #ebe8e0;
-    padding-top: 12px;
-  }
-
-  .sidebar-export summary {
-    border-radius: 6px;
-    padding: 5px 7px;
-    color: #6a6861;
-    cursor: pointer;
-    font-size: 0.8rem;
-    font-weight: 760;
-  }
-
-  .sidebar-export summary:hover {
-    background: #e9e6df;
-    color: #262621;
-  }
-
-  .sidebar-export button {
-    min-height: 28px;
-    border: 1px solid #dedbd5;
-    border-radius: 6px;
-    color: #464646;
-    background: #ffffff;
-    font-weight: 700;
-  }
-
   .main-stage {
     padding: 56px clamp(28px, 6vw, 88px) 72px;
   }
 
   .memory-page,
-  .projects-page,
-  .export-page {
+  .projects-page {
     width: min(1180px, 100%);
   }
 
@@ -4766,22 +4006,6 @@
       background: #e9e6df;
     }
 
-    .sidebar-export {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 8px;
-      border-top: 1px solid #e7e2db;
-      padding-top: 14px;
-    }
-
-    .sidebar-export .obsidian-field {
-      grid-column: 1 / -1;
-    }
-
-    .sidebar-export button {
-      min-height: 36px;
-    }
-
     .main-stage {
       padding: 26px 14px 48px;
     }
@@ -4972,15 +4196,13 @@
   }
 
   .sidebar-search span,
-  .nav-heading,
-  .obsidian-field span {
+  .nav-heading {
     color: #9a968d;
     font-size: 0.72rem;
     letter-spacing: 0;
   }
 
-  .sidebar-search input,
-  .obsidian-field input {
+  .sidebar-search input {
     min-height: 44px;
     border: 1px solid #dedbd3;
     border-radius: 8px;
@@ -5024,11 +4246,6 @@
     color: #9a968d;
   }
 
-  .sidebar-export {
-    border-top: 1px solid #dfdbd1;
-    padding-top: 18px;
-  }
-
   .main-stage {
     min-width: 0;
     padding: 46px clamp(34px, 4vw, 72px) 88px;
@@ -5037,8 +4254,7 @@
 
   .memory-page,
   .projects-page,
-  .graph-page,
-  .export-page {
+  .graph-page {
     width: min(1060px, 100%);
     margin: 0;
   }
@@ -5907,12 +5123,6 @@
     font-weight: 760;
   }
 
-  .object-meta .advisory-chip {
-    border-color: #d99b69;
-    color: #8a461a;
-    background: #fff4e8;
-  }
-
   .object-list small {
     display: block;
     margin-top: 7px;
@@ -5929,95 +5139,6 @@
     font-style: normal;
     font-weight: 620;
     text-align: right;
-  }
-
-  .maintenance-page {
-    display: grid;
-    gap: 22px;
-    padding: 28px;
-  }
-
-  .maintenance-list {
-    display: grid;
-    gap: 14px;
-  }
-
-  .maintenance-card {
-    display: grid;
-    gap: 14px;
-    border: 1px solid #e4dfd6;
-    border-radius: 8px;
-    padding: 18px;
-    background: #ffffff;
-    box-shadow: 0 1px 2px rgb(16 24 40 / 4%);
-  }
-
-  .maintenance-card-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 14px;
-    align-items: flex-start;
-  }
-
-  .maintenance-card h3 {
-    margin: 2px 0 4px;
-    color: #25231f;
-    font-size: 1.2rem;
-    line-height: 1.2;
-  }
-
-  .maintenance-action {
-    margin: 0;
-    color: #5b5650;
-  }
-
-  .maintenance-findings {
-    display: grid;
-    gap: 10px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .maintenance-findings li {
-    display: grid;
-    gap: 5px;
-    border-left: 3px solid #ded7cc;
-    padding: 2px 0 2px 12px;
-  }
-
-  .maintenance-findings.compact li {
-    border-left-color: #d99b69;
-  }
-
-  .maintenance-findings p,
-  .maintenance-findings small {
-    margin: 0;
-    color: #665f56;
-  }
-
-  .maintenance-findings small {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .advisory-badge {
-    width: max-content;
-    border: 1px solid #d6cec2;
-    border-radius: 999px;
-    padding: 2px 8px;
-    color: #675f56;
-    background: #f7f3ec;
-    font-size: 0.72rem;
-    font-weight: 780;
-    text-transform: uppercase;
-  }
-
-  .advisory-badge.warning {
-    border-color: #d99b69;
-    color: #8a461a;
-    background: #fff4e8;
   }
 
   .memory-preview {

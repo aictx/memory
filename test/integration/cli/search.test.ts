@@ -22,29 +22,6 @@ interface CliRunResult {
   stderr: string;
 }
 
-interface LoadEnvelope {
-  ok: true;
-  data: {
-    task: string;
-    mode: string;
-    token_budget: number | null;
-    context_pack: string;
-    token_target: number | null;
-    estimated_tokens: number;
-    budget_status: "not_requested" | "within_target" | "over_target";
-    truncated: boolean;
-    source: {
-      project: string;
-      git_available: boolean;
-      branch: string | null;
-      commit: string | null;
-    };
-    included_ids: string[];
-    excluded_ids: string[];
-    omitted_ids: string[];
-  };
-}
-
 interface SearchEnvelope {
   ok: true;
   data: {
@@ -79,135 +56,10 @@ afterEach(async () => {
   );
 });
 
-describe("memory load and search CLI", () => {
-  it("prints a Markdown context pack by default", async () => {
-    const projectRoot = await createInitializedProject("memory-cli-load-markdown-");
-    await writeLoadSearchFixtures(projectRoot);
-    await rebuildProject(projectRoot);
-
-    const output = await runCli(
-      ["node", "memory", "load", "Stripe webhook idempotency"],
-      projectRoot
-    );
-
-    expect(output.exitCode).toBe(0);
-    expect(output.stderr).toBe("");
-    expect(output.stdout.startsWith("# AI Context Pack\n")).toBe(true);
-    expect(output.stdout).toContain("Stripe may deliver duplicate webhook events");
-    expect(output.stdout).toContain("constraint.webhook-idempotency");
-    expect(output.stdout).not.toContain("token_target");
-    expect(output.stdout).not.toContain("budget_status");
-    expect(() => JSON.parse(output.stdout) as unknown).toThrow();
-  });
-
-  it("prints a JSON envelope with public token metadata fields", async () => {
-    const projectRoot = await createInitializedProject("memory-cli-load-json-");
-    await writeLoadSearchFixtures(projectRoot);
-    await rebuildProject(projectRoot);
-
-    const output = await runCli(
-      ["node", "memory", "load", "Stripe webhook idempotency", "--json"],
-      projectRoot
-    );
-
-    expect(output.exitCode).toBe(0);
-    expect(output.stderr).toBe("");
-    const envelope = JSON.parse(output.stdout) as LoadEnvelope;
-
-    expect(envelope.ok).toBe(true);
-    expect(envelope.data).toMatchObject({
-      task: "Stripe webhook idempotency",
-      mode: "coding",
-      token_budget: null,
-      token_target: null,
-      budget_status: "not_requested",
-      truncated: false
-    });
-    expect(envelope.data.context_pack).toContain("# AI Context Pack");
-    expect(envelope.data.context_pack).toContain("constraint.webhook-idempotency");
-    expect(envelope.data.estimated_tokens).toBeGreaterThan(0);
-    expect(envelope.data.source.git_available).toBe(false);
-    expect(envelope.data.included_ids).toContain("constraint.webhook-idempotency");
-    expect(envelope.data.included_ids).toContain("synthesis.webhook-context");
-    expect(envelope.data.omitted_ids).toEqual([]);
-  });
-
-  it("reports explicit token target and omitted IDs when packaging truncates", async () => {
-    const projectRoot = await createInitializedProject("memory-cli-load-budget-");
-    await writeManyBudgetFixtures(projectRoot, 18);
-    await rebuildProject(projectRoot);
-
-    const output = await runCli(
-      [
-        "node",
-        "memory",
-        "load",
-        "budget compiler context",
-        "--token-budget",
-        "501",
-        "--json"
-      ],
-      projectRoot
-    );
-
-    expect(output.exitCode).toBe(0);
-    expect(output.stderr).toBe("");
-    const envelope = JSON.parse(output.stdout) as LoadEnvelope;
-
-    expect(envelope.ok).toBe(true);
-    expect(envelope.data.token_budget).toBe(501);
-    expect(envelope.data.token_target).toBe(501);
-    expect(["within_target", "over_target"]).toContain(envelope.data.budget_status);
-    expect(envelope.data.truncated).toBe(true);
-    expect(envelope.data.omitted_ids.length).toBeGreaterThan(0);
-  });
-
-  it("accepts --mode and prints the normalized mode in JSON output", async () => {
-    const projectRoot = await createInitializedProject("memory-cli-load-mode-");
-    await writeModeFixtures(projectRoot);
-    await rebuildProject(projectRoot);
-
-    const output = await runCli(
-      ["node", "memory", "load", "Mode service overview", "--mode", "debugging", "--json"],
-      projectRoot
-    );
-
-    expect(output.exitCode).toBe(0);
-    expect(output.stderr).toBe("");
-    const envelope = JSON.parse(output.stdout) as LoadEnvelope;
-
-    expect(envelope.ok).toBe(true);
-    expect(envelope.data.mode).toBe("debugging");
-    expect(envelope.data.context_pack).toContain("## Relevant gotchas");
-    expect(envelope.data.included_ids).toContain("gotcha.mode-service");
-  });
-
-  it("returns a validation envelope for invalid --mode values in JSON output", async () => {
-    const projectRoot = await createInitializedProject("memory-cli-load-invalid-mode-");
-
-    const output = await runCli(
-      ["node", "memory", "load", "Architecture", "--mode", "triage", "--json"],
-      projectRoot
-    );
-
-    expect(output.exitCode).toBe(1);
-    expect(output.stderr).toBe("");
-    const envelope = JSON.parse(output.stdout) as {
-      ok: false;
-      error: { code: string; details?: Record<string, unknown> };
-    };
-
-    expect(envelope.ok).toBe(false);
-    expect(envelope.error.code).toBe("MemoryValidationFailed");
-    expect(envelope.error.details).toMatchObject({
-      field: "mode",
-      actual: "triage"
-    });
-  });
-
+describe("memory search CLI", () => {
   it("returns SQLite FTS search results in JSON mode", async () => {
     const projectRoot = await createInitializedProject("memory-cli-search-json-");
-    await writeLoadSearchFixtures(projectRoot);
+    await writeSearchFixtures(projectRoot);
     await rebuildProject(projectRoot);
 
     const output = await runCli(
@@ -246,8 +98,8 @@ describe("memory load and search CLI", () => {
     expect(typeof webhook?.score).toBe("number");
   });
 
-  it("accepts retrieval hint flags for load and search", async () => {
-    const projectRoot = await createInitializedProject("memory-cli-load-search-hints-");
+  it("accepts retrieval hint flags for search", async () => {
+    const projectRoot = await createInitializedProject("memory-cli-search-hints-");
     await writeMemoryObject(projectRoot, {
       id: "decision.hinted-ranking",
       type: "decision",
@@ -265,20 +117,6 @@ describe("memory load and search CLI", () => {
     });
     await rebuildProject(projectRoot);
 
-    const loadOutput = await runCli(
-      [
-        "node",
-        "memory",
-        "load",
-        "Opaque task",
-        "--file",
-        "src/context/rank.ts",
-        "--changed-file",
-        "src/index/search.ts",
-        "--json"
-      ],
-      projectRoot
-    );
     const searchOutput = await runCli(
       [
         "node",
@@ -296,14 +134,10 @@ describe("memory load and search CLI", () => {
       projectRoot
     );
 
-    expect(loadOutput.exitCode).toBe(0);
     expect(searchOutput.exitCode).toBe(0);
 
-    const loadEnvelope = JSON.parse(loadOutput.stdout) as LoadEnvelope;
     const searchEnvelope = JSON.parse(searchOutput.stdout) as SearchEnvelope;
 
-    expect(loadEnvelope.data.included_ids).toContain("decision.hinted-ranking");
-    expect(loadEnvelope.data.context_pack).toContain("src/context/rank.ts");
     expect(searchEnvelope.data.matches[0]).toMatchObject({
       id: "decision.hinted-ranking",
       status: "active"
@@ -312,7 +146,7 @@ describe("memory load and search CLI", () => {
 
   it("prints compact human search results", async () => {
     const projectRoot = await createInitializedProject("memory-cli-search-human-");
-    await writeLoadSearchFixtures(projectRoot);
+    await writeSearchFixtures(projectRoot);
     await rebuildProject(projectRoot);
 
     const output = await runCli(
@@ -390,7 +224,7 @@ async function createTempRoot(prefix: string): Promise<string> {
   return resolvedRoot;
 }
 
-async function writeLoadSearchFixtures(projectRoot: string): Promise<void> {
+async function writeSearchFixtures(projectRoot: string): Promise<void> {
   await writeMemoryObject(projectRoot, {
     id: "constraint.webhook-idempotency",
     type: "constraint",
@@ -426,59 +260,6 @@ async function writeLoadSearchFixtures(projectRoot: string): Promise<void> {
     },
     updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
   });
-}
-
-async function writeModeFixtures(projectRoot: string): Promise<void> {
-  const shared = {
-    status: "active" as const,
-    title: "Mode service overview",
-    tags: ["mode", "service", "overview"],
-    updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
-  };
-
-  await writeMemoryObject(projectRoot, {
-    ...shared,
-    id: "project.mode-service",
-    type: "project",
-    bodyPath: "memory/project-mode-service.md",
-    body: "# Mode service overview\n\nMode service overview project orientation.\n"
-  });
-  await writeMemoryObject(projectRoot, {
-    ...shared,
-    id: "constraint.mode-service",
-    type: "constraint",
-    bodyPath: "memory/constraints/mode-service.md",
-    body: "# Mode service overview\n\nMode service overview constraint.\n"
-  });
-  await writeMemoryObject(projectRoot, {
-    ...shared,
-    id: "gotcha.mode-service",
-    type: "gotcha",
-    bodyPath: "memory/gotchas/mode-service.md",
-    body: "# Mode service overview\n\nMode service overview gotcha for debugging.\n"
-  });
-  await writeMemoryObject(projectRoot, {
-    ...shared,
-    id: "workflow.mode-service",
-    type: "workflow",
-    bodyPath: "memory/workflows/mode-service.md",
-    body: "# Mode service overview\n\nMode service overview workflow for onboarding.\n"
-  });
-}
-
-async function writeManyBudgetFixtures(projectRoot: string, count: number): Promise<void> {
-  for (let index = 1; index <= count; index += 1) {
-    await writeMemoryObject(projectRoot, {
-      id: `decision.budget-context-${index}`,
-      type: "decision",
-      status: index <= 8 ? "active" : "stale",
-      title: `Budget compiler context ${index}`,
-      bodyPath: `memory/decisions/budget-context-${index}.md`,
-      body: `# Budget compiler context ${index}\n\n${"Budget compiler context behavior should stay visible when token_budget is omitted. ".repeat(18)}\n`,
-      tags: ["budget", "compiler", "context"],
-      updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
-    });
-  }
 }
 
 async function writeMemoryObject(projectRoot: string, fixture: MemoryFixture): Promise<void> {

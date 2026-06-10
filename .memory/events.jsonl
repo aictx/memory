@@ -55,3 +55,6 @@
 {"actor":"agent","event":"memory.updated","id":"workflow.memory-token-savings-benchmark-harness","timestamp":"2026-05-20T22:39:06+02:00"}
 {"actor":"agent","event":"memory.created","id":"question.product-graph-pivot-under-evaluation","timestamp":"2026-06-10T16:39:34+02:00"}
 {"actor":"agent","event":"relation.created","relation_id":"rel.question-product-graph-pivot-under-evaluation-challenges-synthesis-product-intent","timestamp":"2026-06-10T16:39:34+02:00"}
+{"actor":"agent","event":"memory.created","id":"decision.m1-deletion-landed-reduced-cli-mcp-viewer-surface","timestamp":"2026-06-10T21:44:28+02:00"}
+{"actor":"agent","event":"memory.marked_stale","id":"synthesis.feature-map","reason":"M1 of the product-graph rework deleted load/lens/handoff/stale/suggest/patch/setup/audit/graph/export/history/restore/rewind/wiki CLI commands, three MCP tools, and viewer maintenance/export/load-preview surfaces; the feature map describes the pre-rework surface and needs regeneration after the rework lands.","timestamp":"2026-06-10T21:44:28+02:00"}
+{"actor":"agent","event":"memory.created","id":"gotcha.viewer-shell-tests-run-against-dist-viewer-and-need-a-rebuild-after-viewer-changes","timestamp":"2026-06-10T22:25:45+02:00"}

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -195,16 +195,6 @@ describe("read-only viewer shell", () => {
       await page.locator('[data-testid="graph-inspector"] button', { hasText: "Open in schema browser" }).click();
       await assertSelectedObject(page, "Viewer Shell Layout", "decision.viewer-shell");
 
-      await openSidebar(page);
-      await page.locator('[data-testid="nav-maintenance"]').click();
-      await expectSidebarClosed(page);
-      await expectText(page, '[data-testid="maintenance-view"]', "Maintenance");
-      await expectText(page, '[data-testid="maintenance-view"]', "source changed");
-      await expectText(page, '[data-testid="maintenance-view"]', "source.agent-integration");
-      await expectText(page, '[data-testid="maintenance-view"]', "source_origin_outdated");
-      await page.locator('[data-testid="maintenance-card-source.agent-integration"] button', { hasText: "Open object" }).click();
-      await assertSelectedObject(page, "Source: docs/agent-integration.md", "source.agent-integration");
-
       await page.selectOption('[data-testid="viewer-type-filter"]', "decision");
       await expectCount(page, '[data-testid="object-row-decision.viewer-shell"]', 1);
       await expectCount(page, '[data-testid="object-row-constraint.viewer-markdown"]', 0);
@@ -313,94 +303,6 @@ describe("read-only viewer shell", () => {
       expect(consoleErrors()).toEqual([]);
     } finally {
       await browser?.close();
-      await started.data.close();
-    }
-  });
-
-  it("serves real read-only load previews without saving context packs or rebuilding indexes", async () => {
-    const projectRoot = await createInitializedProject("memory-viewer-preview-route-");
-    await writeViewerFixtures(projectRoot);
-    await updateProjectConfig(projectRoot, (config) => {
-      config.memory.saveContextPacks = true;
-    });
-    await rebuildProjectIndex(projectRoot);
-    const memoryHome = await createTempRoot("memory-viewer-preview-home-");
-    const started = await startViewerServer({
-      cwd: projectRoot,
-      assetsDir: viewerAssetsDir,
-      memoryHome,
-      token: "viewer-preview-token"
-    });
-
-    expect(started.ok).toBe(true);
-    if (!started.ok) {
-      throw new Error(started.error.message);
-    }
-
-    try {
-      const registryId = await currentViewerRegistryId(started.data.url);
-      const previewUrl = `${started.data.url.replace(/\?.*$/, "")}api/projects/${encodeURIComponent(registryId)}/load-preview?token=viewer-preview-token`;
-
-      const unauthorized = await fetch(previewUrl.replace("?token=viewer-preview-token", ""));
-      expect(unauthorized.status).toBe(401);
-
-      const wrongMethod = await fetch(previewUrl);
-      expect(wrongMethod.status).toBe(405);
-
-      const invalidMode = await fetch(previewUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ task: "viewer shell layout", mode: "sales" })
-      });
-      const invalidModeBody = await invalidMode.json() as { error: { code: string } };
-      expect(invalidMode.status).toBe(400);
-      expect(invalidModeBody.error.code).toBe("MemoryValidationFailed");
-
-      const invalidBudget = await fetch(previewUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ task: "viewer shell layout", token_budget: 500 })
-      });
-      const invalidBudgetBody = await invalidBudget.json() as { error: { code: string } };
-      expect(invalidBudget.status).toBe(400);
-      expect(invalidBudgetBody.error.code).toBe("MemoryValidationFailed");
-
-      const success = await fetch(previewUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ task: "viewer shell layout", mode: "coding", token_budget: 1600 })
-      });
-      const successBody = await success.json() as {
-        ok: true;
-        data: {
-          context_pack: string;
-          included_ids: string[];
-          estimated_tokens: number;
-          source: { project: string };
-        };
-      };
-
-      expect(success.status).toBe(200);
-      expect(successBody.ok).toBe(true);
-      expect(successBody.data.context_pack).toContain("# AI Context Pack");
-      expect(successBody.data.context_pack).toContain("Viewer Shell Layout");
-      expect(successBody.data.included_ids).toContain("decision.viewer-shell");
-      expect(successBody.data.estimated_tokens).toBeGreaterThan(0);
-      expect(successBody.data.source.project).toContain("memory-viewer-preview-route");
-      await expect(listContextPacks(projectRoot)).resolves.toEqual([]);
-
-      await rm(join(projectRoot, ".memory", "index"), { recursive: true, force: true });
-      const missingIndex = await fetch(previewUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ task: "viewer shell layout" })
-      });
-      const missingIndexBody = await missingIndex.json() as { error: { code: string } };
-
-      expect(missingIndex.status).toBe(412);
-      expect(missingIndexBody.error.code).toBe("MemoryIndexUnavailable");
-      await expect(stat(join(projectRoot, ".memory", "index"))).rejects.toThrow();
-    } finally {
       await started.data.close();
     }
   });
@@ -918,45 +820,6 @@ async function rebuildProjectIndex(projectRoot: string): Promise<void> {
 
   expect(exitCode).toBe(0);
   expect(output.stderr()).toBe("");
-}
-
-async function updateProjectConfig(
-  projectRoot: string,
-  mutate: (config: { memory: { saveContextPacks: boolean } }) => void
-): Promise<void> {
-  const configPath = join(projectRoot, ".memory", "config.json");
-  const config = JSON.parse(await readFile(configPath, "utf8")) as {
-    memory: { saveContextPacks: boolean };
-  };
-
-  mutate(config);
-  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-}
-
-async function currentViewerRegistryId(url: string): Promise<string> {
-  const response = await fetch(`${url.replace(/\?.*$/, "")}api/projects?token=viewer-preview-token`);
-  const body = await response.json() as {
-    ok: true;
-    data: {
-      current_project_registry_id: string | null;
-    };
-  };
-
-  expect(response.status).toBe(200);
-  expect(body.ok).toBe(true);
-  expect(body.data.current_project_registry_id).not.toBeNull();
-
-  return body.data.current_project_registry_id ?? "";
-}
-
-async function listContextPacks(projectRoot: string): Promise<string[]> {
-  const contextDir = join(projectRoot, ".memory", "context");
-
-  try {
-    return (await readdir(contextDir)).filter((file) => file.endsWith(".md"));
-  } catch {
-    return [];
-  }
 }
 
 async function createInitializedProject(prefix: string): Promise<string> {

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, realpath, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, readdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -14,14 +14,6 @@ import {
   saveMemoryPatch
 } from "../../../src/app/operations.js";
 import { main, type CliOutputWriter } from "../../../src/cli/main.js";
-import type {
-  ObjectId,
-  ObjectStatus,
-  ObjectType
-} from "../../../src/core/types.js";
-import { computeObjectContentHash } from "../../../src/storage/hashes.js";
-import type { MemoryObjectSidecar } from "../../../src/storage/objects.js";
-import { readCanonicalStorage } from "../../../src/storage/read.js";
 import {
   createFixedTestClock,
   FIXED_TIMESTAMP,
@@ -35,15 +27,15 @@ const tsxLoader = pathToFileURL(require.resolve("tsx")).href;
 const tempRoots: string[] = [];
 
 const REQUIRED_MCP_TOOLS = [
-  "diff_memory",
   "inspect_memory",
-  "load_memory",
   "remember_memory",
-  "save_memory_patch",
   "search_memory"
 ] as const;
 
 const FORBIDDEN_MCP_TOOLS = [
+  "load_memory",
+  "save_memory_patch",
+  "diff_memory",
   "init",
   "check",
   "rebuild",
@@ -92,29 +84,9 @@ interface ErrorEnvelope {
   meta: unknown;
 }
 
-interface LoadEnvelope {
-  ok: true;
-  data: {
-    context_pack: string;
-    included_ids: string[];
-    excluded_ids: string[];
-  };
-}
-
 interface TextContent {
   type: "text";
   text: string;
-}
-
-interface MemoryFixture {
-  id: ObjectId;
-  type: ObjectType;
-  status: ObjectStatus;
-  title: string;
-  bodyPath: string;
-  body: string;
-  tags: string[];
-  supersededBy?: ObjectId;
 }
 
 afterEach(async () => {
@@ -186,9 +158,16 @@ describe("integration security regression guardrails", () => {
 
     try {
       const result = await started.client.callTool({
-        name: "save_memory_patch",
+        name: "remember_memory",
         arguments: {
-          patch: createNotePatch("MCP secret blocked", `Secret: ${secret}`)
+          task: "Security regression test",
+          memories: [
+            {
+              kind: "note",
+              title: "MCP secret blocked",
+              body: `Secret: ${secret}`
+            }
+          ]
         }
       });
       const envelope = parseToolEnvelope<ErrorEnvelope>(result);
@@ -286,60 +265,6 @@ describe("integration security regression guardrails", () => {
     await expect(readdir(projectRoot)).resolves.toEqual([]);
   });
 
-  it("keeps stale and superseded memory out of Must know by default", async () => {
-    const projectRoot = await createInitializedProject("memory-security-load-");
-    await writeMemoryObject(projectRoot, {
-      id: "decision.security-active",
-      type: "decision",
-      status: "active",
-      title: "Security active memory",
-      bodyPath: "memory/decisions/security-active.md",
-      body: "# Security active memory\n\nSecurity regression keyword must stay in Must know.\n",
-      tags: ["security", "regression"]
-    });
-    await writeMemoryObject(projectRoot, {
-      id: "decision.security-stale",
-      type: "decision",
-      status: "stale",
-      title: "Security stale memory",
-      bodyPath: "memory/decisions/security-stale.md",
-      body: "# Security stale memory\n\nSecurity regression keyword stale guidance must not enter Must know.\n",
-      tags: ["security", "regression"]
-    });
-    await writeMemoryObject(projectRoot, {
-      id: "decision.security-superseded",
-      type: "decision",
-      status: "superseded",
-      title: "Security superseded memory",
-      bodyPath: "memory/decisions/security-superseded.md",
-      body:
-        "# Security superseded memory\n\nSecurity regression keyword superseded guidance must not enter Must know.\n",
-      tags: ["security", "regression"],
-      supersededBy: "decision.security-active"
-    });
-    await rebuildProject(projectRoot);
-
-    const output = await runCli(
-      ["node", "memory", "load", "security regression keyword", "--json"],
-      projectRoot
-    );
-    const envelope = parseSuccessfulCliEnvelope<LoadEnvelope>(output);
-    const activeDecisions = extractMarkdownSection(
-      envelope.data.context_pack,
-      "Relevant decisions"
-    );
-    const staleSection = extractMarkdownSection(
-      envelope.data.context_pack,
-      "Stale or superseded memory to avoid"
-    );
-
-    expect(activeDecisions).toContain("decision.security-active");
-    expect(activeDecisions).not.toContain("decision.security-stale");
-    expect(activeDecisions).not.toContain("decision.security-superseded");
-    expect(staleSection).toContain("decision.security-stale");
-    expect(staleSection).toContain("decision.security-superseded");
-    expect(envelope.data.included_ids).toContain("decision.security-active");
-  });
 });
 
 async function createInitializedProject(prefix: string): Promise<string> {
@@ -440,13 +365,6 @@ function createCapturedOutput(): {
   };
 }
 
-async function rebuildProject(projectRoot: string): Promise<void> {
-  const output = await runCli(["node", "memory", "rebuild", "--json"], projectRoot);
-
-  expect(output.exitCode).toBe(0);
-  expect(output.stderr).toBe("");
-}
-
 function createNotePatch(title: string, body: string) {
   return {
     source: {
@@ -462,79 +380,6 @@ function createNotePatch(title: string, body: string) {
       }
     ]
   };
-}
-
-async function writeMemoryObject(projectRoot: string, fixture: MemoryFixture): Promise<void> {
-  const storage = await readStorageOrThrow(projectRoot);
-  const sidecarWithoutHash: Omit<MemoryObjectSidecar, "content_hash"> = {
-    id: fixture.id,
-    type: fixture.type,
-    status: fixture.status,
-    title: fixture.title,
-    body_path: fixture.bodyPath,
-    scope: {
-      kind: "project",
-      project: storage.config.project.id,
-      branch: null,
-      task: null
-    },
-    tags: fixture.tags,
-    source: {
-      kind: "agent"
-    },
-    ...(fixture.supersededBy === undefined
-      ? {}
-      : { superseded_by: fixture.supersededBy }),
-    created_at: FIXED_TIMESTAMP_NEXT_MINUTE,
-    updated_at: FIXED_TIMESTAMP_NEXT_MINUTE
-  };
-  const sidecar: MemoryObjectSidecar = {
-    ...sidecarWithoutHash,
-    content_hash: computeObjectContentHash(sidecarWithoutHash, fixture.body)
-  };
-
-  await writeProjectFile(projectRoot, `.memory/${fixture.bodyPath}`, fixture.body);
-  await writeJsonProjectFile(
-    projectRoot,
-    `.memory/${fixture.bodyPath.replace(/\.md$/, ".json")}`,
-    sidecar
-  );
-}
-
-async function readStorageOrThrow(projectRoot: string) {
-  const storage = await readCanonicalStorage(projectRoot);
-
-  expect(storage.ok).toBe(true);
-  if (!storage.ok) {
-    throw new Error(storage.error.message);
-  }
-
-  return storage.data;
-}
-
-async function writeProjectFile(
-  projectRoot: string,
-  relativePath: string,
-  contents: string
-): Promise<void> {
-  const target = join(projectRoot, relativePath);
-  await mkdir(dirname(target), { recursive: true });
-  await writeFile(target, contents, "utf8");
-}
-
-async function writeJsonProjectFile(
-  projectRoot: string,
-  relativePath: string,
-  value: unknown
-): Promise<void> {
-  await writeProjectFile(projectRoot, relativePath, `${JSON.stringify(value, null, 2)}\n`);
-}
-
-function parseSuccessfulCliEnvelope<T>(output: CliRunResult): T {
-  expect(output.exitCode).toBe(0);
-  expect(output.stderr).toBe("");
-
-  return JSON.parse(output.stdout) as T;
 }
 
 function parseToolEnvelope<T>(result: unknown): T {
@@ -580,16 +425,3 @@ function expectNoSecret(value: unknown, secret: string): void {
   expect(serialized).not.toContain(secret);
 }
 
-function extractMarkdownSection(markdown: string, title: string): string {
-  const heading = `## ${title}`;
-  const start = markdown.indexOf(heading);
-
-  if (start === -1) {
-    return "";
-  }
-
-  const afterHeading = markdown.slice(start + heading.length);
-  const nextHeading = afterHeading.search(/\n## /);
-
-  return nextHeading === -1 ? afterHeading : afterHeading.slice(0, nextHeading);
-}

@@ -33,7 +33,7 @@ describe("viewer demo Worker", () => {
     });
   });
 
-  it("serves seeded Todo App bootstrap data with objects, facets, role coverage, and relations", async () => {
+  it("serves seeded Todo App bootstrap data with objects, facets, and relations", async () => {
     const response = await worker.fetch(request("/api/projects/demo/bootstrap?token=demo"), env);
     const body = await response.json() as {
       ok: true;
@@ -41,8 +41,6 @@ describe("viewer demo Worker", () => {
         project: { id: string; name: string };
         objects: Array<{ id: string; type: string; facets: { category: string } | null }>;
         relations: Array<{ from: string; to: string }>;
-        role_coverage: { roles: unknown[] };
-        lenses: Array<{ name: string; included_memory_ids: string[] }>;
       };
     };
 
@@ -58,44 +56,7 @@ describe("viewer demo Worker", () => {
       type: "workflow",
       facets: { category: "testing" }
     });
-    expect(body.data.role_coverage.roles.length).toBeGreaterThan(0);
-    expect(body.data.lenses).toHaveLength(5);
-    expect(body.data.lenses.every((lens) => lens.included_memory_ids.length > 0)).toBe(true);
     expect(body.data.relations.length).toBeGreaterThan(0);
-  });
-
-  it("serves read-only load previews", async () => {
-    const response = await worker.fetch(request("/api/projects/demo/load-preview?token=demo", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
-        task: "try the public demo",
-        mode: "coding",
-        token_budget: 1600
-      })
-    }), env);
-    const body = await response.json() as {
-      ok: true;
-      data: {
-        task: string;
-        mode: string;
-        context_pack: string;
-        included_ids: string[];
-        token_budget: number;
-      };
-    };
-
-    expect(response.status).toBe(200);
-    expect(body.ok).toBe(true);
-    expect(body.data.task).toBe("try the public demo");
-    expect(body.data.mode).toBe("coding");
-    expect(body.data.token_budget).toBe(1600);
-    expect(body.data.context_pack).toContain("AI Context Pack");
-    expect(body.data.context_pack).toContain("Todo App");
-    expect(body.data.context_pack).not.toContain("project.memory");
-    expect(body.data.included_ids).toContain("project.todo-app");
   });
 
   it("requires the demo token for API routes", async () => {
@@ -108,15 +69,6 @@ describe("viewer demo Worker", () => {
   });
 
   it("blocks write routes in the public demo", async () => {
-    const response = await worker.fetch(request("/api/projects/demo/export/obsidian?token=demo", {
-      method: "POST"
-    }), env);
-    const body = await response.json() as { ok: false; error: { message: string } };
-
-    expect(response.status).toBe(403);
-    expect(body.ok).toBe(false);
-    expect(body.error.message).toContain("read-only");
-
     const deleteResponse = await worker.fetch(request("/api/projects/demo?token=demo", {
       method: "DELETE"
     }), env);

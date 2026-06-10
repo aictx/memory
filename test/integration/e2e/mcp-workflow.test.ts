@@ -66,25 +66,6 @@ interface SaveData {
   index_updated: boolean;
 }
 
-interface LoadData {
-  task: string;
-  token_budget: number | null;
-  context_pack: string;
-  token_target: number | null;
-  estimated_tokens: number;
-  budget_status: "not_requested" | "within_target" | "over_target";
-  truncated: boolean;
-  source: {
-    project: string;
-    git_available: boolean;
-    branch: string | null;
-    commit: string | null;
-  };
-  included_ids: string[];
-  excluded_ids: string[];
-  omitted_ids: string[];
-}
-
 interface SearchData {
   matches: Array<{
     id: string;
@@ -134,31 +115,21 @@ interface RebuildData {
   event_appended: boolean;
 }
 
-interface HistoryData {
-  commits: Array<{
-    commit: string;
-    short_commit: string;
-    author: string;
-    timestamp: string;
-    subject: string;
-  }>;
-}
-
 interface TextContent {
   type: "text";
   text: string;
 }
 
 const REQUIRED_MCP_TOOLS = [
-  "diff_memory",
   "inspect_memory",
-  "load_memory",
   "remember_memory",
-  "save_memory_patch",
   "search_memory"
 ] as const;
 
 const FORBIDDEN_MCP_TOOLS = [
+  "load_memory",
+  "save_memory_patch",
+  "diff_memory",
   "init",
   "check",
   "rebuild",
@@ -226,39 +197,18 @@ describe("memory full MCP workflow", () => {
         ".memory"
       ]);
 
-      const initialLoad = parseToolEnvelope<SuccessEnvelope<LoadData>>(
-        await started.client.callTool({
-          name: "load_memory",
-          arguments: {
-            task: "MCP routine workflow"
-          }
-        })
-      );
-
-      expect(initialLoad.data).toMatchObject({
-        task: "MCP routine workflow",
-        token_budget: null,
-        token_target: null,
-        budget_status: "not_requested",
-        truncated: false
-      });
-      expect(initialLoad.data.context_pack).toContain("# AI Context Pack");
-
       const headBeforeSave = (await git(repo, ["rev-parse", "HEAD"])).trim();
       const saved = parseToolEnvelope<SuccessEnvelope<SaveData>>(
         await started.client.callTool({
-          name: "save_memory_patch",
-          arguments: {
-            patch: createWorkflowPatch()
-          }
+          name: "remember_memory",
+          arguments: createWorkflowRememberArguments()
         })
       );
 
       expect(saved.data.memory_created).toEqual(
         expect.arrayContaining([
           "decision.mcp-routine-workflow",
-          "constraint.mcp-no-cli-mirroring",
-          "decision.mcp-budget-context-1"
+          "constraint.mcp-does-not-mirror-cli-only-commands"
         ])
       );
       expect(saved.data.memory_updated).toEqual([]);
@@ -269,62 +219,6 @@ describe("memory full MCP workflow", () => {
         dirty: true
       });
       expect((await git(repo, ["rev-parse", "HEAD"])).trim()).toBe(headBeforeSave);
-
-      const mcpLoadWithoutBudget = parseToolEnvelope<SuccessEnvelope<LoadData>>(
-        await started.client.callTool({
-          name: "load_memory",
-          arguments: {
-            task: "MCP routine workflow"
-          }
-        })
-      );
-      const cliLoadWithoutBudget = parseCliEnvelope<LoadData>(
-        await expectSuccessfulMemoryCli(repo, [
-          "load",
-          "MCP routine workflow",
-          "--json"
-        ])
-      );
-
-      expect(mcpLoadWithoutBudget).toEqual(cliLoadWithoutBudget);
-      expect(mcpLoadWithoutBudget.data).toMatchObject({
-        token_budget: null,
-        token_target: null,
-        budget_status: "not_requested",
-        truncated: false
-      });
-      expect(mcpLoadWithoutBudget.data.omitted_ids).toEqual([]);
-      expect(mcpLoadWithoutBudget.data.context_pack).toContain(
-        "decision.mcp-routine-workflow"
-      );
-      expect(mcpLoadWithoutBudget.data.context_pack).toContain(
-        "constraint.mcp-no-cli-mirroring"
-      );
-      expect(mcpLoadWithoutBudget.data.context_pack).toContain(
-        "decision.mcp-budget-context-1"
-      );
-
-      const mcpLoadWithBudget = parseToolEnvelope<SuccessEnvelope<LoadData>>(
-        await started.client.callTool({
-          name: "load_memory",
-          arguments: {
-            task: "MCP routine workflow",
-            token_budget: 501
-          }
-        })
-      );
-
-      expect(mcpLoadWithBudget.data.token_budget).toBe(501);
-      expect(mcpLoadWithBudget.data.token_target).toBe(501);
-      expect(["within_target", "over_target"]).toContain(
-        mcpLoadWithBudget.data.budget_status
-      );
-      expect(mcpLoadWithBudget.data.truncated).toBe(true);
-      expect(
-        mcpLoadWithBudget.data.omitted_ids.some((id) =>
-          id.startsWith("decision.mcp-budget-context-")
-        )
-      ).toBe(true);
 
       const mcpSearch = parseToolEnvelope<SuccessEnvelope<SearchData>>(
         await started.client.callTool({
@@ -391,37 +285,17 @@ describe("memory full MCP workflow", () => {
 
       await writeFile(join(repo, "src.ts"), "unrelated dirty source change\n", "utf8");
 
-      const mcpDiff = parseToolEnvelope<SuccessEnvelope<DiffData>>(
-        await started.client.callTool({
-          name: "diff_memory",
-          arguments: {}
-        })
-      );
       const cliDiff = parseCliEnvelope<DiffData>(
         await expectSuccessfulMemoryCli(repo, ["diff", "--json"])
       );
 
-      expect(mcpDiff).toEqual(cliDiff);
-      expect(mcpDiff.data.changed_files.length).toBeGreaterThan(0);
+      expect(cliDiff.data.changed_files.length).toBeGreaterThan(0);
       expect(
-        mcpDiff.data.changed_files.every((path) => path.startsWith(".memory/"))
+        cliDiff.data.changed_files.every((path) => path.startsWith(".memory/"))
       ).toBe(true);
-      expect(mcpDiff.data.changed_files).toContain(".memory/events.jsonl");
-      expect(mcpDiff.data.diff).toContain(".memory/events.jsonl");
-      expect(mcpDiff.data.diff).not.toContain("src.ts");
-
-      await commit(repo, "Save MCP workflow memory", "2026-04-25T14:01:00+02:00", [
-        ".memory"
-      ]);
-
-      const history = parseCliEnvelope<HistoryData>(
-        await expectSuccessfulMemoryCli(repo, ["history", "--json", "--limit", "2"])
-      );
-
-      expect(history.data.commits.map((entry) => entry.subject)).toEqual([
-        "Save MCP workflow memory",
-        "Initialize memory"
-      ]);
+      expect(cliDiff.data.changed_files).toContain(".memory/events.jsonl");
+      expect(cliDiff.data.diff).toContain(".memory/events.jsonl");
+      expect(cliDiff.data.diff).not.toContain("src.ts");
     } finally {
       await started.close();
     }
@@ -563,40 +437,25 @@ async function git(
   return result.data.stdout;
 }
 
-function createWorkflowPatch() {
+function createWorkflowRememberArguments() {
   return {
-    source: {
-      kind: "agent",
-      task: "Full MCP workflow test"
-    },
-    changes: [
+    task: "Full MCP workflow test",
+    memories: [
       {
-        op: "create_object",
+        kind: "decision",
         id: "decision.mcp-routine-workflow",
-        type: "decision",
         title: "MCP routine workflow",
         body:
-          "# MCP routine workflow\n\nMCP routine workflow agents use load_memory, search_memory, inspect_memory, save_memory_patch, and diff_memory for normal project memory work. Relevant file src/mcp/server.ts.\n",
+          "MCP routine workflow agents use search_memory, inspect_memory, and remember_memory for normal project memory work. Relevant file src/mcp/server.ts.",
         tags: ["mcp", "workflow", "routine"]
       },
       {
-        op: "create_object",
-        id: "constraint.mcp-no-cli-mirroring",
-        type: "constraint",
+        kind: "constraint",
         title: "MCP does not mirror CLI-only commands",
         body:
-          "# MCP does not mirror CLI-only commands\n\nDo not expose init, check, rebuild, history, restore, stale, graph, export, shell, or filesystem operations through MCP. Agents must use the memory binary for CLI-only capabilities.\n",
+          "Do not expose init, check, rebuild, shell, or filesystem operations through MCP. Agents must use the memory binary for CLI-only capabilities.",
         tags: ["mcp", "workflow", "cli-only"]
-      },
-      ...Array.from({ length: 14 }, (_, index) => ({
-        op: "create_object",
-        id: `decision.mcp-budget-context-${index + 1}`,
-        type: "decision",
-        status: "stale",
-        title: `MCP budget context ${index + 1}`,
-        body: `# MCP budget context ${index + 1}\n\n${"MCP workflow budget context should appear when token_budget is omitted and may be omitted only when an explicit token target is requested. ".repeat(12)}\n`,
-        tags: ["mcp", "workflow", "budget"]
-      }))
+      }
     ]
   };
 }

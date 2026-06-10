@@ -1,6 +1,6 @@
 {
   "body_path": "memory/syntheses/feature-map.md",
-  "content_hash": "sha256:c5774417b12f47016d8c30dd629119d33c94361134c38fe79a4eb92ca080bc83",
+  "content_hash": "sha256:67a0c02490405b532afa1db932f8b6c242789905d7cf421e483287a5cb3195ec",
   "created_at": "2026-05-18T15:00:40+02:00",
   "evidence": [
     {
@@ -81,12 +81,12 @@
     "kind": "cli",
     "task": "Proposed bootstrap memory patch from deterministic repository analysis"
   },
-  "status": "active",
+  "status": "stale",
   "tags": [
     "synthesis",
     "features"
   ],
   "title": "Feature map",
   "type": "synthesis",
-  "updated_at": "2026-05-19T15:37:18+02:00"
+  "updated_at": "2026-06-10T21:44:28+02:00"
 }

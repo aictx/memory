@@ -124,15 +124,15 @@ describe("memory MCP server bootstrap", () => {
       const toolNames = result.tools.map((tool) => tool.name).sort();
 
       expect(toolNames).toEqual([
-        "diff_memory",
         "inspect_memory",
-        "load_memory",
         "remember_memory",
-        "save_memory_patch",
         "search_memory"
       ]);
       expect(toolNames).not.toEqual(
         expect.arrayContaining([
+          "load_memory",
+          "save_memory_patch",
+          "diff_memory",
           "init",
           "check",
           "rebuild",
@@ -180,7 +180,7 @@ describe("memory MCP server bootstrap", () => {
       const result = await started.client.listTools();
       const descriptions = getProjectRootDescriptions(result.tools);
 
-      expect(descriptions).toHaveLength(6);
+      expect(descriptions).toHaveLength(3);
 
       for (const description of descriptions) {
         expect(description).toContain("select");
@@ -220,17 +220,17 @@ describe("memory MCP server bootstrap", () => {
       await expect(started.client.ping()).resolves.toEqual({});
 
       await started.client.callTool({
-        name: "save_memory_patch",
+        name: "remember_memory",
         arguments: {
           project_root: alphaRoot,
-          patch: createProjectNotePatch("Alpha-only deployment fact")
+          ...createProjectNoteRememberArguments("Alpha-only deployment fact")
         }
       });
       await started.client.callTool({
-        name: "save_memory_patch",
+        name: "remember_memory",
         arguments: {
           project_root: betaRoot,
-          patch: createProjectNotePatch("Beta-only deployment fact")
+          ...createProjectNoteRememberArguments("Beta-only deployment fact")
         }
       });
 
@@ -340,16 +340,12 @@ async function createInitializedProject(prefix: string): Promise<string> {
   return projectRoot;
 }
 
-function createProjectNotePatch(title: string): Record<string, unknown> {
+function createProjectNoteRememberArguments(title: string): Record<string, unknown> {
   return {
-    source: {
-      kind: "agent",
-      task: "Exercise global MCP project targeting"
-    },
-    changes: [
+    task: "Exercise global MCP project targeting",
+    memories: [
       {
-        op: "create_object",
-        type: "note",
+        kind: "note",
         title,
         body: `${title} belongs only to its initialized Memory project.`,
         tags: ["mcp", "global-server"]

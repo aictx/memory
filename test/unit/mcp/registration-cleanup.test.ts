@@ -7,29 +7,20 @@ const root = process.cwd();
 
 const mcpSourcePaths = [
   "src/mcp/server.ts",
-  "src/mcp/tools/load-memory.ts",
   "src/mcp/tools/search-memory.ts",
   "src/mcp/tools/inspect-memory.ts",
-  "src/mcp/tools/remember-memory.ts",
-  "src/mcp/tools/save-memory-patch.ts",
-  "src/mcp/tools/diff-memory.ts"
+  "src/mcp/tools/remember-memory.ts"
 ] as const;
 
 const toolSourcePaths = [
-  "src/mcp/tools/load-memory.ts",
   "src/mcp/tools/search-memory.ts",
   "src/mcp/tools/inspect-memory.ts",
-  "src/mcp/tools/remember-memory.ts",
-  "src/mcp/tools/save-memory-patch.ts",
-  "src/mcp/tools/diff-memory.ts"
+  "src/mcp/tools/remember-memory.ts"
 ] as const;
 
 const exactMcpToolNames = [
-  "diff_memory",
   "inspect_memory",
-  "load_memory",
   "remember_memory",
-  "save_memory_patch",
   "search_memory"
 ] as const;
 

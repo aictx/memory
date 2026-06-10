@@ -4,7 +4,7 @@ import {
   MAX_TOKEN_BUDGET,
   estimateTokenCount,
   normalizeTokenBudget
-} from "../../../src/context/tokens.js";
+} from "../../../src/core/tokens.js";
 
 describe("context token estimation", () => {
   it("estimates tokens from character count deterministically", () => {

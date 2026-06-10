@@ -1,9 +1,8 @@
-import { access, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 
-import fg from "fast-glob";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { main, type CliOutputWriter } from "../../../src/cli/main.js";
@@ -64,25 +63,6 @@ interface SaveData {
   index_updated: boolean;
 }
 
-interface LoadData {
-  task: string;
-  token_budget: number | null;
-  context_pack: string;
-  token_target: number | null;
-  estimated_tokens: number;
-  budget_status: "not_requested" | "within_target" | "over_target";
-  truncated: boolean;
-  source: {
-    project: string;
-    git_available: boolean;
-    branch: string | null;
-    commit: string | null;
-  };
-  included_ids: string[];
-  excluded_ids: string[];
-  omitted_ids: string[];
-}
-
 interface SearchData {
   matches: Array<{
     id: string;
@@ -93,22 +73,6 @@ interface SearchData {
     body_path: string;
     score: number;
   }>;
-}
-
-interface HistoryData {
-  commits: Array<{
-    commit: string;
-    short_commit: string;
-    author: string;
-    timestamp: string;
-    subject: string;
-  }>;
-}
-
-interface RestoreData {
-  restored_from: string;
-  files_changed: string[];
-  index_rebuilt: boolean;
 }
 
 interface CheckData {
@@ -125,25 +89,6 @@ interface RebuildData {
   event_appended: boolean;
 }
 
-interface SuggestData {
-  mode: "from_diff" | "bootstrap";
-  changed_files: string[];
-  related_memory_ids: string[];
-  possible_stale_ids: string[];
-  recommended_memory: string[];
-  agent_checklist: string[];
-}
-
-interface AuditData {
-  findings: Array<{
-    severity: "warning" | "info";
-    rule: string;
-    memory_id: string;
-    message: string;
-    evidence: unknown[];
-  }>;
-}
-
 afterEach(async () => {
   await Promise.all(
     tempRoots.splice(0).map((path) => rm(path, { recursive: true, force: true }))
@@ -151,7 +96,7 @@ afterEach(async () => {
 });
 
 describe("memory full CLI workflow", () => {
-  it("runs the Git-backed workflow end to end and restores only .memory", async () => {
+  it("runs the Git-backed workflow end to end", async () => {
     const repo = await createRepo("memory-e2e-cli-git-");
     const initOutput = await runCli(["node", "memory", "init", "--json"], repo);
 
@@ -169,7 +114,6 @@ describe("memory full CLI workflow", () => {
       ".gitignore",
       ".memory"
     ]);
-    const initCommit = (await git(repo, ["rev-parse", "HEAD"])).trim();
     const projectId = await readJsonString(join(repo, ".memory", "memory", "project.json"), "id");
     const saveOutput = await runCli(
       ["node", "memory", "save", "--stdin", "--json"],
@@ -186,58 +130,7 @@ describe("memory full CLI workflow", () => {
     expect(saveEnvelope.data.index_updated).toBe(true);
     expect(saveEnvelope.meta.git.dirty).toBe(true);
 
-    const loadWithoutBudget = parseSuccessEnvelope<LoadData>(
-      (
-        await expectSuccessfulCli([
-          "node",
-          "memory",
-          "load",
-          "workflow retry queue",
-          "--json"
-        ], repo)
-      ).stdout
-    );
-    expect(loadWithoutBudget.data).toMatchObject({
-      task: "workflow retry queue",
-      token_budget: null,
-      token_target: null,
-      budget_status: "not_requested",
-      truncated: false
-    });
-    expect(loadWithoutBudget.data.omitted_ids).toEqual([]);
-    expect(loadWithoutBudget.data.context_pack).toContain("decision.workflow-retry-queue");
-    expect(loadWithoutBudget.data.context_pack).toContain("constraint.workflow-local-only");
-    expect(loadWithoutBudget.data.context_pack).toContain("decision.workflow-budget-stale-1");
-    expect(loadWithoutBudget.data.source.git_available).toBe(true);
-
-    const loadWithBudget = parseSuccessEnvelope<LoadData>(
-      (
-        await expectSuccessfulCli([
-          "node",
-          "memory",
-          "load",
-          "workflow retry queue",
-          "--token-budget",
-          "501",
-          "--json"
-        ], repo)
-      ).stdout
-    );
-    expect(loadWithBudget.data.token_budget).toBe(501);
-    expect(loadWithBudget.data.token_target).toBe(501);
-    expect(["within_target", "over_target"]).toContain(loadWithBudget.data.budget_status);
-    expect(loadWithBudget.data.truncated).toBe(true);
-    expect(loadWithBudget.data.context_pack).toContain("decision.workflow-retry-queue");
-    expect(loadWithBudget.data.context_pack).toContain("constraint.workflow-local-only");
-    expect(loadWithBudget.data.included_ids).toContain("decision.workflow-retry-queue");
-    expect(loadWithBudget.data.included_ids).toContain("constraint.workflow-local-only");
-    expect(
-      loadWithBudget.data.omitted_ids.some((id) =>
-        id.startsWith("decision.workflow-budget-stale-")
-      )
-    ).toBe(true);
-
-    const searchBeforeRestore = parseSuccessEnvelope<SearchData>(
+    const searched = parseSuccessEnvelope<SearchData>(
       (
         await expectSuccessfulCli([
           "node",
@@ -248,60 +141,15 @@ describe("memory full CLI workflow", () => {
         ], repo)
       ).stdout
     );
-    expect(searchIds(searchBeforeRestore)).toContain("decision.workflow-retry-queue");
+    expect(searchIds(searched)).toContain("decision.workflow-retry-queue");
 
-    const outsideDirtyContent = "outside dirty change must survive restore\n";
+    const outsideDirtyContent = "outside dirty change must stay out of memory diff\n";
     await writeFile(join(repo, "src.ts"), outsideDirtyContent, "utf8");
     const diffOutput = await expectSuccessfulCli(["node", "memory", "diff"], repo);
     expect(diffOutput.stdout).toContain(".memory/memory/project.md");
     expect(diffOutput.stdout).toContain("Workflow retry queue requires local deterministic CLI coverage");
     expect(diffOutput.stdout).not.toContain("src.ts");
     expect(() => JSON.parse(diffOutput.stdout) as unknown).toThrow();
-
-    await commit(repo, "Save workflow memory", "2026-04-25T14:01:00+02:00", [
-      ".memory"
-    ]);
-    const history = parseSuccessEnvelope<HistoryData>(
-      (
-        await expectSuccessfulCli(["node", "memory", "history", "--json"], repo)
-      ).stdout
-    );
-    expect(history.data.commits.map((entry) => entry.subject)).toEqual([
-      "Save workflow memory",
-      "Initialize memory"
-    ]);
-
-    const headBeforeRestore = (await git(repo, ["rev-parse", "HEAD"])).trim();
-    const restoreOutput = await expectSuccessfulCli(
-      ["node", "memory", "restore", initCommit, "--json"],
-      repo
-    );
-    const restoreEnvelope = parseSuccessEnvelope<RestoreData>(restoreOutput.stdout);
-    expect(restoreEnvelope.data.restored_from).toBe(initCommit);
-    expect(restoreEnvelope.data.index_rebuilt).toBe(true);
-    expect(restoreEnvelope.data.files_changed.length).toBeGreaterThan(0);
-    expect(
-      restoreEnvelope.data.files_changed.every((file) => file.startsWith(".memory/"))
-    ).toBe(true);
-    expect((await git(repo, ["rev-parse", "HEAD"])).trim()).toBe(headBeforeRestore);
-    expect(await readFile(join(repo, "src.ts"), "utf8")).toBe(outsideDirtyContent);
-    await expect(
-      access(join(repo, ".memory", "memory", "decisions", "workflow-retry-queue.json"))
-    ).rejects.toMatchObject({ code: "ENOENT" });
-
-    const searchAfterRestore = parseSuccessEnvelope<SearchData>(
-      (
-        await expectSuccessfulCli([
-          "node",
-          "memory",
-          "search",
-          "workflow retry queue",
-          "--json"
-        ], repo)
-      ).stdout
-    );
-    expect(searchIds(searchAfterRestore)).not.toContain("decision.workflow-retry-queue");
-    expect(searchIds(searchAfterRestore)).not.toContain("constraint.workflow-local-only");
   });
 
   it("runs the core workflow outside Git and rejects Git-only commands", async () => {
@@ -321,26 +169,6 @@ describe("memory full CLI workflow", () => {
       }
     });
 
-    const beforeBootstrap = await readCanonicalSnapshot(projectRoot);
-    const bootstrap = parseSuccessEnvelope<SuggestData>(
-      (
-        await expectSuccessfulCli([
-          "node",
-          "memory",
-          "suggest",
-          "--bootstrap",
-          "--json"
-        ], projectRoot)
-      ).stdout
-    );
-    expect(bootstrap.data.mode).toBe("bootstrap");
-    expect(bootstrap.data.recommended_memory).toEqual(
-      expect.arrayContaining(["project", "architecture", "workflow", "constraint", "gotcha"])
-    );
-    expect(bootstrap.meta.git.available).toBe(false);
-    expect(bootstrap.meta.git.dirty).toBeNull();
-    await expect(readCanonicalSnapshot(projectRoot)).resolves.toEqual(beforeBootstrap);
-
     const save = parseSuccessEnvelope<SaveData>(
       (
         await expectSuccessfulCli(
@@ -353,20 +181,6 @@ describe("memory full CLI workflow", () => {
     expect(save.data.memory_created).toContain("decision.nongit-cli-workflow");
     expect(save.data.index_updated).toBe(true);
     expect(save.meta.git.available).toBe(false);
-
-    const loaded = parseSuccessEnvelope<LoadData>(
-      (
-        await expectSuccessfulCli([
-          "node",
-          "memory",
-          "load",
-          "non git workflow search",
-          "--json"
-        ], projectRoot)
-      ).stdout
-    );
-    expect(loaded.data.context_pack).toContain("decision.nongit-cli-workflow");
-    expect(loaded.data.source.git_available).toBe(false);
 
     const searched = parseSuccessEnvelope<SearchData>(
       (
@@ -395,13 +209,6 @@ describe("memory full CLI workflow", () => {
     expect(rebuilt.data.index_rebuilt).toBe(true);
     expect(rebuilt.data.objects_indexed).toBeGreaterThan(0);
     expect(rebuilt.data.event_appended).toBe(false);
-
-    const audit = parseSuccessEnvelope<AuditData>(
-      (await expectSuccessfulCli(["node", "memory", "audit", "--json"], projectRoot)).stdout
-    );
-    expect(Array.isArray(audit.data.findings)).toBe(true);
-    expect(audit.meta.git.available).toBe(false);
-    expect(audit.meta.git.dirty).toBeNull();
 
     for (const argv of gitOnlyCommands()) {
       const output = await runCli(argv, projectRoot);
@@ -459,16 +266,7 @@ function createGitWorkflowPatch(projectId: string) {
         body:
           "# Workflow retry queue\n\nUse the generated SQLite index and CLI adapters to load and search saved workflow retry queue memory. Do not mutate product files from the e2e test.\n",
         tags: ["workflow", "retry", "queue"]
-      },
-      ...Array.from({ length: 14 }, (_, index) => ({
-        op: "create_object",
-        id: `decision.workflow-budget-stale-${index + 1}`,
-        type: "decision",
-        status: "stale",
-        title: `Workflow budget stale ${index + 1}`,
-        body: `# Workflow budget stale ${index + 1}\n\n${"Workflow retry queue budget context should be visible when no token budget is requested, but it can be omitted under an explicit low token target. ".repeat(12)}\n`,
-        tags: ["workflow", "budget"]
-      }))
+      }
     ]
   };
 }
@@ -494,13 +292,7 @@ function createNonGitWorkflowPatch() {
 }
 
 function gitOnlyCommands(): string[][] {
-  return [
-    ["node", "memory", "suggest", "--from-diff", "--json"],
-    ["node", "memory", "diff", "--json"],
-    ["node", "memory", "history", "--json"],
-    ["node", "memory", "restore", "HEAD", "--json"],
-    ["node", "memory", "rewind", "--json"]
-  ];
+  return [["node", "memory", "diff", "--json"]];
 }
 
 async function expectSuccessfulCli(
@@ -545,30 +337,6 @@ function parseErrorEnvelope(stdout: string): ErrorEnvelope {
 
 function searchIds(envelope: SuccessEnvelope<SearchData>): string[] {
   return envelope.data.matches.map((match) => match.id);
-}
-
-async function readCanonicalSnapshot(projectRoot: string): Promise<Record<string, string>> {
-  const paths = await fg(
-    [
-      ".memory/config.json",
-      ".memory/events.jsonl",
-      ".memory/memory/**",
-      ".memory/relations/**"
-    ],
-    {
-      cwd: projectRoot,
-      dot: true,
-      onlyFiles: true,
-      unique: true
-    }
-  );
-  const snapshot: Record<string, string> = {};
-
-  for (const path of paths.sort()) {
-    snapshot[path] = (await readFile(join(projectRoot, path))).toString("base64");
-  }
-
-  return snapshot;
 }
 
 function createCapturedOutput(): {

@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import {
   diffMemory,
   inspectMemory,
-  loadMemory,
   saveMemoryPatch,
   rememberMemory,
   searchMemory,
@@ -11,7 +10,6 @@ import {
   type DiffMemoryData,
   type InspectMemoryData,
   type InspectMemoryOptions,
-  type LoadMemoryOptions,
   type SaveMemoryData,
   type SaveMemoryPatchOptions,
   type RememberMemoryData,
@@ -27,7 +25,6 @@ import {
 } from "../core/paths.js";
 import type { Result } from "../core/result.js";
 import type { MemoryMeta, ObjectId } from "../core/types.js";
-import type { LoadMemoryData, LoadMemoryInput } from "../context/compile.js";
 import type { SearchMemoryData, SearchMemoryInput } from "../index/search.js";
 
 export type DataAccessProjectTarget =
@@ -44,8 +41,6 @@ export interface DataAccessBaseInput extends GitWrapperOptions {
   target: DataAccessProjectTarget;
   clock?: Clock;
 }
-
-export interface DataAccessLoadInput extends DataAccessBaseInput, LoadMemoryInput {}
 
 export interface DataAccessSearchInput extends DataAccessBaseInput, SearchMemoryInput {}
 
@@ -65,7 +60,6 @@ export interface DataAccessRememberInput extends DataAccessBaseInput {
 }
 
 export interface DataAccessService {
-  load(input: DataAccessLoadInput): Promise<AppResult<LoadMemoryData>>;
   search(input: DataAccessSearchInput): Promise<AppResult<SearchMemoryData>>;
   inspect(input: DataAccessInspectInput): Promise<AppResult<InspectMemoryData>>;
   diff(input: DataAccessDiffInput): Promise<AppResult<DiffMemoryData>>;
@@ -75,8 +69,6 @@ export interface DataAccessService {
 
 export function createDataAccessService(): DataAccessService {
   return {
-    load: async (input) =>
-      withResolvedProject(input, async (paths) => loadMemory(toLoadMemoryOptions(input, paths))),
     search: async (input) =>
       withResolvedProject(input, async (paths) =>
         searchMemory(toSearchMemoryOptions(input, paths))
@@ -137,21 +129,6 @@ async function resolveDataAccessProject(
     mode,
     ...gitWrapperOptions(input)
   });
-}
-
-function toLoadMemoryOptions(
-  input: DataAccessLoadInput,
-  paths: ProjectPaths
-): LoadMemoryOptions {
-  return {
-    cwd: paths.projectRoot,
-    task: input.task,
-    ...gitWrapperOptions(input),
-    ...clockOption(input),
-    ...(input.token_budget === undefined ? {} : { token_budget: input.token_budget }),
-    ...(input.mode === undefined ? {} : { mode: input.mode }),
-    ...(input.hints === undefined ? {} : { hints: input.hints })
-  };
 }
 
 function toSearchMemoryOptions(

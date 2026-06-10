@@ -191,7 +191,7 @@ describe("viewer local server", () => {
     }
   });
 
-  it("returns project-scoped bootstrap data and export responses", async () => {
+  it("returns project-scoped bootstrap data", async () => {
     const projectRoot = await createInitializedProject("memory-viewer-project-route-");
     const memoryHome = await createTempRoot("memory-viewer-project-route-home-");
     const assetsDir = await createViewerAssets("memory-viewer-project-route-assets-");
@@ -229,26 +229,6 @@ describe("viewer local server", () => {
       expect(bootstrapResponse.status).toBe(200);
       expect(bootstrapEnvelope.ok).toBe(true);
       expect(bootstrapEnvelope.data.counts.objects).toBeGreaterThan(0);
-
-      const exportResponse = await fetch(
-        `${base}/api/projects/${encodeURIComponent(registryId ?? "")}/export/obsidian`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${started.data.token}`,
-            "content-type": "application/json"
-          },
-          body: JSON.stringify({ outDir: "project-route-export" })
-        }
-      );
-      const exportEnvelope = await exportResponse.json() as {
-        ok: true;
-        data: { manifest_path: string };
-      };
-
-      expect(exportResponse.status).toBe(200);
-      expect(exportEnvelope.ok).toBe(true);
-      expect(exportEnvelope.data.manifest_path).toBe("project-route-export/.memory-obsidian-export.json");
     } finally {
       await started.data.close();
     }
@@ -425,7 +405,6 @@ describe("viewer local server", () => {
           project: { id: string; name: string };
           objects: unknown[];
           relations: unknown[];
-          audit_findings: unknown[];
           counts: {
             objects: number;
             relations: number;
@@ -443,7 +422,6 @@ describe("viewer local server", () => {
       expect(envelope.data.project.id).toMatch(/^project\./);
       expect(envelope.data.objects.length).toBe(envelope.data.counts.objects);
       expect(envelope.data.relations.length).toBe(envelope.data.counts.relations);
-      expect(Array.isArray(envelope.data.audit_findings)).toBe(true);
       expect(envelope.data.counts).toMatchObject({
         stale_objects: expect.any(Number),
         superseded_objects: expect.any(Number),
@@ -451,59 +429,6 @@ describe("viewer local server", () => {
         synthesis_objects: expect.any(Number),
         active_relations: expect.any(Number)
       });
-      await expect(readCanonicalAndIndexFiles(projectRoot)).resolves.toEqual(before);
-    } finally {
-      await started.data.close();
-    }
-  });
-
-  it("exports Obsidian projection files without mutating canonical storage or indexes", async () => {
-    const projectRoot = await createInitializedProject("memory-viewer-export-project-");
-    const assetsDir = await createViewerAssets("memory-viewer-export-assets-");
-    const started = await startViewerServer({
-      cwd: projectRoot,
-      assetsDir,
-      token: "export-token"
-    });
-
-    expect(started.ok).toBe(true);
-    if (!started.ok) {
-      throw new Error(started.error.message);
-    }
-
-    try {
-      const before = await readCanonicalAndIndexFiles(projectRoot);
-      const response = await fetch(
-        `http://${started.data.host}:${started.data.port}/api/export/obsidian`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${started.data.token}`,
-            "content-type": "application/json"
-          },
-          body: JSON.stringify({ outDir: "viewer-export" })
-        }
-      );
-      const envelope = await response.json() as {
-        ok: true;
-        data: {
-          format: "obsidian";
-          output_dir: string;
-          manifest_path: string;
-          files_written: string[];
-        };
-      };
-
-      expect(response.status).toBe(200);
-      expect(envelope.ok).toBe(true);
-      expect(envelope.data).toMatchObject({
-        format: "obsidian",
-        output_dir: "viewer-export",
-        manifest_path: "viewer-export/.memory-obsidian-export.json"
-      });
-      expect(envelope.data.files_written).toContain("viewer-export/index.md");
-      await expect(readFile(join(projectRoot, "viewer-export/index.md"), "utf8"))
-        .resolves.toContain("# Memory");
       await expect(readCanonicalAndIndexFiles(projectRoot)).resolves.toEqual(before);
     } finally {
       await started.data.close();
@@ -520,8 +445,6 @@ describe("viewer local server", () => {
       await expect(fetch(`${base}/api/bootstrap?token=${token}`, {
         method: "POST"
       })).resolves.toMatchObject({ status: 405 });
-      await expect(fetch(`${base}/api/export/obsidian?token=${token}`))
-        .resolves.toMatchObject({ status: 405 });
       const projectsResponse = await fetch(`${base}/api/projects?token=${token}`);
       const projectsEnvelope = await projectsResponse.json() as {
         ok: true;

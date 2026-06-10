@@ -10,11 +10,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 import { version } from "../generated/version.js";
 import type { MemoryMcpContext } from "./context.js";
-import { diffMemoryTool } from "./tools/diff-memory.js";
 import { inspectMemoryTool } from "./tools/inspect-memory.js";
-import { loadMemoryTool } from "./tools/load-memory.js";
 import { rememberMemoryTool } from "./tools/remember-memory.js";
-import { saveMemoryPatchTool } from "./tools/save-memory-patch.js";
 import { searchMemoryTool } from "./tools/search-memory.js";
 
 export interface MemoryMcpServer {
@@ -154,16 +151,6 @@ function writeStartupFailure(error: unknown, options: StartupFailureOptions): vo
 
 function registerTools(mcp: MemoryMcpServer): void {
   mcp.server.registerTool(
-    loadMemoryTool.name,
-    {
-      title: loadMemoryTool.title,
-      description: loadMemoryTool.description,
-      inputSchema: loadMemoryTool.inputSchema,
-      annotations: loadMemoryTool.annotations
-    },
-    (args) => loadMemoryTool.call(mcp.context, args)
-  );
-  mcp.server.registerTool(
     searchMemoryTool.name,
     {
       title: searchMemoryTool.title,
@@ -184,16 +171,6 @@ function registerTools(mcp: MemoryMcpServer): void {
     (args) => inspectMemoryTool.call(mcp.context, args)
   );
   mcp.server.registerTool(
-    saveMemoryPatchTool.name,
-    {
-      title: saveMemoryPatchTool.title,
-      description: saveMemoryPatchTool.description,
-      inputSchema: saveMemoryPatchTool.inputSchema,
-      annotations: saveMemoryPatchTool.annotations
-    },
-    (args) => saveMemoryPatchTool.call(mcp.context, args)
-  );
-  mcp.server.registerTool(
     rememberMemoryTool.name,
     {
       title: rememberMemoryTool.title,
@@ -202,15 +179,5 @@ function registerTools(mcp: MemoryMcpServer): void {
       annotations: rememberMemoryTool.annotations
     },
     (args) => rememberMemoryTool.call(mcp.context, args)
-  );
-  mcp.server.registerTool(
-    diffMemoryTool.name,
-    {
-      title: diffMemoryTool.title,
-      description: diffMemoryTool.description,
-      inputSchema: diffMemoryTool.inputSchema,
-      annotations: diffMemoryTool.annotations
-    },
-    (args) => diffMemoryTool.call(mcp.context, args)
   );
 }

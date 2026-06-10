@@ -17,7 +17,6 @@ export {
   type DataAccessApplyPatchInput,
   type DataAccessDiffInput,
   type DataAccessInspectInput,
-  type DataAccessLoadInput,
   type DataAccessProjectTarget,
   type DataAccessRememberInput,
   type DataAccessSearchInput,

@@ -10,7 +10,6 @@ import {
   saveMemoryPatch,
   searchMemory
 } from "../../../src/app/operations.js";
-import { main, type CliOutputWriter } from "../../../src/cli/main.js";
 import type {
   MemoryEvent,
   ObjectId,
@@ -38,7 +37,6 @@ const FIXTURE_TIMEOUT_MS = 60_000;
 const REBUILD_TIMEOUT_MS = 60_000;
 const OPERATION_TIMEOUT_MS = 30_000;
 const WRITE_BATCH_SIZE = 64;
-const EXPLICIT_TOKEN_BUDGET = 501;
 const PERFORMANCE_QUERY = "decision.perf-smoke-0001 performance smoke query";
 const RELATION_PREDICATES = [
   "requires",
@@ -55,27 +53,6 @@ interface FileWrite {
   contents: string;
 }
 
-interface CliRunResult {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}
-
-interface LoadEnvelope {
-  ok: true;
-  data: {
-    task: string;
-    token_budget: number | null;
-    context_pack: string;
-    token_target: number | null;
-    estimated_tokens: number;
-    budget_status: "not_requested" | "within_target" | "over_target";
-    truncated: boolean;
-    included_ids: string[];
-    omitted_ids: string[];
-  };
-}
-
 afterEach(async () => {
   await Promise.all(
     tempRoots.splice(0).map((path) => rm(path, { recursive: true, force: true }))
@@ -84,7 +61,7 @@ afterEach(async () => {
 
 describe("performance smoke tests", () => {
   it(
-    "keeps local rebuild, search, load, and save operations responsive on a generated project",
+    "keeps local rebuild, search, and save operations responsive on a generated project",
     async () => {
       const projectRoot = await createInitializedProject("memory-performance-smoke-");
       const objectIds = await withLocalTimeout(
@@ -136,44 +113,6 @@ describe("performance smoke tests", () => {
         throw new Error(searched.error.message);
       }
       expect(searched.data.matches.map((match) => match.id)).toContain(targetObjectId);
-
-      const loadWithoutBudget = await withLocalTimeout(
-        "context pack without token target",
-        OPERATION_TIMEOUT_MS,
-        () => runLoadJson(projectRoot, [PERFORMANCE_QUERY])
-      );
-
-      expect(loadWithoutBudget.data).toMatchObject({
-        task: PERFORMANCE_QUERY,
-        token_budget: null,
-        token_target: null,
-        budget_status: "not_requested",
-        truncated: false,
-        omitted_ids: []
-      });
-      expect(loadWithoutBudget.data.context_pack).toContain(targetObjectId);
-      expect(loadWithoutBudget.data.included_ids).toContain(targetObjectId);
-      expect(loadWithoutBudget.data.estimated_tokens).toBeGreaterThan(0);
-
-      const loadWithBudget = await withLocalTimeout(
-        "context pack with explicit advisory token target",
-        OPERATION_TIMEOUT_MS,
-        () =>
-          runLoadJson(projectRoot, [
-            PERFORMANCE_QUERY,
-            "--token-budget",
-            String(EXPLICIT_TOKEN_BUDGET)
-          ])
-      );
-
-      expect(loadWithBudget.data.token_budget).toBe(EXPLICIT_TOKEN_BUDGET);
-      expect(loadWithBudget.data.token_target).toBe(EXPLICIT_TOKEN_BUDGET);
-      expect(["within_target", "over_target"]).toContain(
-        loadWithBudget.data.budget_status
-      );
-      expect(loadWithBudget.data.context_pack).toContain(targetObjectId);
-      expect(loadWithBudget.data.included_ids).toContain(targetObjectId);
-      expect(loadWithBudget.data.estimated_tokens).toBeGreaterThan(0);
 
       const saved = await withLocalTimeout("save small patch", OPERATION_TIMEOUT_MS, () =>
         saveMemoryPatch({
@@ -387,54 +326,6 @@ async function writeFilesInBatches(
       batch.map((entry) => writeFile(join(projectRoot, entry.relativePath), entry.contents, "utf8"))
     );
   }
-}
-
-async function runLoadJson(projectRoot: string, args: readonly string[]): Promise<LoadEnvelope> {
-  const output = await runCli(["node", "memory", "load", ...args, "--json"], projectRoot);
-
-  expect(output.exitCode).toBe(0);
-  expect(output.stderr).toBe("");
-
-  const envelope = JSON.parse(output.stdout) as LoadEnvelope;
-
-  expect(envelope.ok).toBe(true);
-  return envelope;
-}
-
-async function runCli(argv: string[], cwd: string): Promise<CliRunResult> {
-  const output = createCapturedOutput();
-  const exitCode = await main(argv, {
-    ...output.writers,
-    cwd
-  });
-
-  return {
-    exitCode,
-    stdout: output.stdout(),
-    stderr: output.stderr()
-  };
-}
-
-function createCapturedOutput(): {
-  writers: { stdout: CliOutputWriter; stderr: CliOutputWriter };
-  stdout: () => string;
-  stderr: () => string;
-} {
-  let stdout = "";
-  let stderr = "";
-
-  return {
-    writers: {
-      stdout(text: string): void {
-        stdout += text;
-      },
-      stderr(text: string): void {
-        stderr += text;
-      }
-    },
-    stdout: () => stdout,
-    stderr: () => stderr
-  };
 }
 
 async function withLocalTimeout<T>(

@@ -20,32 +20,24 @@ describe("CLI main", () => {
     expect(remember?.description()).toContain("workflows/how-tos");
   });
 
-  it("registers lens, handoff, and wiki commands", () => {
+  it("registers only the surviving commands", () => {
     const program = createCliProgram();
 
-    expect(program.commands.map((command) => command.name())).toEqual(
-      expect.arrayContaining(["lens", "handoff", "wiki"])
-    );
-    expect(
-      program.commands.find((command) => command.name() === "handoff")?.commands.map((command) => command.name())
-    ).toEqual(expect.arrayContaining(["show", "update", "close"]));
-    expect(
-      program.commands.find((command) => command.name() === "wiki")?.commands.map((command) => command.name())
-    ).toEqual(expect.arrayContaining(["ingest", "file", "lint", "log"]));
-  });
-
-  it("documents setup dry-run as non-initializing and non-writing", () => {
-    const program = createCliProgram();
-    const setup = program.commands.find((command) => command.name() === "setup");
-    const setupHelp = (setup?.helpInformation() ?? "").replace(/\s+/g, " ");
-
-    expect(setupHelp).toContain("--dry-run");
-    expect(setupHelp).toContain("without initializing storage");
-    expect(setupHelp).toContain("writing repo files");
-    expect(setupHelp).toContain("--no-view");
-    expect(setupHelp).toContain("Skip local viewer startup");
-    expect(setupHelp).toContain("--review-agent-guidance");
-    expect(setupHelp).toContain("semantic review");
+    expect(program.commands.map((command) => command.name()).sort()).toEqual([
+      "check",
+      "diff",
+      "docs",
+      "init",
+      "inspect",
+      "projects",
+      "rebuild",
+      "remember",
+      "reset",
+      "save",
+      "search",
+      "upgrade",
+      "view"
+    ]);
   });
 
   it("returns exit 2 for unknown options", async () => {

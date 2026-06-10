@@ -6,7 +6,7 @@ import { Readable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { main, type CliOutputWriter } from "../../../src/cli/main.js";
-import { loadMemory } from "../../../src/app/operations.js";
+import { searchMemory } from "../../../src/app/operations.js";
 import { runSubprocess } from "../../../src/core/subprocess.js";
 import { readCanonicalStorage } from "../../../src/storage/read.js";
 import { createFixedTestClock } from "../../fixtures/time.js";
@@ -35,7 +35,7 @@ afterEach(async () => {
 });
 
 describe("memory remember CLI", () => {
-  it("saves intent-first memory through the shared write path and makes it immediately loadable", async () => {
+  it("saves intent-first memory through the shared write path and makes it immediately searchable", async () => {
     const projectRoot = await createInitializedProject("memory-cli-remember-");
     const output = createCapturedOutput();
     const input = {
@@ -80,14 +80,14 @@ describe("memory remember CLI", () => {
       });
     }
 
-    const loaded = await loadMemory({
+    const searched = await searchMemory({
       cwd: projectRoot,
-      task: "where do billing retries run",
+      query: "billing retries worker",
       clock: createFixedTestClock()
     });
-    expect(loaded.ok).toBe(true);
-    if (loaded.ok) {
-      expect(loaded.data.included_ids).toContain(
+    expect(searched.ok).toBe(true);
+    if (searched.ok) {
+      expect(searched.data.matches.map((match) => match.id)).toContain(
         "decision.billing-retries-run-in-the-worker"
       );
     }

@@ -321,6 +321,46 @@ export async function detachViewer(
   });
 }
 
+export interface StartViewerFlags {
+  view?: boolean;
+  open?: boolean;
+}
+
+export interface StartViewerRunOptions {
+  json: boolean;
+}
+
+export async function maybeStartViewer(
+  cwd: string,
+  flags: StartViewerFlags,
+  viewerDetacher: ViewerDetacher | undefined,
+  options: StartViewerRunOptions
+): Promise<Result<DetachedViewer | null>> {
+  if (!shouldStartViewer(flags, options)) {
+    return {
+      ok: true,
+      data: null,
+      warnings: []
+    };
+  }
+
+  return detachViewer(
+    {
+      cwd,
+      open: flags.open === true
+    },
+    viewerDetacher
+  );
+}
+
+function shouldStartViewer(flags: StartViewerFlags, options: StartViewerRunOptions): boolean {
+  if (flags.view === false) {
+    return false;
+  }
+
+  return flags.view === true || flags.open === true || !options.json;
+}
+
 export function resolveDetachedCliPath(moduleUrl: string): string {
   const currentPath = fileURLToPath(moduleUrl);
 

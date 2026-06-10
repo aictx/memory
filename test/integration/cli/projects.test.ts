@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -88,35 +88,8 @@ describe("memory projects CLI", () => {
     await runCli(["node", "memory", "projects", "remove", registryIdAfterCheck ?? "", "--json"], projectRoot, memoryHome);
     await expectRegisteredProjectCount(projectRoot, memoryHome, 0);
 
-    const load = await runCli(["node", "memory", "load", "project context", "--json"], projectRoot, memoryHome, true);
-    expect(load.exitCode).toBe(0);
-    await expectRegisteredProjectCount(projectRoot, memoryHome, 1);
-
-    const registryIdAfterLoad = parseJson<{
-      ok: true;
-      data: { projects: Array<{ registry_id: string }> };
-    }>((await runCli(["node", "memory", "projects", "list", "--json"], projectRoot, memoryHome)).stdout)
-      .data.projects[0]?.registry_id;
-
-    await runCli(["node", "memory", "projects", "remove", registryIdAfterLoad ?? "", "--json"], projectRoot, memoryHome);
-    await expectRegisteredProjectCount(projectRoot, memoryHome, 0);
-
-    await writeFile(
-      join(projectRoot, "noop-memory.json"),
-      JSON.stringify({
-        proposed: false,
-        reason: "No patch needed.",
-        packet: {}
-      }),
-      "utf8"
-    );
-    const patchReview = await runCli(
-      ["node", "memory", "patch", "review", "noop-memory.json", "--json"],
-      projectRoot,
-      memoryHome,
-      true
-    );
-    expect(patchReview.exitCode).toBe(0);
+    const search = await runCli(["node", "memory", "search", "project context", "--json"], projectRoot, memoryHome, true);
+    expect(search.exitCode).toBe(0);
     await expectRegisteredProjectCount(projectRoot, memoryHome, 1);
   });
 });

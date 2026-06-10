@@ -17,7 +17,6 @@ describe("data-access adapter profiles", () => {
       status: "active"
     });
     expect(mappingByToolName(profile)).toEqual({
-      load_memory: "load",
       search_memory: "search",
       inspect_memory: "inspect",
       remember_memory: "remember",
@@ -49,7 +48,6 @@ describe("data-access adapter profiles", () => {
 
     expect(defaultProfiles.map((profile) => profile.id)).toEqual(["local-mcp"]);
     expect(defaultToolNames).toEqual([
-      "load_memory",
       "search_memory",
       "inspect_memory",
       "remember_memory",

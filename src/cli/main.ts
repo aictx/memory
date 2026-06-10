@@ -5,40 +5,26 @@ import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { Command, CommanderError } from "commander";
 import { version } from "../generated/version.js";
-import { registerAuditCommand } from "./commands/audit.js";
 import { registerCheckCommand } from "./commands/check.js";
 import { registerDiffCommand } from "./commands/diff.js";
 import {
   registerDocsCommand,
   type DocsUrlOpener
 } from "./commands/docs.js";
-import { registerExportCommand } from "./commands/export.js";
-import { registerGraphCommand } from "./commands/graph.js";
-import { registerHandoffCommand } from "./commands/handoff.js";
-import { registerHistoryCommand } from "./commands/history.js";
 import { registerInitCommand } from "./commands/init.js";
-import { registerLensCommand } from "./commands/lens.js";
 import { registerInspectCommand } from "./commands/inspect.js";
-import { registerLoadCommand } from "./commands/load.js";
-import { registerPatchCommand } from "./commands/patch.js";
 import { registerProjectsCommand } from "./commands/projects.js";
 import { registerRebuildCommand } from "./commands/rebuild.js";
 import { registerRememberCommand } from "./commands/remember.js";
 import { registerResetCommand } from "./commands/reset.js";
-import { registerRestoreCommand } from "./commands/restore.js";
-import { registerRewindCommand } from "./commands/rewind.js";
 import { registerSaveCommand } from "./commands/save.js";
 import { registerSearchCommand } from "./commands/search.js";
-import { registerSetupCommand } from "./commands/setup.js";
-import { registerStaleCommand } from "./commands/stale.js";
-import { registerSuggestCommand } from "./commands/suggest.js";
 import { registerUpgradeCommand } from "./commands/upgrade.js";
 import {
   registerViewCommand,
   type ViewerDetacher,
   type ViewerUrlOpener
 } from "./commands/view.js";
-import { registerWikiCommand } from "./commands/wiki.js";
 import {
   CLI_EXIT_SUCCESS,
   CLI_EXIT_USAGE,
@@ -106,43 +92,12 @@ export function createCliProgram(options: CliMainOptions = {}): Command {
     stdout: writeOut,
     stderr: writeErr
   });
-  registerLoadCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdout: writeOut,
-    stderr: writeErr
-  });
   registerSearchCommand(program, {
     cwd: options.cwd ?? process.cwd(),
     stdout: writeOut,
     stderr: writeErr
   });
   registerInspectCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdout: writeOut,
-    stderr: writeErr
-  });
-  registerLensCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdout: writeOut,
-    stderr: writeErr
-  });
-  registerHandoffCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdin: options.stdin ?? process.stdin,
-    stdout: writeOut,
-    stderr: writeErr
-  });
-  registerStaleCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdout: writeOut,
-    stderr: writeErr
-  });
-  registerSuggestCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdout: writeOut,
-    stderr: writeErr
-  });
-  registerPatchCommand(program, {
     cwd: options.cwd ?? process.cwd(),
     stdout: writeOut,
     stderr: writeErr
@@ -155,28 +110,7 @@ export function createCliProgram(options: CliMainOptions = {}): Command {
       ? {}
       : { memoryHome: options.registry.memoryHome })
   });
-  registerSetupCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdout: writeOut,
-    stderr: writeErr,
-    ...(options.viewer?.detacher === undefined ? {} : { detacher: options.viewer.detacher })
-  });
-  registerAuditCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdout: writeOut,
-    stderr: writeErr
-  });
   registerUpgradeCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdout: writeOut,
-    stderr: writeErr
-  });
-  registerGraphCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdout: writeOut,
-    stderr: writeErr
-  });
-  registerExportCommand(program, {
     cwd: options.cwd ?? process.cwd(),
     stdout: writeOut,
     stderr: writeErr
@@ -209,21 +143,6 @@ export function createCliProgram(options: CliMainOptions = {}): Command {
     stdout: writeOut,
     stderr: writeErr
   });
-  registerHistoryCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdout: writeOut,
-    stderr: writeErr
-  });
-  registerRestoreCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdout: writeOut,
-    stderr: writeErr
-  });
-  registerRewindCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdout: writeOut,
-    stderr: writeErr
-  });
   registerResetCommand(program, {
     cwd: options.cwd ?? process.cwd(),
     stdout: writeOut,
@@ -240,12 +159,6 @@ export function createCliProgram(options: CliMainOptions = {}): Command {
     stderr: writeErr
   });
   registerRememberCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdin: options.stdin ?? process.stdin,
-    stdout: writeOut,
-    stderr: writeErr
-  });
-  registerWikiCommand(program, {
     cwd: options.cwd ?? process.cwd(),
     stdin: options.stdin ?? process.stdin,
     stdout: writeOut,
@@ -349,26 +262,11 @@ const AUTO_REGISTER_COMMANDS = new Set([
   "init",
   "check",
   "rebuild",
-  "load",
   "search",
   "inspect",
-  "lens",
-  "handoff show",
-  "handoff update",
-  "handoff close",
-  "stale",
-  "suggest",
-  "setup",
-  "audit",
-  "upgrade",
-  "graph",
-  "export obsidian",
-  "patch review",
   "diff",
-  "history",
-  "restore",
-  "rewind",
-  "save"
+  "save",
+  "upgrade"
 ]);
 
 function registryAutoRegistrationEnabled(options: CliMainOptions): boolean {

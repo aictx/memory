@@ -26,7 +26,6 @@ describe("data-access service", () => {
       "applyPatch",
       "diff",
       "inspect",
-      "load",
       "remember",
       "search"
     ]);
@@ -100,26 +99,6 @@ describe("data-access service", () => {
     expect(betaSearch.data.matches.map((match) => match.title)).not.toContain(
       "Alpha-only deployment fact"
     );
-
-    const alphaLoad = await dataAccessService.load({
-      target: {
-        kind: "project-root",
-        projectRoot: alphaRoot
-      },
-      task: "Use the alpha deployment fact",
-      token_budget: 1000
-    });
-
-    expect(alphaLoad.ok).toBe(true);
-
-    if (!alphaLoad.ok) {
-      return;
-    }
-
-    expect(alphaLoad.meta.project_root).toBe(alphaRoot);
-    expect(alphaLoad.meta.memory_root).toBe(join(alphaRoot, ".memory"));
-    expect(alphaLoad.data.context_pack).toContain("Alpha-only deployment fact");
-    expect(alphaLoad.data.context_pack).not.toContain("Beta-only deployment fact");
   });
 
   it("resolves nested cwd targets to the initialized project boundary", async () => {
