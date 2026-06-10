@@ -13,6 +13,7 @@ coverage/
 
 # Tool caches
 .cache/
+.bench/
 .turbo/
 .vite/
 .astro/
