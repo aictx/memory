@@ -2,14 +2,14 @@ import { memoryError } from "../core/errors.js";
 import { err, ok, type Result } from "../core/result.js";
 import type { SqliteDatabase } from "./sqlite-driver.js";
 
-export const CURRENT_INDEX_SCHEMA_VERSION = 5;
+export const CURRENT_INDEX_SCHEMA_VERSION = 6;
 
 export const REQUIRED_META_DEFAULTS = {
   schema_version: String(CURRENT_INDEX_SCHEMA_VERSION),
   built_at: "",
   source_git_commit: "",
   git_available: "false",
-  storage_version: "4",
+  storage_version: "5",
   object_count: "0",
   relation_count: "0",
   event_count: "0"
@@ -90,15 +90,9 @@ function createSchema(db: SqliteDatabase): void {
       json_path TEXT NOT NULL,
       body TEXT NOT NULL,
       content_hash TEXT NOT NULL,
-      scope_json TEXT NOT NULL,
-      scope_kind TEXT NOT NULL,
-      scope_project TEXT NOT NULL,
-      scope_branch TEXT,
-      scope_task TEXT,
+      stage TEXT,
+      anchors_json TEXT,
       tags_json TEXT NOT NULL,
-      facets_json TEXT,
-      facet_category TEXT,
-      applies_to_json TEXT,
       evidence_json TEXT,
       source_json TEXT,
       origin_json TEXT,
@@ -119,13 +113,6 @@ function createSchema(db: SqliteDatabase): void {
       commit_hash TEXT NOT NULL,
       link_kind TEXT NOT NULL,
       PRIMARY KEY (memory_id, commit_hash, link_kind)
-    );
-
-    CREATE TABLE IF NOT EXISTS memory_facet_links (
-      memory_id TEXT NOT NULL,
-      facet TEXT NOT NULL,
-      link_kind TEXT NOT NULL,
-      PRIMARY KEY (memory_id, facet, link_kind)
     );
 
     CREATE TABLE IF NOT EXISTS relations (
@@ -167,24 +154,18 @@ function createSchema(db: SqliteDatabase): void {
       title,
       body,
       tags,
-      facets,
+      anchors,
       evidence
     );
 
     CREATE INDEX IF NOT EXISTS objects_type_idx ON objects(type);
     CREATE INDEX IF NOT EXISTS objects_status_idx ON objects(status);
+    CREATE INDEX IF NOT EXISTS objects_stage_idx ON objects(stage);
     CREATE INDEX IF NOT EXISTS objects_updated_at_idx ON objects(updated_at);
-    CREATE INDEX IF NOT EXISTS objects_scope_project_idx ON objects(scope_project);
-    CREATE INDEX IF NOT EXISTS objects_scope_kind_idx ON objects(scope_kind);
-    CREATE INDEX IF NOT EXISTS objects_scope_branch_idx ON objects(scope_branch);
-    CREATE INDEX IF NOT EXISTS objects_scope_task_idx ON objects(scope_task);
-    CREATE INDEX IF NOT EXISTS objects_facet_category_idx ON objects(facet_category);
     CREATE INDEX IF NOT EXISTS memory_file_links_file_idx ON memory_file_links(file_path);
     CREATE INDEX IF NOT EXISTS memory_file_links_memory_idx ON memory_file_links(memory_id);
     CREATE INDEX IF NOT EXISTS memory_commit_links_commit_idx ON memory_commit_links(commit_hash);
     CREATE INDEX IF NOT EXISTS memory_commit_links_memory_idx ON memory_commit_links(memory_id);
-    CREATE INDEX IF NOT EXISTS memory_facet_links_facet_idx ON memory_facet_links(facet);
-    CREATE INDEX IF NOT EXISTS memory_facet_links_memory_idx ON memory_facet_links(memory_id);
     CREATE INDEX IF NOT EXISTS relations_from_idx ON relations(from_id);
     CREATE INDEX IF NOT EXISTS relations_to_idx ON relations(to_id);
     CREATE INDEX IF NOT EXISTS relations_predicate_idx ON relations(predicate);

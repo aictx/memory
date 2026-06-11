@@ -56,6 +56,7 @@ interface SaveErrorEnvelope {
 }
 
 interface SaveData {
+  dry_run: boolean;
   files_changed: string[];
   memory_created: string[];
   memory_updated: string[];
@@ -80,9 +81,9 @@ afterEach(async () => {
   );
 });
 
-describe("memory MCP remember_memory tool", () => {
+describe("memory MCP save_memory tool", () => {
   it("exposes only the normalized MCP tool set", async () => {
-    const projectRoot = await createProjectRoot("memory-mcp-remember-tools-");
+    const projectRoot = await createProjectRoot("memory-mcp-save-tools-");
     const started = await startMcpClient(projectRoot);
 
     try {
@@ -91,12 +92,13 @@ describe("memory MCP remember_memory tool", () => {
 
       expect(toolNames).toEqual([
         "inspect_memory",
-        "remember_memory",
+        "save_memory",
         "search_memory"
       ]);
       expect(toolNames).not.toEqual(
         expect.arrayContaining([
           "load_memory",
+          "remember_memory",
           "save_memory_patch",
           "diff_memory",
           "init",
@@ -130,24 +132,24 @@ describe("memory MCP remember_memory tool", () => {
     expect(started.stderr()).toBe("");
   });
 
-  it("advertises the intent-first remember input shape", async () => {
-    const projectRoot = await createProjectRoot("memory-mcp-remember-schema-");
+  it("advertises the intent-first save input shape", async () => {
+    const projectRoot = await createProjectRoot("memory-mcp-save-schema-");
     const started = await startMcpClient(projectRoot);
 
     try {
       const result = await started.client.listTools();
-      const rememberTool = result.tools.find((tool) => tool.name === "remember_memory");
-      const schema = JSON.stringify(rememberTool?.inputSchema);
+      const saveTool = result.tools.find((tool) => tool.name === "save_memory");
+      const schema = JSON.stringify(saveTool?.inputSchema);
 
-      expect(rememberTool).toBeDefined();
+      expect(saveTool).toBeDefined();
       expect(schema).toContain("task");
-      expect(schema).toContain("memories");
-      expect(schema).toContain("updates");
+      expect(schema).toContain("nodes");
       expect(schema).toContain("stale");
       expect(schema).toContain("supersede");
-      expect(schema).toContain("relations");
-      expect(schema).toContain("applies_to");
-      expect(schema).toContain("origin");
+      expect(schema).toContain("delete");
+      expect(schema).toContain("anchors");
+      expect(schema).toContain("stage");
+      expect(schema).toContain("related");
       expect(schema).not.toContain("additionalProperties\":{}");
     } finally {
       await started.close();
@@ -156,25 +158,25 @@ describe("memory MCP remember_memory tool", () => {
     expect(started.stderr()).toBe("");
   });
 
-  it("remembers intent-first memory through globally targeted MCP writes", async () => {
-    const serverRoot = await createProjectRoot("memory-mcp-remember-server-");
-    const projectRoot = await createInitializedProject("memory-mcp-remember-project-");
+  it("saves intent-first memory through globally targeted MCP writes", async () => {
+    const serverRoot = await createProjectRoot("memory-mcp-save-server-");
+    const projectRoot = await createInitializedProject("memory-mcp-save-project-");
     const started = await startMcpClient(serverRoot);
 
     try {
       const mcp = await started.client.callTool({
-        name: "remember_memory",
+        name: "save_memory",
         arguments: {
           project_root: projectRoot,
-          task: "Add MCP remember coverage",
-          memories: [
+          task: "Add MCP save coverage",
+          nodes: [
             {
               kind: "decision",
-              title: "MCP remember uses intent-first writes",
-              body: "The remember_memory tool accepts semantic memory input and routes it through the shared save path.",
-              tags: ["mcp", "remember"],
-              applies_to: ["src/mcp/tools/remember-memory.ts"],
-              evidence: [{ kind: "file", id: "src/mcp/tools/remember-memory.ts" }]
+              title: "MCP save uses intent-first writes",
+              body: "The save_memory tool accepts semantic memory input and routes it through the shared save path.",
+              tags: ["mcp", "save"],
+              anchors: ["src/mcp/tools/save-memory.ts"],
+              evidence: [{ kind: "file", id: "src/mcp/tools/save-memory.ts" }]
             }
           ]
         }
@@ -183,7 +185,7 @@ describe("memory MCP remember_memory tool", () => {
 
       expect(envelope.ok).toBe(true);
       expect(envelope.data.memory_created).toEqual([
-        "decision.mcp-remember-uses-intent-first-writes"
+        "decision.mcp-save-uses-intent-first-writes"
       ]);
 
       const storage = await readCanonicalStorage(projectRoot);
@@ -195,16 +197,13 @@ describe("memory MCP remember_memory tool", () => {
 
       const saved = storage.data.objects.find(
         (object) =>
-          object.sidecar.id === "decision.mcp-remember-uses-intent-first-writes"
+          object.sidecar.id === "decision.mcp-save-uses-intent-first-writes"
       );
 
       expect(saved?.body).toContain("semantic memory input");
-      expect(saved?.sidecar.facets).toEqual({
-        category: "decision-rationale",
-        applies_to: ["src/mcp/tools/remember-memory.ts"]
-      });
+      expect(saved?.sidecar.anchors).toEqual(["src/mcp/tools/save-memory.ts"]);
       expect(saved?.sidecar.evidence).toEqual([
-        { kind: "file", id: "src/mcp/tools/remember-memory.ts" }
+        { kind: "file", id: "src/mcp/tools/save-memory.ts" }
       ]);
     } finally {
       await started.close();
@@ -213,52 +212,63 @@ describe("memory MCP remember_memory tool", () => {
     expect(started.stderr()).toBe("");
   });
 
-  it("saves source origin through MCP remember", async () => {
-    const projectRoot = await createInitializedProject("memory-mcp-remember-origin-");
+  it("saves feature stage and lifecycle actions through MCP", async () => {
+    const projectRoot = await createInitializedProject("memory-mcp-save-lifecycle-");
     const started = await startMcpClient(projectRoot);
 
     try {
-      const remembered = await started.client.callTool({
-        name: "remember_memory",
+      const seeded = await started.client.callTool({
+        name: "save_memory",
         arguments: {
-          task: "Remember source origin",
-          memories: [
+          task: "Seed lifecycle nodes",
+          nodes: [
             {
-              kind: "source",
-              id: "source.mcp-remember-origin",
-              title: "MCP remember origin source",
-              body: "MCP remember_memory can set raw-source origin metadata on source records.",
-              origin: {
-                kind: "url",
-                locator: "https://example.com/mcp-remember-origin",
-                captured_at: "2026-05-14T12:00:00+02:00",
-                media_type: "text/markdown"
-              }
+              id: "feature.mcp-save",
+              kind: "feature",
+              title: "MCP save",
+              body: "Save memory through MCP.",
+              stage: "building"
+            },
+            {
+              id: "gotcha.stale-me",
+              kind: "gotcha",
+              title: "Stale me",
+              body: "Old knowledge."
             }
           ]
         }
       });
-      const rememberedEnvelope = parseToolEnvelope<SaveEnvelope>(remembered);
+      const seededEnvelope = parseToolEnvelope<SaveEnvelope>(seeded);
+      expect(seededEnvelope.ok).toBe(true);
 
-      expect(rememberedEnvelope.ok).toBe(true);
-
-      const storage = await readCanonicalStorage(projectRoot);
-
-      expect(storage.ok).toBe(true);
-      if (!storage.ok) {
-        return;
-      }
-
-      const rememberedSource = storage.data.objects.find(
-        (object) => object.sidecar.id === "source.mcp-remember-origin"
+      const transitioned = await started.client.callTool({
+        name: "save_memory",
+        arguments: {
+          task: "Ship the feature and stale the gotcha",
+          nodes: [
+            {
+              id: "feature.mcp-save",
+              stage: "shipped"
+            }
+          ],
+          stale: [{ id: "gotcha.stale-me", reason: "Behavior changed." }]
+        }
+      });
+      const transitionedEnvelope = parseToolEnvelope<SaveEnvelope>(transitioned);
+      expect(transitionedEnvelope.ok).toBe(true);
+      expect(transitionedEnvelope.data.memory_updated).toEqual(
+        expect.arrayContaining(["feature.mcp-save", "gotcha.stale-me"])
       );
 
-      expect(rememberedSource?.sidecar.origin).toMatchObject({
-        kind: "url",
-        locator: "https://example.com/mcp-remember-origin",
-        captured_at: "2026-05-14T12:00:00+02:00",
-        media_type: "text/markdown"
-      });
+      const storage = await readCanonicalStorage(projectRoot);
+      expect(storage.ok).toBe(true);
+      if (storage.ok) {
+        const byId = new Map(
+          storage.data.objects.map((object) => [object.sidecar.id, object.sidecar])
+        );
+        expect(byId.get("feature.mcp-save")?.stage).toBe("shipped");
+        expect(byId.get("gotcha.stale-me")?.status).toBe("stale");
+      }
     } finally {
       await started.close();
     }
@@ -267,22 +277,22 @@ describe("memory MCP remember_memory tool", () => {
   });
 
   it("serializes concurrent MCP writes or returns lock errors", async () => {
-    const projectRoot = await createInitializedProject("memory-mcp-remember-concurrent-");
+    const projectRoot = await createInitializedProject("memory-mcp-save-concurrent-");
     const started = await startMcpClient(projectRoot);
 
     try {
       const results = await Promise.all([
         started.client.callTool({
-          name: "remember_memory",
-          arguments: createRememberFactArguments(
-            "Concurrent fact one",
+          name: "save_memory",
+          arguments: createSaveGotchaArguments(
+            "Concurrent gotcha one",
             "First concurrent MCP write."
           )
         }),
         started.client.callTool({
-          name: "remember_memory",
-          arguments: createRememberFactArguments(
-            "Concurrent fact two",
+          name: "save_memory",
+          arguments: createSaveGotchaArguments(
+            "Concurrent gotcha two",
             "Second concurrent MCP write."
           )
         })
@@ -303,7 +313,7 @@ describe("memory MCP remember_memory tool", () => {
 
       if (successes.length === 2) {
         expect(savedIds).toEqual(
-          expect.arrayContaining(["fact.concurrent-fact-one", "fact.concurrent-fact-two"])
+          expect.arrayContaining(["gotcha.concurrent-gotcha-one", "gotcha.concurrent-gotcha-two"])
         );
       } else {
         expect(savedIds).toEqual(
@@ -322,16 +332,16 @@ describe("memory MCP remember_memory tool", () => {
   });
 
   it("does not create a Git commit", async () => {
-    const repo = await createInitializedGitProject("memory-mcp-remember-git-");
+    const repo = await createInitializedGitProject("memory-mcp-save-git-");
     const commitBefore = (await git(repo, ["rev-parse", "HEAD"])).trim();
     const started = await startMcpClient(repo);
 
     try {
       const mcp = await started.client.callTool({
-        name: "remember_memory",
-        arguments: createRememberFactArguments(
-          "MCP git remember fact",
-          "MCP remember must not create a commit."
+        name: "save_memory",
+        arguments: createSaveGotchaArguments(
+          "MCP git save gotcha",
+          "MCP save must not create a commit."
         )
       });
       const envelope = parseToolEnvelope<SaveEnvelope>(mcp);
@@ -344,8 +354,8 @@ describe("memory MCP remember_memory tool", () => {
 
       const status = await git(repo, ["status", "--porcelain=v1", "-uall", "--", ".memory"]);
       expect(status).toContain(".memory/events.jsonl");
-      expect(status).toContain(".memory/memory/facts/mcp-git-remember-fact.md");
-      expect(status).toContain(".memory/memory/facts/mcp-git-remember-fact.json");
+      expect(status).toContain(".memory/memory/gotchas/mcp-git-save-gotcha.md");
+      expect(status).toContain(".memory/memory/gotchas/mcp-git-save-gotcha.json");
     } finally {
       await started.close();
     }
@@ -354,38 +364,51 @@ describe("memory MCP remember_memory tool", () => {
   });
 
   it("rejects invalid MCP input before service execution", async () => {
-    const projectRoot = await createProjectRoot("memory-mcp-remember-invalid-");
+    const projectRoot = await createProjectRoot("memory-mcp-save-invalid-");
     const started = await startMcpClient(projectRoot);
 
     try {
       const missingTask = await started.client.callTool({
-        name: "remember_memory",
+        name: "save_memory",
         arguments: {}
       });
       const unsupportedProjectRoot = await started.client.callTool({
-        name: "remember_memory",
+        name: "save_memory",
         arguments: {
-          ...createRememberFactArguments("Ignored", "Should not run."),
+          ...createSaveGotchaArguments("Ignored", "Should not run."),
           projectRoot
         }
       });
       const unknownTopLevel = await started.client.callTool({
-        name: "remember_memory",
+        name: "save_memory",
         arguments: {
-          ...createRememberFactArguments("Ignored top level", "Should not run."),
+          ...createSaveGotchaArguments("Ignored top level", "Should not run."),
           unexpected: true
         }
       });
-      const unknownMemoryField = await started.client.callTool({
-        name: "remember_memory",
+      const unknownNodeField = await started.client.callTool({
+        name: "save_memory",
         arguments: {
-          task: "Ignored memory field",
-          memories: [
+          task: "Ignored node field",
+          nodes: [
             {
-              kind: "fact",
-              title: "Ignored memory field",
+              kind: "gotcha",
+              title: "Ignored node field",
               body: "Should not run.",
               unexpected: true
+            }
+          ]
+        }
+      });
+      const unsupportedKind = await started.client.callTool({
+        name: "save_memory",
+        arguments: {
+          task: "Reject removed kinds",
+          nodes: [
+            {
+              kind: "fact",
+              title: "Removed kind",
+              body: "Should not run."
             }
           ]
         }
@@ -394,7 +417,8 @@ describe("memory MCP remember_memory tool", () => {
       expectToolError(missingTask, /task/);
       expectToolError(unsupportedProjectRoot, /projectRoot|unexpected|unrecognized|unknown/i);
       expectToolError(unknownTopLevel, /unexpected|unrecognized|unknown/i);
-      expectToolError(unknownMemoryField, /unexpected|unrecognized|unknown/i);
+      expectToolError(unknownNodeField, /unexpected|unrecognized|unknown/i);
+      expectToolError(unsupportedKind, /kind|invalid|enum/i);
     } finally {
       await started.close();
     }
@@ -422,7 +446,7 @@ async function startMcpClient(cwd: string): Promise<StartedMcpClient> {
   }
 
   const client = new Client({
-    name: "memory-mcp-remember-tool-test-client",
+    name: "memory-mcp-save-tool-test-client",
     version: "0.0.0"
   });
 
@@ -523,12 +547,12 @@ function createCapturedOutput(): {
   };
 }
 
-function createRememberFactArguments(title: string, body: string) {
+function createSaveGotchaArguments(title: string, body: string) {
   return {
-    task: "Remember MCP integration test",
-    memories: [
+    task: "Save MCP integration test",
+    nodes: [
       {
-        kind: "fact",
+        kind: "gotcha",
         title,
         body
       }

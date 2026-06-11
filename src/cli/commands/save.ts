@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import type { Readable } from "node:stream";
 
 import { CommanderError, type Command } from "commander";
@@ -7,7 +5,7 @@ import { CommanderError, type Command } from "commander";
 import {
   type AppResult,
   dataAccessService,
-  type DataAccessApplyPatchInput,
+  type DataAccessSaveInput,
   type SaveMemoryData
 } from "../../data-access/index.js";
 import { memoryError, type MemoryError } from "../../core/errors.js";
@@ -15,7 +13,6 @@ import type { MemoryMeta } from "../../core/types.js";
 import { err, ok, type Result } from "../../core/result.js";
 import {
   CLI_EXIT_SUCCESS,
-  CLI_EXIT_USAGE,
   type CliExitCode
 } from "../exit.js";
 import { renderAppResult } from "../render.js";
@@ -30,19 +27,9 @@ export interface RegisterSaveCommandOptions {
 }
 
 interface SaveCommandFlags {
-  file?: string;
   stdin?: boolean;
+  dryRun?: boolean;
 }
-
-type SaveInputSource =
-  | {
-      kind: "stdin";
-    }
-  | {
-      kind: "file";
-      inputPath: string;
-      resolvedPath: string;
-    };
 
 export function registerSaveCommand(
   program: Command,
@@ -50,96 +37,57 @@ export function registerSaveCommand(
 ): void {
   program
     .command("save")
-    .description("Write Memory updates from a structured patch.")
-    .option("--file <path>", "Read the structured memory patch from a JSON file.")
-    .option("--stdin", "Read the structured memory patch from stdin.")
+    .description(
+      "Save product memory from intent-first input: create or update feature/decision/gotcha/question nodes, mark stale, supersede, or delete."
+    )
+    .option("--stdin", "Read the save input from stdin.")
+    .option("--dry-run", "Validate and plan the generated patch without writing memory.")
     .action(async (commandOptions: SaveCommandFlags, command: Command) => {
-      const source = inputSource(commandOptions, options.cwd, command);
-      const input = await readPatchInput(source, options.stdin);
+      if (commandOptions.stdin !== true) {
+        command.error("error: --stdin is required", {
+          code: "commander.invalidArgument",
+          exitCode: 2
+        });
+      }
+
+      const input = await readSaveInput(options.stdin);
 
       if (!input.ok) {
         renderAndThrowOnFailure(inputErrorResult(input.error, options.cwd), options, command);
         return;
       }
 
-      const patch = parsePatchJson(input.data, source);
+      const parsed = parseSaveJson(input.data);
 
-      if (!patch.ok) {
-        renderAndThrowOnFailure(inputErrorResult(patch.error, options.cwd), options, command);
+      if (!parsed.ok) {
+        renderAndThrowOnFailure(inputErrorResult(parsed.error, options.cwd), options, command);
         return;
       }
 
-      const result = await dataAccessService.applyPatch(
-        saveMemoryPatchOptions(options, patch.data)
+      const result = await dataAccessService.save(
+        saveMemoryOptions(options, parsed.data, commandOptions)
       );
 
       renderAndThrowOnFailure(result, options, command);
     });
 }
 
-function saveMemoryPatchOptions(
+function saveMemoryOptions(
   options: RegisterSaveCommandOptions,
-  patch: unknown
-): DataAccessApplyPatchInput {
+  input: unknown,
+  flags: SaveCommandFlags
+): DataAccessSaveInput {
   return {
     target: {
       kind: "cwd",
       cwd: options.cwd
     },
-    patch
+    input,
+    dryRun: flags.dryRun === true
   };
 }
 
-function inputSource(
-  options: SaveCommandFlags,
-  cwd: string,
-  command: Command
-): SaveInputSource {
-  const file = options.file;
-  const hasFile = typeof file === "string";
-  const hasStdin = options.stdin === true;
-
-  if (hasStdin && !hasFile) {
-    return {
-      kind: "stdin"
-    };
-  }
-
-  if (hasFile && !hasStdin) {
-    return {
-      kind: "file",
-      inputPath: file,
-      resolvedPath: resolve(cwd, file)
-    };
-  }
-
-  command.error("error: exactly one of --file or --stdin is required", {
-    code: "commander.invalidArgument",
-    exitCode: CLI_EXIT_USAGE
-  });
-}
-
-async function readPatchInput(
-  source: SaveInputSource,
-  stdin: Readable
-): Promise<Result<string>> {
-  if (source.kind === "stdin") {
-    return readPatchFromStdin(stdin);
-  }
-
-  try {
-    return ok(await readFile(source.resolvedPath, "utf8"));
-  } catch (error) {
-    return err(
-      memoryError("MemoryValidationFailed", "Structured memory patch file could not be read.", {
-        path: source.inputPath,
-        message: messageFromUnknown(error)
-      })
-    );
-  }
-}
-
-async function readPatchFromStdin(stdin: Readable): Promise<Result<string>> {
+async function readSaveInput(stdin: Readable): Promise<Result<string>> {
   let contents = "";
 
   try {
@@ -148,7 +96,7 @@ async function readPatchFromStdin(stdin: Readable): Promise<Result<string>> {
     }
   } catch (error) {
     return err(
-      memoryError("MemoryValidationFailed", "Structured memory patch could not be read from stdin.", {
+      memoryError("MemoryValidationFailed", "Save input could not be read from stdin.", {
         message: messageFromUnknown(error)
       })
     );
@@ -157,45 +105,17 @@ async function readPatchFromStdin(stdin: Readable): Promise<Result<string>> {
   return ok(contents);
 }
 
-function parsePatchJson(contents: string, source: SaveInputSource): Result<unknown> {
+function parseSaveJson(contents: string): Result<unknown> {
   try {
     return ok(JSON.parse(contents) as unknown);
   } catch (error) {
     return err(
-      memoryError(
-        "MemoryInvalidJson",
-        "Structured memory patch contains invalid JSON.",
-        jsonParseErrorDetails(source, error)
-      )
+      memoryError("MemoryInvalidJson", "Save input contains invalid JSON.", {
+        source: "stdin",
+        message: messageFromUnknown(error)
+      })
     );
   }
-}
-
-function jsonParseErrorDetails(source: SaveInputSource, error: unknown) {
-  if (source.kind === "file") {
-    return {
-      source: "file",
-      path: source.inputPath,
-      message: messageFromUnknown(error)
-    };
-  }
-
-  return {
-    source: "stdin",
-    message: messageFromUnknown(error)
-  };
-}
-
-function chunkToString(chunk: unknown): string {
-  if (typeof chunk === "string") {
-    return chunk;
-  }
-
-  if (Buffer.isBuffer(chunk)) {
-    return chunk.toString("utf8");
-  }
-
-  return String(chunk);
 }
 
 function renderAndThrowOnFailure(
@@ -216,10 +136,7 @@ function renderAndThrowOnFailure(
   }
 }
 
-function inputErrorResult(
-  error: MemoryError,
-  cwd: string
-): AppResult<SaveMemoryData> {
+function inputErrorResult(error: MemoryError, cwd: string): AppResult<SaveMemoryData> {
   return {
     ok: false,
     error,
@@ -229,11 +146,9 @@ function inputErrorResult(
 }
 
 function fallbackMeta(cwd: string): MemoryMeta {
-  const projectRoot = resolve(cwd);
-
   return {
-    project_root: projectRoot,
-    memory_root: resolve(projectRoot, ".memory"),
+    project_root: cwd,
+    memory_root: `${cwd}/.memory`,
     git: {
       available: false,
       branch: null,
@@ -243,28 +158,10 @@ function fallbackMeta(cwd: string): MemoryMeta {
   };
 }
 
-function throwCommandFailed(exitCode: CliExitCode): never {
-  throw new CommanderError(
-    exitCode,
-    "memory.command.failed",
-    "Memory command failed."
-  );
-}
-
-function isJsonMode(command: Command): boolean {
-  const options = command.optsWithGlobals() as { json?: unknown };
-  return options.json === true;
-}
-
 function renderSaveData(data: SaveMemoryData): string {
   return [
-    "Saved Memory patch.",
+    data.dry_run ? "Planned Memory save input." : "Saved Memory save input.",
     ...renderList("Files changed", data.files_changed),
-    ...renderList(
-      "Recovery backups",
-      data.recovery_files.map((file) => `${file.path} -> ${file.recovery_path}`)
-    ),
-    ...renderList("Repairs applied", data.repairs_applied),
     ...renderList("Memory created", data.memory_created),
     ...renderList("Memory updated", data.memory_updated),
     ...renderList("Memory deleted", data.memory_deleted),
@@ -282,6 +179,31 @@ function renderList(label: string, values: readonly string[]): string[] {
   }
 
   return [`${label}:`, ...values.map((value) => `- ${value}`)];
+}
+
+function isJsonMode(command: Command): boolean {
+  const options = command.optsWithGlobals() as { json?: unknown };
+  return options.json === true;
+}
+
+function throwCommandFailed(exitCode: CliExitCode): never {
+  throw new CommanderError(
+    exitCode,
+    "memory.command.failed",
+    "Memory command failed."
+  );
+}
+
+function chunkToString(chunk: unknown): string {
+  if (typeof chunk === "string") {
+    return chunk;
+  }
+
+  if (Buffer.isBuffer(chunk)) {
+    return chunk.toString("utf8");
+  }
+
+  return String(chunk);
 }
 
 function messageFromUnknown(error: unknown): string {

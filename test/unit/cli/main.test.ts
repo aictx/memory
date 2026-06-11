@@ -13,11 +13,11 @@ describe("CLI main", () => {
     expect(program.helpInformation()).toContain("--json");
   });
 
-  it("documents workflow and how-to memory in remember help", () => {
+  it("documents the intent-first node kinds in save help", () => {
     const program = createCliProgram();
-    const remember = program.commands.find((command) => command.name() === "remember");
+    const save = program.commands.find((command) => command.name() === "save");
 
-    expect(remember?.description()).toContain("workflows/how-tos");
+    expect(save?.description()).toContain("feature/decision/gotcha/question");
   });
 
   it("registers only the surviving commands", () => {
@@ -31,7 +31,6 @@ describe("CLI main", () => {
       "inspect",
       "projects",
       "rebuild",
-      "remember",
       "reset",
       "save",
       "search",

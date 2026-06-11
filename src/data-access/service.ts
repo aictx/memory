@@ -3,17 +3,14 @@ import { resolve } from "node:path";
 import {
   diffMemory,
   inspectMemory,
-  saveMemoryPatch,
-  rememberMemory,
+  saveMemory,
   searchMemory,
   type AppResult,
   type DiffMemoryData,
   type InspectMemoryData,
   type InspectMemoryOptions,
   type SaveMemoryData,
-  type SaveMemoryPatchOptions,
-  type RememberMemoryData,
-  type RememberMemoryOptions,
+  type SaveMemoryOptions,
   type SearchMemoryOptions
 } from "../app/operations.js";
 import type { Clock } from "../core/clock.js";
@@ -50,11 +47,7 @@ export interface DataAccessInspectInput extends DataAccessBaseInput {
 
 export type DataAccessDiffInput = DataAccessBaseInput;
 
-export interface DataAccessApplyPatchInput extends DataAccessBaseInput {
-  patch?: unknown;
-}
-
-export interface DataAccessRememberInput extends DataAccessBaseInput {
+export interface DataAccessSaveInput extends DataAccessBaseInput {
   input?: unknown;
   dryRun?: boolean;
 }
@@ -63,8 +56,7 @@ export interface DataAccessService {
   search(input: DataAccessSearchInput): Promise<AppResult<SearchMemoryData>>;
   inspect(input: DataAccessInspectInput): Promise<AppResult<InspectMemoryData>>;
   diff(input: DataAccessDiffInput): Promise<AppResult<DiffMemoryData>>;
-  applyPatch(input: DataAccessApplyPatchInput): Promise<AppResult<SaveMemoryData>>;
-  remember(input: DataAccessRememberInput): Promise<AppResult<RememberMemoryData>>;
+  save(input: DataAccessSaveInput): Promise<AppResult<SaveMemoryData>>;
 }
 
 export function createDataAccessService(): DataAccessService {
@@ -84,16 +76,10 @@ export function createDataAccessService(): DataAccessService {
           ...gitWrapperOptions(input)
         })
       ),
-    applyPatch: async (input) =>
+    save: async (input) =>
       withResolvedProject(
         input,
-        async (paths) => saveMemoryPatch(toSaveMemoryPatchOptions(input, paths)),
-        "init"
-      ),
-    remember: async (input) =>
-      withResolvedProject(
-        input,
-        async (paths) => rememberMemory(toRememberMemoryOptions(input, paths)),
+        async (paths) => saveMemory(toSaveMemoryOptions(input, paths)),
         "init"
       )
   };
@@ -140,8 +126,7 @@ function toSearchMemoryOptions(
     query: input.query,
     ...gitWrapperOptions(input),
     ...clockOption(input),
-    ...(input.limit === undefined ? {} : { limit: input.limit }),
-    ...(input.hints === undefined ? {} : { hints: input.hints })
+    ...(input.limit === undefined ? {} : { limit: input.limit })
   };
 }
 
@@ -156,22 +141,10 @@ function toInspectMemoryOptions(
   };
 }
 
-function toSaveMemoryPatchOptions(
-  input: DataAccessApplyPatchInput,
+function toSaveMemoryOptions(
+  input: DataAccessSaveInput,
   paths: ProjectPaths
-): SaveMemoryPatchOptions {
-  return {
-    cwd: paths.projectRoot,
-    ...gitWrapperOptions(input),
-    ...clockOption(input),
-    ...(input.patch === undefined ? {} : { patch: input.patch })
-  };
-}
-
-function toRememberMemoryOptions(
-  input: DataAccessRememberInput,
-  paths: ProjectPaths
-): RememberMemoryOptions {
+): SaveMemoryOptions {
   return {
     cwd: paths.projectRoot,
     ...gitWrapperOptions(input),

@@ -1,0 +1,23 @@
+{
+  "id": "feature.golden-coverage",
+  "type": "feature",
+  "status": "active",
+  "title": "Golden fixture coverage",
+  "body_path": "memory/features/golden-coverage.md",
+  "stage": "shipped",
+  "anchors": [
+    "test/fixtures/golden-storage/"
+  ],
+  "tags": [
+    "fixture",
+    "coverage"
+  ],
+  "source": {
+    "kind": "agent",
+    "task": "T044"
+  },
+  "superseded_by": null,
+  "created_at": "2026-04-25T14:00:00+02:00",
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:f7ce54e623cf8a6c144ed8fe3f84e8d6aa2a0db9aef470e63e1bbb66bfec70df"
+}

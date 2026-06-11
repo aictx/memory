@@ -17,12 +17,7 @@ export interface RegisterSearchCommandOptions {
 }
 
 interface SearchCommandFlags {
-  changedFile?: string[];
-  file?: string[];
-  historyWindow?: string;
   limit?: string;
-  subsystem?: string[];
-  symbol?: string[];
 }
 
 export function registerSearchCommand(
@@ -34,11 +29,6 @@ export function registerSearchCommand(
     .description("Search local Memory using the generated SQLite index.")
     .argument("<query>", "Search query.")
     .option("--limit <number>", "Maximum number of matches to return.")
-    .option("--file <path>", "File path retrieval hint.", collectRepeated, [])
-    .option("--changed-file <path>", "Changed file retrieval hint.", collectRepeated, [])
-    .option("--symbol <name>", "Symbol retrieval hint.", collectRepeated, [])
-    .option("--subsystem <name>", "Subsystem retrieval hint.", collectRepeated, [])
-    .option("--history-window <duration>", "Git history window hint such as 30d, 12w, 6m, or 1y.")
     .action(async (query: string, commandOptions: SearchCommandFlags, command: Command) => {
       const result = await dataAccessService.search(
         searchMemoryOptions(options, query, commandOptions)
@@ -72,31 +62,8 @@ function searchMemoryOptions(
       cwd: options.cwd
     },
     query,
-    ...(flags.limit === undefined ? {} : { limit: Number(flags.limit) }),
-    ...hintsFromFlags(flags)
+    ...(flags.limit === undefined ? {} : { limit: Number(flags.limit) })
   };
-}
-
-function hintsFromFlags(flags: SearchCommandFlags): Pick<DataAccessSearchInput, "hints"> {
-  const hints = {
-    files: flags.file ?? [],
-    changed_files: flags.changedFile ?? [],
-    symbols: flags.symbol ?? [],
-    subsystems: flags.subsystem ?? [],
-    ...(flags.historyWindow === undefined ? {} : { history_window: flags.historyWindow })
-  };
-
-  return hints.files.length === 0 &&
-    hints.changed_files.length === 0 &&
-    hints.symbols.length === 0 &&
-    hints.subsystems.length === 0 &&
-    hints.history_window === undefined
-    ? {}
-    : { hints };
-}
-
-function collectRepeated(value: string, previous: string[]): string[] {
-  return [...previous, value];
 }
 
 function isJsonMode(command: Command): boolean {

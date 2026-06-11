@@ -8,7 +8,7 @@ import { searchIndex } from "../../../src/index/search.js";
 import { openIndexDatabase, type IndexDatabaseConnection } from "../../../src/index/sqlite.js";
 import type {
   Evidence,
-  ObjectFacets,
+  FeatureStage,
   ObjectStatus,
   ObjectType,
   SourceOrigin
@@ -62,7 +62,7 @@ describe("search index", () => {
     try {
       for (let index = 0; index < 12; index += 1) {
         insertObject(connection, {
-          id: `note.shared-${String(index).padStart(2, "0")}`,
+          id: `gotcha.shared-${String(index).padStart(2, "0")}`,
           title: `Shared search ${index}`,
           body: "Shared search body.",
           updatedAt: `2026-04-27T12:${String(index).padStart(2, "0")}:00+02:00`
@@ -88,21 +88,21 @@ describe("search index", () => {
 
     try {
       insertObject(connection, {
-        id: "constraint.webhook-idempotency",
-        type: "constraint",
+        id: "decision.webhook-idempotency",
+        type: "decision",
         title: "Webhook idempotency",
-        bodyPath: ".memory/memory/constraints/webhook-idempotency.md",
+        bodyPath: ".memory/memory/decisions/webhook-idempotency.md",
         body: "Stripe may deliver duplicate webhook events.",
         tags: ["stripe", "webhooks"]
       });
 
       const byId = await searchIndex({
         memoryRoot: connection.memoryRoot,
-        query: " constraint.webhook-idempotency "
+        query: " decision.webhook-idempotency "
       });
       const byPath = await searchIndex({
         memoryRoot: connection.memoryRoot,
-        query: ".memory/memory/constraints/webhook-idempotency.md"
+        query: ".memory/memory/decisions/webhook-idempotency.md"
       });
 
       expect(byId.ok).toBe(true);
@@ -110,12 +110,12 @@ describe("search index", () => {
 
       if (byId.ok && byPath.ok) {
         expect(byId.data.matches[0]).toMatchObject({
-          id: "constraint.webhook-idempotency",
+          id: "decision.webhook-idempotency",
           status: "active"
         });
         expect(byPath.data.matches[0]).toMatchObject({
-          id: "constraint.webhook-idempotency",
-          body_path: ".memory/memory/constraints/webhook-idempotency.md"
+          id: "decision.webhook-idempotency",
+          body_path: ".memory/memory/decisions/webhook-idempotency.md"
         });
       }
     } finally {
@@ -128,8 +128,8 @@ describe("search index", () => {
 
     try {
       insertObject(connection, {
-        id: "constraint.active-webhook",
-        type: "constraint",
+        id: "decision.active-webhook",
+        type: "decision",
         status: "active",
         title: "Active webhook",
         body: "Webhook delivery must be idempotent.",
@@ -144,25 +144,26 @@ describe("search index", () => {
         tags: ["stripe"]
       });
       insertObject(connection, {
-        id: "note.superseded-webhook",
+        id: "gotcha.superseded-webhook",
         status: "superseded",
         title: "Superseded webhook",
         body: "Webhook behavior was replaced.",
         tags: ["stripe"]
       });
       insertObject(connection, {
-        id: "note.closed-webhook",
+        id: "question.closed-webhook",
+        type: "question",
         status: "closed",
         title: "Closed webhook",
         body: "Webhook question was closed.",
         tags: ["stripe"]
       });
       insertObject(connection, {
-        id: "synthesis.webhook-context",
-        type: "synthesis",
+        id: "feature.webhook-context",
+        type: "feature",
         status: "active",
         title: "Webhook context",
-        body: "Webhook text is captured in maintained synthesis.",
+        body: "Webhook text is captured in the webhook feature node.",
         tags: ["stripe"]
       });
 
@@ -176,7 +177,7 @@ describe("search index", () => {
         const ids = result.data.matches.map((match) => match.id);
         const statuses = result.data.matches.map((match) => match.status);
 
-        expect(ids).toContain("synthesis.webhook-context");
+        expect(ids).toContain("feature.webhook-context");
         expect(statuses).toEqual(expect.arrayContaining(["active", "stale", "superseded", "closed"]));
       }
     } finally {
@@ -189,14 +190,14 @@ describe("search index", () => {
 
     try {
       insertObject(connection, {
-        id: "note.legacy-draft",
+        id: "gotcha.legacy-draft",
         status: "draft",
         title: "Legacy draft webhook",
         body: "Webhook notes from legacy draft storage.",
         tags: ["webhook"]
       });
       insertObject(connection, {
-        id: "note.legacy-rejected",
+        id: "gotcha.legacy-rejected",
         status: "rejected",
         title: "Legacy rejected webhook",
         body: "Webhook notes from legacy rejected storage.",
@@ -213,13 +214,13 @@ describe("search index", () => {
         expect(result.data.matches).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
-              id: "note.legacy-draft",
+              id: "gotcha.legacy-draft",
               status: "active"
             })
           ])
         );
         expect(result.data.matches.map((match) => match.id)).not.toContain(
-          "note.legacy-rejected"
+          "gotcha.legacy-rejected"
         );
       }
     } finally {
@@ -227,7 +228,7 @@ describe("search index", () => {
     }
   });
 
-  it("returns gotcha and workflow search matches", async () => {
+  it("returns gotcha and staged feature search matches", async () => {
     const connection = await openMigratedConnection();
 
     try {
@@ -240,10 +241,11 @@ describe("search index", () => {
         tags: ["webhook"]
       });
       insertObject(connection, {
-        id: "workflow.release-checklist",
-        type: "workflow",
+        id: "feature.release-checklist",
+        type: "feature",
+        stage: "building",
         title: "Release checklist",
-        bodyPath: ".memory/memory/workflows/release-checklist.md",
+        bodyPath: ".memory/memory/features/release-checklist.md",
         body: "Run the release checklist before publishing.",
         tags: ["release"]
       });
@@ -264,9 +266,9 @@ describe("search index", () => {
               body_path: ".memory/memory/gotchas/webhook-duplicates.md"
             }),
             expect.objectContaining({
-              id: "workflow.release-checklist",
-              type: "workflow",
-              body_path: ".memory/memory/workflows/release-checklist.md"
+              id: "feature.release-checklist",
+              type: "feature",
+              body_path: ".memory/memory/features/release-checklist.md"
             })
           ])
         );
@@ -276,7 +278,7 @@ describe("search index", () => {
     }
   });
 
-  it("matches facet and object evidence search material", async () => {
+  it("matches anchor and object evidence search material", async () => {
     const connection = await openMigratedConnection();
 
     try {
@@ -285,28 +287,24 @@ describe("search index", () => {
         type: "decision",
         title: "SQLite schema",
         body: "The index keeps deterministic search material.",
-        facets: {
-          category: "decision-rationale",
-          applies_to: ["src/index/migrations.ts"],
-          load_modes: ["architecture"]
-        },
-        evidence: [{ kind: "file", id: "src/index/migrations.ts" }]
+        anchors: ["src/index/migrations.ts", "src/index/"],
+        evidence: [{ kind: "commit", id: "abc1234" }]
       });
 
-      const byFacet = await searchIndex({
-        memoryRoot: connection.memoryRoot,
-        query: "decision-rationale"
-      });
-      const byEvidence = await searchIndex({
+      const byAnchor = await searchIndex({
         memoryRoot: connection.memoryRoot,
         query: "migrations"
       });
+      const byEvidence = await searchIndex({
+        memoryRoot: connection.memoryRoot,
+        query: "abc1234"
+      });
 
-      expect(byFacet.ok).toBe(true);
+      expect(byAnchor.ok).toBe(true);
       expect(byEvidence.ok).toBe(true);
 
-      if (byFacet.ok && byEvidence.ok) {
-        expect(byFacet.data.matches[0]?.id).toBe("decision.sqlite-schema");
+      if (byAnchor.ok && byEvidence.ok) {
+        expect(byAnchor.data.matches[0]?.id).toBe("decision.sqlite-schema");
         expect(byEvidence.data.matches[0]?.id).toBe("decision.sqlite-schema");
       }
     } finally {
@@ -319,10 +317,10 @@ describe("search index", () => {
 
     try {
       insertObject(connection, {
-        id: "source.llm-wiki",
-        type: "source",
-        title: "LLM Wiki source",
-        body: "Source record for a wiki workflow article.",
+        id: "decision.llm-wiki",
+        type: "decision",
+        title: "LLM Wiki decision",
+        body: "Decision derived from a wiki workflow article.",
         origin: {
           kind: "url",
           locator: "https://example.com/llm-wiki",
@@ -338,66 +336,7 @@ describe("search index", () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.data.matches[0]?.id).toBe("source.llm-wiki");
-      }
-    } finally {
-      connection.close();
-    }
-  });
-
-  it("seeds candidates from file and subsystem hints when query text does not match", async () => {
-    const connection = await openMigratedConnection();
-
-    try {
-      insertObject(connection, {
-        id: "decision.hinted-ranking",
-        type: "decision",
-        title: "Hinted ranking",
-        body: "This memory should be found from deterministic hint links."
-      });
-      insertFileLink(connection, "decision.hinted-ranking", "src/context/rank.ts");
-      insertFacetLink(connection, "decision.hinted-ranking", "retrieval");
-
-      const result = await searchIndex({
-        memoryRoot: connection.memoryRoot,
-        query: "opaque",
-        hints: {
-          changed_files: ["src/context/rank.ts"],
-          subsystems: ["retrieval"]
-        }
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.data.matches[0]).toMatchObject({
-          id: "decision.hinted-ranking",
-          status: "active"
-        });
-      }
-    } finally {
-      connection.close();
-    }
-  });
-
-  it("rejects invalid retrieval hint shapes", async () => {
-    const connection = await openMigratedConnection();
-
-    try {
-      const result = await searchIndex({
-        memoryRoot: connection.memoryRoot,
-        query: "ranking",
-        hints: {
-          history_window: "thirty-days"
-        }
-      });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe("MemoryValidationFailed");
-        expect(result.error.details).toMatchObject({
-          field: "hints.history_window",
-          actual: "thirty-days"
-        });
+        expect(result.data.matches[0]?.id).toBe("decision.llm-wiki");
       }
     } finally {
       connection.close();
@@ -409,19 +348,19 @@ describe("search index", () => {
 
     try {
       insertObject(connection, {
-        id: "note.beta",
+        id: "gotcha.beta",
         title: "Ranking tie",
         body: "Ranking tie body.",
         updatedAt: "2026-04-27T12:00:00+02:00"
       });
       insertObject(connection, {
-        id: "note.alpha",
+        id: "gotcha.alpha",
         title: "Ranking tie",
         body: "Ranking tie body.",
         updatedAt: "2026-04-27T12:00:00+02:00"
       });
       insertObject(connection, {
-        id: "note.newer",
+        id: "gotcha.newer",
         title: "Ranking tie",
         body: "Ranking tie body.",
         updatedAt: "2026-04-27T12:01:00+02:00"
@@ -441,9 +380,9 @@ describe("search index", () => {
 
       if (first.ok && second.ok) {
         expect(first.data.matches.map((match) => match.id)).toEqual([
-          "note.newer",
-          "note.alpha",
-          "note.beta"
+          "gotcha.newer",
+          "gotcha.alpha",
+          "gotcha.beta"
         ]);
         expect(second.data.matches.map((match) => match.id)).toEqual(
           first.data.matches.map((match) => match.id)
@@ -459,12 +398,12 @@ describe("search index", () => {
 
     try {
       insertObject(connection, {
-        id: "note.needle",
+        id: "gotcha.needle",
         title: "Needle",
         body: `${"prefix ".repeat(20)}needle appears in the middle of this memory body.${" suffix".repeat(20)}`
       });
       insertObject(connection, {
-        id: "note.fallback-snippet",
+        id: "gotcha.fallback-snippet",
         title: "Fallback snippet title",
         body: "First sentence of the body is used when no query term appears in the body."
       });
@@ -475,7 +414,7 @@ describe("search index", () => {
       });
       const fallback = await searchIndex({
         memoryRoot: connection.memoryRoot,
-        query: "note.fallback-snippet"
+        query: "gotcha.fallback-snippet"
       });
 
       expect(matched.ok).toBe(true);
@@ -505,8 +444,9 @@ interface ObjectFixture {
   title: string;
   bodyPath?: string;
   body: string;
+  stage?: FeatureStage;
+  anchors?: string[];
   tags?: string[];
-  facets?: ObjectFacets;
   evidence?: Evidence[];
   origin?: SourceOrigin;
   updatedAt?: string;
@@ -538,11 +478,11 @@ async function createMemoryRoot(): Promise<string> {
 }
 
 function insertObject(connection: TestConnection, fixture: ObjectFixture): void {
-  const type = fixture.type ?? "note";
+  const type = fixture.type ?? "gotcha";
   const status = fixture.status ?? "active";
-  const bodyPath = fixture.bodyPath ?? `.memory/memory/notes/${fixture.id.replace(".", "-")}.md`;
+  const bodyPath = fixture.bodyPath ?? `.memory/memory/gotchas/${fixture.id.replace(".", "-")}.md`;
+  const anchors = fixture.anchors ?? null;
   const tags = fixture.tags ?? [];
-  const facets = fixture.facets ?? null;
   const evidence = fixture.evidence ?? [];
   const origin = fixture.origin ?? null;
   const updatedAt = fixture.updatedAt ?? "2026-04-27T12:00:00+02:00";
@@ -559,18 +499,12 @@ function insertObject(connection: TestConnection, fixture: ObjectFixture): void 
           json_path,
           body,
           content_hash,
-          scope_json,
-          scope_kind,
-          scope_project,
-          scope_branch,
-          scope_task,
+          stage,
+          anchors_json,
           tags_json,
-          facets_json,
-          facet_category,
-          applies_to_json,
           evidence_json,
-          origin_json,
           source_json,
+          origin_json,
           superseded_by,
           created_at,
           updated_at
@@ -583,18 +517,12 @@ function insertObject(connection: TestConnection, fixture: ObjectFixture): void 
           @json_path,
           @body,
           @content_hash,
-          @scope_json,
-          @scope_kind,
-          @scope_project,
-          @scope_branch,
-          @scope_task,
+          @stage,
+          @anchors_json,
           @tags_json,
-          @facets_json,
-          @facet_category,
-          @applies_to_json,
           @evidence_json,
-          @origin_json,
           @source_json,
+          @origin_json,
           @superseded_by,
           @created_at,
           @updated_at
@@ -610,23 +538,12 @@ function insertObject(connection: TestConnection, fixture: ObjectFixture): void 
       json_path: bodyPath.replace(/\.md$/, ".json"),
       body: fixture.body,
       content_hash: `sha256:${fixture.id}`,
-      scope_json: JSON.stringify({
-        kind: "project",
-        project: "project.search-test",
-        branch: null,
-        task: null
-      }),
-      scope_kind: "project",
-      scope_project: "project.search-test",
-      scope_branch: null,
-      scope_task: null,
+      stage: fixture.stage ?? null,
+      anchors_json: jsonOrNull(anchors),
       tags_json: JSON.stringify(tags),
-      facets_json: jsonOrNull(facets),
-      facet_category: facets?.category ?? null,
-      applies_to_json: jsonOrNull(facets?.applies_to),
       evidence_json: JSON.stringify(evidence),
-      origin_json: jsonOrNull(origin),
       source_json: null,
+      origin_json: jsonOrNull(origin),
       superseded_by: null,
       created_at: updatedAt,
       updated_at: updatedAt
@@ -635,8 +552,8 @@ function insertObject(connection: TestConnection, fixture: ObjectFixture): void 
   connection.db
     .prepare<Record<string, string>>(
       `
-        INSERT INTO objects_fts (object_id, title, body, tags, facets, evidence)
-        VALUES (@object_id, @title, @body, @tags, @facets, @evidence)
+        INSERT INTO objects_fts (object_id, title, body, tags, anchors, evidence)
+        VALUES (@object_id, @title, @body, @tags, @anchors, @evidence)
       `
     )
     .run({
@@ -644,51 +561,13 @@ function insertObject(connection: TestConnection, fixture: ObjectFixture): void 
       title: fixture.title,
       body: fixture.body,
       tags: tags.join(" "),
-      facets: facets === null ? "" : facetSearchText(facets),
+      anchors: (anchors ?? []).join(" "),
       evidence: [evidenceSearchText(evidence), originSearchText(origin)].join(" ")
-    });
-}
-
-function insertFileLink(connection: TestConnection, memoryId: string, filePath: string): void {
-  connection.db
-    .prepare<Record<string, string>>(
-      `
-        INSERT INTO memory_file_links (memory_id, file_path, link_kind)
-        VALUES (@memory_id, @file_path, @link_kind)
-      `
-    )
-    .run({
-      memory_id: memoryId,
-      file_path: filePath,
-      link_kind: "test"
-    });
-}
-
-function insertFacetLink(connection: TestConnection, memoryId: string, facet: string): void {
-  connection.db
-    .prepare<Record<string, string>>(
-      `
-        INSERT INTO memory_facet_links (memory_id, facet, link_kind)
-        VALUES (@memory_id, @facet, @link_kind)
-      `
-    )
-    .run({
-      memory_id: memoryId,
-      facet,
-      link_kind: "test"
     });
 }
 
 function jsonOrNull(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
-}
-
-function facetSearchText(facets: ObjectFacets): string {
-  return [
-    facets.category,
-    ...(facets.applies_to ?? []),
-    ...(facets.load_modes ?? [])
-  ].join(" ");
 }
 
 function evidenceSearchText(evidence: readonly Evidence[]): string {

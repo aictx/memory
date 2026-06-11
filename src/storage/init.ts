@@ -15,7 +15,7 @@ import {
   getTrackedMemoryDirtyFiles,
   type GitWrapperOptions
 } from "../core/git.js";
-import { generateRelationId, slugify } from "../core/ids.js";
+import { slugify } from "../core/ids.js";
 import { withProjectLock } from "../core/lock.js";
 import { resolveProjectPaths, type ProjectPaths } from "../core/paths.js";
 import { err, ok, type Result } from "../core/result.js";
@@ -26,14 +26,12 @@ import {
   type ValidateProjectOptions
 } from "../validation/validate.js";
 import { SCHEMA_FILES } from "../validation/schemas.js";
-import { computeObjectContentHash, computeRelationContentHash } from "./hashes.js";
-import type { MemoryConfig, MemoryObjectSidecar } from "./objects.js";
+import { computeObjectContentHash } from "./hashes.js";
+import { CURRENT_STORAGE_VERSION, type MemoryConfig, type MemoryObjectSidecar } from "./objects.js";
 import type { CanonicalStorageSnapshot } from "./read.js";
-import type { MemoryRelation } from "./relations.js";
 
 const GENERATED_GITIGNORE_ENTRIES = [
   ".memory/index/",
-  ".memory/context/",
   ".memory/exports/",
   ".memory/recovery/",
   ".memory/.backup/",
@@ -131,11 +129,6 @@ interface InitialMemoryObject {
   sidecar: MemoryObjectSidecar;
 }
 
-interface InitialMemoryRelation {
-  path: string;
-  relation: MemoryRelation;
-}
-
 export function buildInitialStoragePreview(options: {
   paths: ProjectPaths;
   clock?: Clock;
@@ -156,10 +149,7 @@ export function buildInitialStoragePreview(options: {
       sidecar: object.sidecar,
       body: object.body
     })),
-    relations: buildInitialRelations({ projectId, timestamp }).map((relation) => ({
-      path: `.memory/${relation.path}`,
-      relation: relation.relation
-    })),
+    relations: [],
     events: []
   };
 }
@@ -259,16 +249,6 @@ async function createInitialStorage(
     return objectResult;
   }
   filesCreated.push(...objectResult.data);
-
-  const relationResult = await writeInitialRelations(paths.projectRoot, {
-    projectId,
-    timestamp
-  });
-
-  if (!relationResult.ok) {
-    return relationResult;
-  }
-  filesCreated.push(...relationResult.data);
 
   const eventsResult = await writeTextAtomic(paths.projectRoot, ".memory/events.jsonl", "");
 
@@ -535,20 +515,13 @@ async function getValidationOptions(
 
 async function createStorageDirectories(projectRoot: string): Promise<Result<void>> {
   const directories = [
+    ".memory/memory/features",
     ".memory/memory/decisions",
-    ".memory/memory/constraints",
-    ".memory/memory/questions",
-    ".memory/memory/facts",
     ".memory/memory/gotchas",
-    ".memory/memory/workflows",
-    ".memory/memory/notes",
-    ".memory/memory/concepts",
-    ".memory/memory/sources",
-    ".memory/memory/syntheses",
+    ".memory/memory/questions",
     ".memory/relations",
     ".memory/schema",
-    ".memory/index",
-    ".memory/context"
+    ".memory/index"
   ];
 
   try {
@@ -579,18 +552,14 @@ async function writeConfig(
 
 function buildInitialConfig(projectId: string, projectName: string): MemoryConfig {
   return {
-    version: 4,
+    version: CURRENT_STORAGE_VERSION,
     project: {
       id: projectId,
       name: projectName
     },
     memory: {
-      defaultTokenBudget: 6000,
-      autoIndex: true,
-      saveContextPacks: false
-    },
-    git: {
-      trackContextPacks: false
+      defaultTokenBudget: 2000,
+      autoIndex: true
     }
   };
 }
@@ -673,33 +642,6 @@ async function writeInitialObjects(
   return ok(created);
 }
 
-async function writeInitialRelations(
-  projectRoot: string,
-  options: {
-    projectId: string;
-    timestamp: IsoDateTime;
-  }
-): Promise<Result<string[]>> {
-  const relations = buildInitialRelations(options);
-  const created: string[] = [];
-
-  for (const relation of relations) {
-    const written = await writeJsonAtomic(
-      projectRoot,
-      `.memory/${relation.path}`,
-      relationToJson(relation.relation)
-    );
-
-    if (!written.ok) {
-      return written;
-    }
-
-    created.push(`.memory/${relation.path}`);
-  }
-
-  return ok(created);
-}
-
 function buildInitialObjects(options: {
   projectId: string;
   projectName: string;
@@ -713,17 +655,6 @@ function buildInitialObjects(options: {
       bodyPath: "memory/project.md",
       sidecarPath: "memory/project.json",
       body: `# ${options.projectName}\n\nProject-level memory for ${options.projectName}.\n`,
-      projectId: options.projectId,
-      timestamp: options.timestamp
-    }),
-    buildInitialObject({
-      id: "architecture.current",
-      type: "architecture",
-      title: "Current Architecture",
-      bodyPath: "memory/architecture.md",
-      sidecarPath: "memory/architecture.json",
-      body: "# Current Architecture\n\nArchitecture memory starts here.\n",
-      projectId: options.projectId,
       timestamp: options.timestamp
     })
   ];
@@ -736,7 +667,6 @@ function buildInitialObject(options: {
   bodyPath: string;
   sidecarPath: string;
   body: string;
-  projectId: string;
   timestamp: IsoDateTime;
 }): InitialMemoryObject {
   const sidecarWithoutHash = {
@@ -745,16 +675,7 @@ function buildInitialObject(options: {
     status: "active",
     title: options.title,
     body_path: options.bodyPath,
-    scope: {
-      kind: "project",
-      project: options.projectId,
-      branch: null,
-      task: null
-    },
     tags: [],
-    facets: {
-      category: facetCategoryForInitialType(options.type)
-    },
     evidence: [],
     source: {
       kind: "system"
@@ -775,112 +696,6 @@ function buildInitialObject(options: {
     body: options.body,
     sidecar
   };
-}
-
-function buildInitialRelations(options: {
-  projectId: string;
-  timestamp: IsoDateTime;
-}): InitialMemoryRelation[] {
-  const id = generateInitialProjectArchitectureRelationId(options.projectId);
-  const relationWithoutHash: Omit<MemoryRelation, "content_hash"> = {
-    id,
-    from: options.projectId,
-    predicate: "related_to",
-    to: "architecture.current",
-    status: "active",
-    confidence: "high",
-    evidence: [
-      { kind: "memory", id: options.projectId },
-      { kind: "memory", id: "architecture.current" }
-    ],
-    created_at: options.timestamp,
-    updated_at: options.timestamp
-  };
-  const relation: MemoryRelation = {
-    ...relationWithoutHash,
-    content_hash: computeRelationContentHash(relationToJson(relationWithoutHash))
-  };
-
-  return [
-    {
-      path: relationPath(id),
-      relation
-    }
-  ];
-}
-
-function generateInitialProjectArchitectureRelationId(projectId: string): string {
-  return generateRelationId({
-    from: projectId,
-    predicate: "related_to",
-    to: "architecture.current"
-  });
-}
-
-function relationPath(id: string): string {
-  return `relations/${id.slice("rel.".length)}.json`;
-}
-
-function facetCategoryForInitialType(
-  type: MemoryObjectSidecar["type"]
-): NonNullable<MemoryObjectSidecar["facets"]>["category"] {
-  switch (type) {
-    case "project":
-      return "project-description";
-    case "architecture":
-      return "architecture";
-    case "source":
-      return "source";
-    case "synthesis":
-      return "concept";
-    case "decision":
-      return "decision-rationale";
-    case "constraint":
-      return "convention";
-    case "question":
-      return "open-question";
-    case "fact":
-      return "debugging-fact";
-    case "gotcha":
-      return "gotcha";
-    case "workflow":
-      return "workflow";
-    case "concept":
-      return "concept";
-    case "note":
-      return "concept";
-  }
-}
-
-function relationToJson(
-  relation: Omit<MemoryRelation, "content_hash"> | MemoryRelation
-): Record<string, JsonValue> {
-  const json: Record<string, JsonValue> = {
-    id: relation.id,
-    from: relation.from,
-    predicate: relation.predicate,
-    to: relation.to,
-    status: relation.status,
-    created_at: relation.created_at,
-    updated_at: relation.updated_at
-  };
-
-  if (relation.confidence !== undefined) {
-    json.confidence = relation.confidence;
-  }
-
-  if (relation.evidence !== undefined) {
-    json.evidence = relation.evidence.map((item) => ({
-      kind: item.kind,
-      id: item.id
-    }));
-  }
-
-  if ("content_hash" in relation) {
-    json.content_hash = relation.content_hash;
-  }
-
-  return json;
 }
 
 async function updateGitignore(
@@ -1140,8 +955,7 @@ function configToJson(config: MemoryConfig): JsonValue {
   return {
     version: config.version,
     project: config.project,
-    memory: config.memory,
-    git: config.git
+    memory: config.memory
   };
 }
 
@@ -1152,12 +966,6 @@ function objectSidecarToJson(sidecar: MemoryObjectSidecar): JsonValue {
     status: sidecar.status,
     title: sidecar.title,
     body_path: sidecar.body_path,
-    scope: {
-      kind: sidecar.scope.kind,
-      project: sidecar.scope.project,
-      branch: sidecar.scope.branch,
-      task: sidecar.scope.task
-    },
     tags: sidecar.tags ?? [],
     source: {
       kind: sidecar.source?.kind ?? "system"
@@ -1167,16 +975,12 @@ function objectSidecarToJson(sidecar: MemoryObjectSidecar): JsonValue {
     updated_at: sidecar.updated_at
   };
 
-  if (sidecar.facets !== undefined) {
-    json.facets = {
-      category: sidecar.facets.category,
-      ...(sidecar.facets.applies_to === undefined
-        ? {}
-        : { applies_to: [...sidecar.facets.applies_to] }),
-      ...(sidecar.facets.load_modes === undefined
-        ? {}
-        : { load_modes: [...sidecar.facets.load_modes] })
-    };
+  if (sidecar.stage !== undefined) {
+    json.stage = sidecar.stage;
+  }
+
+  if (sidecar.anchors !== undefined) {
+    json.anchors = [...sidecar.anchors];
   }
 
   if (sidecar.evidence !== undefined) {

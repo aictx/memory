@@ -4,12 +4,6 @@
   "status": "active",
   "title": "Invalid Missing Body",
   "body_path": "memory/project.md",
-  "scope": {
-    "kind": "project",
-    "project": "project.invalid-missing-body",
-    "branch": null,
-    "task": null
-  },
   "tags": [
     "fixture"
   ],
@@ -17,7 +11,7 @@
     "kind": "system"
   },
   "superseded_by": null,
-  "content_hash": "sha256:7955373c1bedd51af9ee4fb32420cefd62b94430c6090230dfa390022e2eb2b4",
   "created_at": "2026-04-25T14:00:00+02:00",
-  "updated_at": "2026-04-25T14:00:00+02:00"
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:7359525a26550add3199a7a67b46a509d57bfec72d15381749ece2e41b8ec2e9"
 }

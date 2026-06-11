@@ -1,3 +1,3 @@
-# Invalid JSONL
+# Invalid Jsonl
 
-Invalid golden storage fixture.
+Project-level memory for Invalid Jsonl.

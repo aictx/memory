@@ -1,0 +1,11 @@
+{
+  "id": "rel.feature-related-to-decision",
+  "from": "feature.golden-coverage",
+  "predicate": "related_to",
+  "to": "decision.storage-fixtures",
+  "status": "active",
+  "confidence": "medium",
+  "created_at": "2026-04-25T14:00:00+02:00",
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:e4bcfff6f65ba5e11b9db836f03f06fdf32768b9eaf5ea834c981541add56bcd"
+}

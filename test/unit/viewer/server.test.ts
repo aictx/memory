@@ -425,8 +425,6 @@ describe("viewer local server", () => {
       expect(envelope.data.counts).toMatchObject({
         stale_objects: expect.any(Number),
         superseded_objects: expect.any(Number),
-        source_objects: expect.any(Number),
-        synthesis_objects: expect.any(Number),
         active_relations: expect.any(Number)
       });
       await expect(readCanonicalAndIndexFiles(projectRoot)).resolves.toEqual(before);

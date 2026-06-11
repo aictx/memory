@@ -34,18 +34,14 @@ const tempRoots: string[] = [];
 const hash = `sha256:${"0".repeat(64)}`;
 
 const validConfig = {
-  version: 4,
+  version: 5,
   project: {
     id: "project.billing-api",
     name: "Billing API"
   },
   memory: {
-    defaultTokenBudget: 6000,
-    autoIndex: true,
-    saveContextPacks: false
-  },
-  git: {
-    trackContextPacks: false
+    defaultTokenBudget: 2000,
+    autoIndex: true
   }
 };
 
@@ -55,18 +51,8 @@ const validObject = {
   status: "active",
   title: "Billing retries moved to queue worker",
   body_path: "memory/decisions/billing-retries.md",
-  scope: {
-    kind: "project",
-    project: "project.billing-api",
-    branch: null,
-    task: null
-  },
+  anchors: ["src/billing/webhook.ts"],
   tags: ["billing", "stripe", "webhooks"],
-  facets: {
-    category: "decision-rationale",
-    applies_to: ["src/billing/webhook.ts"],
-    load_modes: ["coding", "review"]
-  },
   evidence: [
     {
       kind: "file",
@@ -96,10 +82,10 @@ const validObject = {
 };
 
 const validRelation = {
-  id: "rel.billing-retries-requires-idempotency",
+  id: "rel.billing-retries-depends-on-idempotency",
   from: "decision.billing-retries",
-  predicate: "requires",
-  to: "constraint.webhook-idempotency",
+  predicate: "depends_on",
+  to: "gotcha.webhook-idempotency",
   status: "active",
   confidence: "high",
   evidence: [
@@ -125,13 +111,13 @@ const validMemoryEvent = {
 
 const validRelationEvent = {
   event: "relation.created",
-  relation_id: "rel.billing-retries-requires-idempotency",
+  relation_id: "rel.billing-retries-depends-on-idempotency",
   actor: "agent",
   timestamp: "2026-04-25T14:01:00+02:00",
   payload: {
     from: "decision.billing-retries",
-    predicate: "requires",
-    to: "constraint.webhook-idempotency"
+    predicate: "depends_on",
+    to: "gotcha.webhook-idempotency"
   }
 };
 
@@ -143,7 +129,7 @@ const minimalPatch = {
   changes: [
     {
       op: "create_object",
-      type: "note",
+      type: "gotcha",
       title: "Billing retries run in the worker",
       body: "Billing retry execution happens in the queue worker, not inside the HTTP webhook handler."
     }
@@ -164,17 +150,8 @@ const createObjectPatch = {
       status: "active",
       title: "Billing retries moved to queue worker",
       body: "Stripe webhook retries now happen in the queue worker.",
-      scope: {
-        kind: "project",
-        project: "project.billing-api",
-        branch: null,
-        task: null
-      },
+      anchors: ["src/billing/webhook.ts"],
       tags: ["billing", "stripe"],
-      facets: {
-        category: "decision-rationale",
-        applies_to: ["src/billing/webhook.ts"]
-      },
       evidence: [
         {
           kind: "file",
@@ -276,51 +253,67 @@ describe("schema validators", () => {
 
     expect(validateConfig(validators, validConfig).valid).toBe(true);
     expect(validateObject(validators, validObject, ".memory/memory/decisions/billing-retries.json").valid).toBe(true);
-    expect(validateRelation(validators, validRelation, ".memory/relations/billing-retries-requires-idempotency.json").valid).toBe(true);
+    expect(validateRelation(validators, validRelation, ".memory/relations/billing-retries-depends-on-idempotency.json").valid).toBe(true);
     expect(validateEvent(validators, validMemoryEvent, ".memory/events.jsonl", 1).valid).toBe(true);
     expect(validateEvent(validators, validRelationEvent, ".memory/events.jsonl", 2).valid).toBe(true);
     expect(validatePatch(validators, minimalPatch).valid).toBe(true);
     expect(validatePatch(validators, createObjectPatch).valid).toBe(true);
   });
 
-  it("accepts legacy config while supporting storage v4 object facets, evidence, and origin", async () => {
+  it("rejects legacy config versions and removed sidecar fields", async () => {
     const validators = await compileFixtureProject();
 
-    expect(validateConfig(validators, { ...validConfig, version: 1 }).valid).toBe(true);
+    expect(issueCodes(validateConfig(validators, { ...validConfig, version: 1 }))).toContain(
+      "SchemaEnum"
+    );
+    expect(issueCodes(validateConfig(validators, { ...validConfig, version: 4 }))).toContain(
+      "SchemaEnum"
+    );
     expect(
-      validateObject(
-        validators,
-        {
-          ...validObject,
-          facets: {
-            category: "abandoned-attempt",
-            applies_to: ["src/old.ts"],
-            load_modes: ["debugging"]
+      issueCodes(
+        validateObject(
+          validators,
+          {
+            ...validObject,
+            scope: {
+              kind: "project",
+              project: "project.billing-api",
+              branch: null,
+              task: null
+            }
           },
-          evidence: [{ kind: "task", id: "Tried worker-local cache" }]
-        },
-        ".memory/memory/decisions/billing-retries.json"
-      ).valid
-    ).toBe(true);
+          ".memory/memory/decisions/billing-retries.json"
+        )
+      )
+    ).toContain("SchemaAdditionalProperty");
+    expect(
+      issueCodes(
+        validateObject(
+          validators,
+          {
+            ...validObject,
+            facets: { category: "decision-rationale" }
+          },
+          ".memory/memory/decisions/billing-retries.json"
+        )
+      )
+    ).toContain("SchemaAdditionalProperty");
   });
 
-  it("accepts v4 relation predicates and rejects malformed origin", async () => {
+  it("rejects removed relation predicates and malformed origin", async () => {
     const validators = await compileFixtureProject();
 
-    expect(
-      validateRelation(
-        validators,
-        { ...validRelation, predicate: "supports" },
-        ".memory/relations/supports.json"
-      ).valid
-    ).toBe(true);
-    expect(
-      validateRelation(
-        validators,
-        { ...validRelation, predicate: "challenges" },
-        ".memory/relations/challenges.json"
-      ).valid
-    ).toBe(true);
+    for (const removedPredicate of ["requires", "mentions", "supports", "challenges", "derived_from"]) {
+      expect(
+        issueCodes(
+          validateRelation(
+            validators,
+            { ...validRelation, predicate: removedPredicate },
+            ".memory/relations/removed.json"
+          )
+        )
+      ).toContain("SchemaEnum");
+    }
     expect(
       issueCodes(
         validateObject(
@@ -338,7 +331,7 @@ describe("schema validators", () => {
     ).toContain("SchemaRequired");
   });
 
-  it("rejects invalid object facets and evidence", async () => {
+  it("rejects invalid object anchors and evidence", async () => {
     const validators = await compileFixtureProject();
 
     expect(
@@ -347,14 +340,12 @@ describe("schema validators", () => {
           validators,
           {
             ...validObject,
-            facets: {
-              category: "random-category"
-            }
+            anchors: [""]
           },
           ".memory/memory/decisions/billing-retries.json"
         )
       )
-    ).toContain("SchemaEnum");
+    ).toContain("SchemaMinLength");
     expect(
       issueCodes(
         validatePatch(validators, {
@@ -362,9 +353,9 @@ describe("schema validators", () => {
           changes: [
             {
               op: "create_object",
-              type: "fact",
-              title: "Fact",
-              body: "Fact body.",
+              type: "gotcha",
+              title: "Gotcha",
+              body: "Gotcha body.",
               evidence: [{ kind: "url", id: "https://example.com" }]
             }
           ]
@@ -373,7 +364,7 @@ describe("schema validators", () => {
     ).toContain("SchemaOneOf");
   });
 
-  it("accepts gotcha and workflow objects and create patches", async () => {
+  it("accepts gotcha and staged feature objects and create patches", async () => {
     const validators = await compileFixtureProject();
 
     const gotchaObject = {
@@ -383,12 +374,13 @@ describe("schema validators", () => {
       title: "Webhook duplicates",
       body_path: "memory/gotchas/webhook-duplicates.md"
     };
-    const workflowObject = {
+    const featureObject = {
       ...validObject,
-      id: "workflow.release-checklist",
-      type: "workflow",
+      id: "feature.release-checklist",
+      type: "feature",
       title: "Release checklist",
-      body_path: "memory/workflows/release-checklist.md"
+      body_path: "memory/features/release-checklist.md",
+      stage: "building"
     };
     const patch = {
       source: {
@@ -403,9 +395,10 @@ describe("schema validators", () => {
         },
         {
           op: "create_object",
-          id: "workflow.release-checklist",
-          type: "workflow",
+          id: "feature.release-checklist",
+          type: "feature",
           status: "active",
+          stage: "building",
           title: "Release checklist",
           body: "Run the release checklist before publishing."
         }
@@ -413,85 +406,41 @@ describe("schema validators", () => {
     };
 
     expect(validateObject(validators, gotchaObject, ".memory/memory/gotchas/webhook-duplicates.json").valid).toBe(true);
-    expect(validateObject(validators, workflowObject, ".memory/memory/workflows/release-checklist.json").valid).toBe(true);
+    expect(validateObject(validators, featureObject, ".memory/memory/features/release-checklist.json").valid).toBe(true);
     expect(validatePatch(validators, patch).valid).toBe(true);
   });
 
-  it("accepts product-feature as a facet for concept memory", async () => {
+  it("rejects stage on non-feature objects", async () => {
     const validators = await compileFixtureProject();
-    const productFeatureObject = {
-      ...validObject,
-      id: "concept.customer-dashboard",
-      type: "concept",
-      title: "Feature: Customer dashboard",
-      body_path: "memory/concepts/customer-dashboard.md",
-      tags: ["feature", "product", "dashboard"],
-      facets: {
-        category: "product-feature",
-        applies_to: ["app/dashboard/page.tsx"],
-        load_modes: ["coding", "onboarding"]
-      }
-    };
-    const patch = {
-      source: {
-        kind: "agent"
-      },
-      changes: [
-        {
-          op: "create_object",
-          id: "concept.customer-dashboard",
-          type: "concept",
-          title: "Feature: Customer dashboard",
-          body: "The app includes a customer dashboard feature.",
-          tags: ["feature", "product", "dashboard"],
-          facets: {
-            category: "product-feature",
-            applies_to: ["app/dashboard/page.tsx"],
-            load_modes: ["coding", "onboarding"]
-          },
-          evidence: [{ kind: "file", id: "app/dashboard/page.tsx" }]
-        }
-      ]
-    };
+
+    expect(
+      issueCodes(
+        validateObject(
+          validators,
+          { ...validObject, stage: "shipped" },
+          ".memory/memory/decisions/billing-retries.json"
+        )
+      ).length
+    ).toBeGreaterThan(0);
+  });
+
+  it("accepts open questions and source evidence", async () => {
+    const validators = await compileFixtureProject();
 
     expect(
       validateObject(
         validators,
-        productFeatureObject,
-        ".memory/memory/concepts/customer-dashboard.json"
+        {
+          ...validObject,
+          id: "question.fixture-refresh",
+          type: "question",
+          status: "open",
+          title: "When should fixtures be refreshed?",
+          body_path: "memory/questions/fixture-refresh.md"
+        },
+        ".memory/memory/questions/fixture-refresh.json"
       ).valid
     ).toBe(true);
-    expect(validatePatch(validators, patch).valid).toBe(true);
-  });
-
-  it("accepts memory organization facets and source evidence", async () => {
-    const validators = await compileFixtureProject();
-
-    for (const category of [
-      "domain",
-      "bounded-context",
-      "capability",
-      "business-rule",
-      "unresolved-conflict"
-    ]) {
-      expect(
-        validateObject(
-          validators,
-          {
-            ...validObject,
-            id: `question.${category}`,
-            type: "question",
-            status: "open",
-            title: `Question for ${category}`,
-            body_path: `memory/questions/${category}.md`,
-            facets: {
-              category
-            }
-          },
-          `.memory/memory/questions/${category}.json`
-        ).valid
-      ).toBe(true);
-    }
 
     expect(
       validatePatch(validators, {
@@ -499,10 +448,9 @@ describe("schema validators", () => {
         changes: [
           {
             op: "create_object",
-            type: "synthesis",
-            title: "Source-backed synthesis",
-            body: "This synthesis is backed by source memory.",
-            facets: { category: "domain" },
+            type: "decision",
+            title: "Source-backed decision",
+            body: "This decision is backed by source evidence.",
             evidence: [{ kind: "source", id: "source.readme" }]
           }
         ]
@@ -510,10 +458,19 @@ describe("schema validators", () => {
     ).toBe(true);
   });
 
-  it("keeps history, task-note, and feature invalid object types", async () => {
+  it("keeps removed taxonomy kinds invalid object types", async () => {
     const validators = await compileFixtureProject();
 
-    for (const invalidType of ["history", "task-note", "feature"]) {
+    for (const invalidType of [
+      "note",
+      "fact",
+      "constraint",
+      "workflow",
+      "synthesis",
+      "source",
+      "concept",
+      "architecture"
+    ]) {
       expect(
         issueCodes(
           validateObject(
@@ -550,7 +507,7 @@ describe("schema validators", () => {
   it("returns stable issue codes for invalid examples", async () => {
     const validators = await compileFixtureProject();
 
-    expect(issueCodes(validateConfig(validators, withoutProperty(validConfig, "git")))).toContain("SchemaRequired");
+    expect(issueCodes(validateConfig(validators, withoutProperty(validConfig, "memory")))).toContain("SchemaRequired");
     expect(
       issueCodes(
         validateObject(
@@ -574,7 +531,7 @@ describe("schema validators", () => {
         validateRelation(
           validators,
           { ...validRelation, predicate: "unknown" },
-          ".memory/relations/billing-retries-requires-idempotency.json"
+          ".memory/relations/billing-retries-depends-on-idempotency.json"
         )
       )
     ).toContain("SchemaEnum");
@@ -616,7 +573,7 @@ describe("schema validators", () => {
 
   it("wraps validation issues in MemorySchemaValidationFailed errors", async () => {
     const validators = await compileFixtureProject();
-    const result = validateConfig(validators, withoutProperty(validConfig, "git"));
+    const result = validateConfig(validators, withoutProperty(validConfig, "memory"));
 
     const error = schemaValidationError(result.errors);
 
@@ -637,7 +594,7 @@ describe("schema validators", () => {
 
     validateConfig(compiled.data, validConfig);
     validateObject(compiled.data, validObject, ".memory/memory/decisions/billing-retries.json");
-    validateRelation(compiled.data, validRelation, ".memory/relations/billing-retries-requires-idempotency.json");
+    validateRelation(compiled.data, validRelation, ".memory/relations/billing-retries-depends-on-idempotency.json");
     validateEvent(compiled.data, validMemoryEvent);
     validatePatch(compiled.data, minimalPatch);
 

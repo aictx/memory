@@ -1,8 +1,8 @@
 {"event":"memory.created","id":"project.golden-rich","actor":"system","timestamp":"2026-04-25T14:00:00+02:00","payload":{"title":"Golden Rich"}}
-{"event":"memory.created","id":"architecture.current","actor":"agent","timestamp":"2026-04-25T14:00:00+02:00","payload":{"title":"Current Architecture"}}
+{"event":"memory.created","id":"feature.golden-coverage","actor":"agent","timestamp":"2026-04-25T14:00:00+02:00","payload":{"title":"Golden fixture coverage"}}
 {"event":"memory.created","id":"decision.storage-fixtures","actor":"agent","timestamp":"2026-04-25T14:00:00+02:00","payload":{"title":"Golden fixtures cover storage validation"}}
-{"event":"memory.created","id":"constraint.hashes-deterministic","actor":"agent","timestamp":"2026-04-25T14:00:00+02:00","payload":{"title":"Fixture hashes must be deterministic"}}
+{"event":"memory.created","id":"gotcha.hashes-deterministic","actor":"agent","timestamp":"2026-04-25T14:00:00+02:00","payload":{"title":"Fixture hashes must be deterministic"}}
 {"event":"memory.created","id":"question.fixture-refresh","actor":"agent","timestamp":"2026-04-25T14:00:00+02:00","payload":{"title":"When should fixtures be refreshed?"}}
-{"event":"relation.created","relation_id":"rel.storage-fixtures-requires-hashes","actor":"agent","timestamp":"2026-04-25T14:00:00+02:00","payload":{"from":"decision.storage-fixtures","predicate":"requires","to":"constraint.hashes-deterministic"}}
-{"event":"relation.created","relation_id":"rel.architecture-mentions-decision","actor":"agent","timestamp":"2026-04-25T14:00:00+02:00","payload":{"from":"architecture.current","predicate":"mentions","to":"decision.storage-fixtures"}}
+{"event":"relation.created","relation_id":"rel.storage-fixtures-depends-on-hashes","actor":"agent","timestamp":"2026-04-25T14:00:00+02:00","payload":{"from":"decision.storage-fixtures","predicate":"depends_on","to":"gotcha.hashes-deterministic"}}
+{"event":"relation.created","relation_id":"rel.feature-related-to-decision","actor":"agent","timestamp":"2026-04-25T14:00:00+02:00","payload":{"from":"feature.golden-coverage","predicate":"related_to","to":"decision.storage-fixtures"}}
 {"event":"relation.created","relation_id":"rel.question-related-to-decision","actor":"agent","timestamp":"2026-04-25T14:00:00+02:00","payload":{"from":"question.fixture-refresh","predicate":"related_to","to":"decision.storage-fixtures"}}

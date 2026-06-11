@@ -27,7 +27,6 @@ import {
   computeRelationContentHash
 } from "../../../src/storage/hashes.js";
 import type { MemoryObjectSidecar } from "../../../src/storage/objects.js";
-import { readCanonicalStorage } from "../../../src/storage/read.js";
 import type { MemoryRelation } from "../../../src/storage/relations.js";
 import { FIXED_TIMESTAMP, FIXED_TIMESTAMP_NEXT_MINUTE } from "../../fixtures/time.js";
 
@@ -132,7 +131,7 @@ describe("memory read-only CLI commands", () => {
     });
     expect(envelope.data.object.body).toContain("Billing retries run in the worker.");
     expect(envelope.data.relations.outgoing.map((relation) => relation.id)).toEqual([
-      "rel.decision-requires-idempotency"
+      "rel.decision-depends-on-idempotency"
     ]);
     expect(envelope.data.relations.incoming.map((relation) => relation.id)).toEqual([
       "rel.worker-affects-decision"
@@ -195,24 +194,24 @@ async function createReadOnlyFixtureProject(prefix: string): Promise<string> {
     updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
   });
   await writeMemoryObject(projectRoot, {
-    id: "constraint.webhook-idempotency",
-    type: "constraint",
+    id: "gotcha.webhook-idempotency",
+    type: "gotcha",
     status: "active",
     title: "Webhook idempotency",
     body: "# Webhook idempotency\n\nWebhook delivery IDs must be deduplicated.\n",
     tags: ["webhooks"]
   });
   await writeMemoryObject(projectRoot, {
-    id: "note.worker-details",
-    type: "note",
+    id: "gotcha.worker-details",
+    type: "gotcha",
     status: "active",
     title: "Worker details",
     body: "# Worker details\n\nThe queue worker owns retry execution.\n",
     tags: ["worker"]
   });
   await writeMemoryObject(projectRoot, {
-    id: "fact.second-hop-only",
-    type: "fact",
+    id: "gotcha.second-hop-only",
+    type: "gotcha",
     status: "active",
     title: "Second-hop only",
     body: "# Second-hop only\n\nThis object is only connected through another neighbor.\n"
@@ -225,23 +224,23 @@ async function createReadOnlyFixtureProject(prefix: string): Promise<string> {
     body: "# Old queue\n\nThe old queue design is stale.\n"
   });
   await writeMemoryObject(projectRoot, {
-    id: "constraint.old-api",
-    type: "constraint",
+    id: "decision.old-api",
+    type: "decision",
     status: "superseded",
     title: "Old API",
     body: "# Old API\n\nThe old API constraint was superseded.\n",
     supersededBy: "decision.billing-retries"
   });
   await writeMemoryObject(projectRoot, {
-    id: "note.stale-memory",
-    type: "note",
+    id: "gotcha.stale-memory",
+    type: "gotcha",
     status: "stale",
     title: "Stale memory",
     body: "# Stale memory\n\nThis memory is stale.\n"
   });
   await writeMemoryObject(projectRoot, {
-    id: "note.active-memory",
-    type: "note",
+    id: "gotcha.active-memory",
+    type: "gotcha",
     status: "active",
     title: "Active memory",
     body: "# Active memory\n\nThis active memory should not be in stale output.\n"
@@ -261,24 +260,24 @@ async function createReadOnlyFixtureProject(prefix: string): Promise<string> {
     body: "# Closed memory\n\nThis closed question should not be in stale output.\n"
   });
   await writeRelation(projectRoot, {
-    id: "rel.decision-requires-idempotency",
+    id: "rel.decision-depends-on-idempotency",
     from: "decision.billing-retries",
-    predicate: "requires",
-    to: "constraint.webhook-idempotency",
+    predicate: "depends_on",
+    to: "gotcha.webhook-idempotency",
     confidence: "high"
   });
   await writeRelation(projectRoot, {
     id: "rel.worker-affects-decision",
-    from: "note.worker-details",
+    from: "gotcha.worker-details",
     predicate: "affects",
     to: "decision.billing-retries",
     confidence: "medium"
   });
   await writeRelation(projectRoot, {
-    id: "rel.idempotency-mentions-second-hop",
-    from: "constraint.webhook-idempotency",
-    predicate: "mentions",
-    to: "fact.second-hop-only",
+    id: "rel.idempotency-related-to-second-hop",
+    from: "gotcha.webhook-idempotency",
+    predicate: "related_to",
+    to: "gotcha.second-hop-only",
     confidence: "low"
   });
 
@@ -339,7 +338,6 @@ async function createTempRoot(prefix: string): Promise<string> {
 }
 
 async function writeMemoryObject(projectRoot: string, fixture: MemoryFixture): Promise<void> {
-  const storage = await readStorageOrThrow(projectRoot);
   const bodyPath = memoryBodyPath(fixture);
   const sidecarWithoutHash = {
     id: fixture.id,
@@ -347,12 +345,6 @@ async function writeMemoryObject(projectRoot: string, fixture: MemoryFixture): P
     status: fixture.status,
     title: fixture.title,
     body_path: bodyPath,
-    scope: {
-      kind: "project",
-      project: storage.config.project.id,
-      branch: null,
-      task: null
-    },
     tags: fixture.tags ?? [],
     source: {
       kind: "agent"
@@ -411,41 +403,17 @@ function memoryBodyPath(fixture: MemoryFixture): string {
 
 function memoryDirectory(type: ObjectType): string {
   switch (type) {
+    case "feature":
+      return "features";
     case "decision":
       return "decisions";
-    case "constraint":
-      return "constraints";
-    case "question":
-      return "questions";
-    case "fact":
-      return "facts";
     case "gotcha":
       return "gotchas";
-    case "workflow":
-      return "workflows";
-    case "note":
-      return "notes";
-    case "concept":
-      return "concepts";
-    case "source":
-      return "sources";
-    case "synthesis":
-      return "syntheses";
+    case "question":
+      return "questions";
     case "project":
-    case "architecture":
       throw new Error(`Unsupported fixture type for nested memory path: ${type}`);
   }
-}
-
-async function readStorageOrThrow(projectRoot: string) {
-  const storage = await readCanonicalStorage(projectRoot);
-
-  expect(storage.ok).toBe(true);
-  if (!storage.ok) {
-    throw new Error(storage.error.message);
-  }
-
-  return storage.data;
 }
 
 async function writeJsonProjectFile(

@@ -1,12 +1,11 @@
+import { resolve } from "node:path";
+
 import { CommanderError, type Command } from "commander";
 
-import {
-  upgradeStorage,
-  type UpgradeStorageData,
-  type UpgradeStorageOptions
-} from "../../app/operations.js";
-import { CLI_EXIT_SUCCESS, type CliExitCode } from "../exit.js";
+import { memoryError } from "../../core/errors.js";
+import type { MemoryMeta } from "../../core/types.js";
 import { renderAppResult } from "../render.js";
+import { CLI_EXIT_SUCCESS, type CliExitCode } from "../exit.js";
 
 type CliOutputWriter = (text: string) => void;
 
@@ -16,19 +15,29 @@ export interface RegisterUpgradeCommandOptions {
   stderr: CliOutputWriter;
 }
 
+const UPGRADE_REMOVED_MESSAGE =
+  "Memory storage upgrades are not supported by this release. Run `memory reset` then `memory init` to re-index with the current schema.";
+
 export function registerUpgradeCommand(
   program: Command,
   options: RegisterUpgradeCommandOptions
 ): void {
   program
     .command("upgrade")
-    .description("Upgrade Memory storage to the latest supported schema.")
+    .description("Removed. Run `memory reset` then `memory init` to re-index storage.")
     .action(async (_commandOptions: unknown, command: Command) => {
-      const result = await upgradeStorage(upgradeStorageOptions(options));
-      const rendered = renderAppResult(result, {
-        json: isJsonMode(command),
-        renderData: renderUpgradeData
-      });
+      const rendered = renderAppResult<never>(
+        {
+          ok: false,
+          error: memoryError("MemoryUnsupportedStorageVersion", UPGRADE_REMOVED_MESSAGE),
+          warnings: [],
+          meta: fallbackMeta(options.cwd)
+        },
+        {
+          json: isJsonMode(command),
+          renderData: () => ""
+        }
+      );
 
       options.stdout(rendered.stdout);
       options.stderr(rendered.stderr);
@@ -39,34 +48,24 @@ export function registerUpgradeCommand(
     });
 }
 
-function upgradeStorageOptions(
-  options: RegisterUpgradeCommandOptions
-): UpgradeStorageOptions {
+function fallbackMeta(cwd: string): MemoryMeta {
+  const projectRoot = resolve(cwd);
+
   return {
-    cwd: options.cwd
+    project_root: projectRoot,
+    memory_root: resolve(projectRoot, ".memory"),
+    git: {
+      available: false,
+      branch: null,
+      commit: null,
+      dirty: null
+    }
   };
 }
 
 function isJsonMode(command: Command): boolean {
   const options = command.optsWithGlobals() as { json?: unknown };
   return options.json === true;
-}
-
-function renderUpgradeData(data: UpgradeStorageData): string {
-  return [
-    data.upgraded ? "Upgraded Memory storage." : "Memory storage is already up to date.",
-    `Storage version: ${data.from_version} -> ${data.to_version}`,
-    renderList("Files changed", data.files_changed),
-    renderList("Objects upgraded", data.objects_upgraded)
-  ].join("\n");
-}
-
-function renderList(label: string, values: readonly string[]): string {
-  if (values.length === 0) {
-    return `${label}:\n- none`;
-  }
-
-  return `${label}:\n${values.map((value) => `- ${value}`).join("\n")}`;
 }
 
 function throwCommandFailed(exitCode: CliExitCode): never {

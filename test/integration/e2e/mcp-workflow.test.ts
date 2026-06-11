@@ -122,12 +122,13 @@ interface TextContent {
 
 const REQUIRED_MCP_TOOLS = [
   "inspect_memory",
-  "remember_memory",
+  "save_memory",
   "search_memory"
 ] as const;
 
 const FORBIDDEN_MCP_TOOLS = [
   "load_memory",
+  "remember_memory",
   "save_memory_patch",
   "diff_memory",
   "init",
@@ -200,15 +201,15 @@ describe("memory full MCP workflow", () => {
       const headBeforeSave = (await git(repo, ["rev-parse", "HEAD"])).trim();
       const saved = parseToolEnvelope<SuccessEnvelope<SaveData>>(
         await started.client.callTool({
-          name: "remember_memory",
-          arguments: createWorkflowRememberArguments()
+          name: "save_memory",
+          arguments: createWorkflowSaveArguments()
         })
       );
 
       expect(saved.data.memory_created).toEqual(
         expect.arrayContaining([
           "decision.mcp-routine-workflow",
-          "constraint.mcp-does-not-mirror-cli-only-commands"
+          "gotcha.mcp-does-not-mirror-cli-only-commands"
         ])
       );
       expect(saved.data.memory_updated).toEqual([]);
@@ -437,20 +438,20 @@ async function git(
   return result.data.stdout;
 }
 
-function createWorkflowRememberArguments() {
+function createWorkflowSaveArguments() {
   return {
     task: "Full MCP workflow test",
-    memories: [
+    nodes: [
       {
         kind: "decision",
         id: "decision.mcp-routine-workflow",
         title: "MCP routine workflow",
         body:
-          "MCP routine workflow agents use search_memory, inspect_memory, and remember_memory for normal project memory work. Relevant file src/mcp/server.ts.",
+          "MCP routine workflow agents use search_memory, inspect_memory, and save_memory for normal project memory work. Relevant file src/mcp/server.ts.",
         tags: ["mcp", "workflow", "routine"]
       },
       {
-        kind: "constraint",
+        kind: "gotcha",
         title: "MCP does not mirror CLI-only commands",
         body:
           "Do not expose init, check, rebuild, shell, or filesystem operations through MCP. Agents must use the memory binary for CLI-only capabilities.",

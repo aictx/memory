@@ -14,11 +14,10 @@ export {
 export {
   createDataAccessService,
   dataAccessService,
-  type DataAccessApplyPatchInput,
   type DataAccessDiffInput,
   type DataAccessInspectInput,
   type DataAccessProjectTarget,
-  type DataAccessRememberInput,
+  type DataAccessSaveInput,
   type DataAccessSearchInput,
   type DataAccessService
 } from "./service.js";
@@ -28,6 +27,5 @@ export type {
   DiffMemoryData,
   InspectMemoryData,
   MemoryRelationSummary,
-  RememberMemoryData,
   SaveMemoryData
 } from "../app/operations.js";

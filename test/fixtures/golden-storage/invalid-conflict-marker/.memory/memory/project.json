@@ -4,12 +4,6 @@
   "status": "active",
   "title": "Invalid Conflict Marker",
   "body_path": "memory/project.md",
-  "scope": {
-    "kind": "project",
-    "project": "project.invalid-conflict-marker",
-    "branch": null,
-    "task": null
-  },
   "tags": [
     "fixture"
   ],
@@ -17,7 +11,7 @@
     "kind": "system"
   },
   "superseded_by": null,
-  "content_hash": "sha256:05d3f50fff04f3ecbcbb79d56fc625a85234a40f7d353b37fae1eba8ae905014",
   "created_at": "2026-04-25T14:00:00+02:00",
-  "updated_at": "2026-04-25T14:00:00+02:00"
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:08404c23bc12531a2116ff85b5ed70909eb23655fdd14d7fb4ffd04e67be68bb"
 }

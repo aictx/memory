@@ -1,15 +1,11 @@
 {
-  "version": 1,
+  "version": 5,
   "project": {
     "id": "project.golden-rich",
     "name": "Golden Rich"
   },
   "memory": {
-    "defaultTokenBudget": 6000,
-    "autoIndex": true,
-    "saveContextPacks": false
-  },
-  "git": {
-    "trackContextPacks": false
+    "defaultTokenBudget": 2000,
+    "autoIndex": true
   }
 }

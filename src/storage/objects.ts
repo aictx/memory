@@ -1,18 +1,19 @@
 import type {
+  Evidence,
+  FeatureStage,
   IsoDateTime,
-  ObjectFacets,
   ObjectId,
   ObjectStatus,
   ObjectType,
-  Evidence,
-  Scope,
   Sha256Hash,
   Source,
   SourceOrigin
 } from "../core/types.js";
 
+export const CURRENT_STORAGE_VERSION = 5;
+
 export interface MemoryConfig {
-  version: 1 | 2 | 3 | 4;
+  version: typeof CURRENT_STORAGE_VERSION;
   project: {
     id: string;
     name: string;
@@ -20,10 +21,6 @@ export interface MemoryConfig {
   memory: {
     defaultTokenBudget: number;
     autoIndex: boolean;
-    saveContextPacks: boolean;
-  };
-  git: {
-    trackContextPacks: boolean;
   };
 }
 
@@ -33,9 +30,9 @@ export interface MemoryObjectSidecar {
   status: ObjectStatus;
   title: string;
   body_path: string;
-  scope: Scope;
+  stage?: FeatureStage;
+  anchors?: string[];
   tags?: string[];
-  facets?: ObjectFacets;
   evidence?: Evidence[];
   source?: Source;
   origin?: SourceOrigin;
@@ -59,22 +56,15 @@ export function isMemoryConfig(value: unknown): value is MemoryConfig {
 
   const project = value.project;
   const memory = value.memory;
-  const git = value.git;
 
   return (
-    (value.version === 1 ||
-      value.version === 2 ||
-      value.version === 3 ||
-      value.version === 4) &&
+    value.version === CURRENT_STORAGE_VERSION &&
     isRecord(project) &&
     typeof project.id === "string" &&
     typeof project.name === "string" &&
     isRecord(memory) &&
     typeof memory.defaultTokenBudget === "number" &&
-    typeof memory.autoIndex === "boolean" &&
-    typeof memory.saveContextPacks === "boolean" &&
-    isRecord(git) &&
-    typeof git.trackContextPacks === "boolean"
+    typeof memory.autoIndex === "boolean"
   );
 }
 
@@ -86,7 +76,6 @@ export function isMemoryObjectSidecar(value: unknown): value is MemoryObjectSide
     typeof value.status === "string" &&
     typeof value.title === "string" &&
     typeof value.body_path === "string" &&
-    isRecord(value.scope) &&
     typeof value.content_hash === "string" &&
     typeof value.created_at === "string" &&
     typeof value.updated_at === "string"

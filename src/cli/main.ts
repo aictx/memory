@@ -15,7 +15,6 @@ import { registerInitCommand } from "./commands/init.js";
 import { registerInspectCommand } from "./commands/inspect.js";
 import { registerProjectsCommand } from "./commands/projects.js";
 import { registerRebuildCommand } from "./commands/rebuild.js";
-import { registerRememberCommand } from "./commands/remember.js";
 import { registerResetCommand } from "./commands/reset.js";
 import { registerSaveCommand } from "./commands/save.js";
 import { registerSearchCommand } from "./commands/search.js";
@@ -158,13 +157,6 @@ export function createCliProgram(options: CliMainOptions = {}): Command {
     stdout: writeOut,
     stderr: writeErr
   });
-  registerRememberCommand(program, {
-    cwd: options.cwd ?? process.cwd(),
-    stdin: options.stdin ?? process.stdin,
-    stdout: writeOut,
-    stderr: writeErr
-  });
-
   installProjectRegistryHook(program, {
     cwd: options.cwd ?? process.cwd(),
     stderr: writeErr,

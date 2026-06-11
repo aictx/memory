@@ -125,12 +125,13 @@ describe("memory MCP server bootstrap", () => {
 
       expect(toolNames).toEqual([
         "inspect_memory",
-        "remember_memory",
+        "save_memory",
         "search_memory"
       ]);
       expect(toolNames).not.toEqual(
         expect.arrayContaining([
           "load_memory",
+          "remember_memory",
           "save_memory_patch",
           "diff_memory",
           "init",
@@ -220,17 +221,17 @@ describe("memory MCP server bootstrap", () => {
       await expect(started.client.ping()).resolves.toEqual({});
 
       await started.client.callTool({
-        name: "remember_memory",
+        name: "save_memory",
         arguments: {
           project_root: alphaRoot,
-          ...createProjectNoteRememberArguments("Alpha-only deployment fact")
+          ...createProjectGotchaSaveArguments("Alpha-only deployment fact")
         }
       });
       await started.client.callTool({
-        name: "remember_memory",
+        name: "save_memory",
         arguments: {
           project_root: betaRoot,
-          ...createProjectNoteRememberArguments("Beta-only deployment fact")
+          ...createProjectGotchaSaveArguments("Beta-only deployment fact")
         }
       });
 
@@ -340,12 +341,12 @@ async function createInitializedProject(prefix: string): Promise<string> {
   return projectRoot;
 }
 
-function createProjectNoteRememberArguments(title: string): Record<string, unknown> {
+function createProjectGotchaSaveArguments(title: string): Record<string, unknown> {
   return {
     task: "Exercise global MCP project targeting",
-    memories: [
+    nodes: [
       {
-        kind: "note",
+        kind: "gotcha",
         title,
         body: `${title} belongs only to its initialized Memory project.`,
         tags: ["mcp", "global-server"]

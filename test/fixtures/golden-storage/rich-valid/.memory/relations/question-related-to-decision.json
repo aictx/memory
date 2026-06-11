@@ -4,14 +4,7 @@
   "predicate": "related_to",
   "to": "decision.storage-fixtures",
   "status": "active",
-  "confidence": "low",
-  "evidence": [
-    {
-      "kind": "memory",
-      "id": "question.fixture-refresh"
-    }
-  ],
-  "content_hash": "sha256:dc1cd26eb708f9ad0ffb2077c54e026729506df6424f5dc571f219fbffefbf96",
   "created_at": "2026-04-25T14:00:00+02:00",
-  "updated_at": "2026-04-25T14:00:00+02:00"
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:5d430e8f73e9e9a3ad6a2fa8b8238029c3fba8bf3aa2f1a16ed25d139eca5e50"
 }

@@ -2,7 +2,7 @@ import { join, resolve } from "node:path";
 
 import fg from "fast-glob";
 
-import { memoryError } from "../core/errors.js";
+import { memoryError, type MemoryError } from "../core/errors.js";
 import { readUtf8FileInsideRoot } from "../core/fs.js";
 import { err, ok, type Result } from "../core/result.js";
 import type { ValidationIssue } from "../core/types.js";
@@ -17,6 +17,7 @@ import {
 } from "../validation/validate.js";
 import { readMarkdownBodyInsideRoot } from "./markdown.js";
 import {
+  CURRENT_STORAGE_VERSION,
   isMemoryConfig,
   isMemoryObjectSidecar,
   type MemoryConfig,
@@ -30,7 +31,7 @@ import {
 
 const CONFIG_PATH = ".memory/config.json";
 const EVENTS_PATH = ".memory/events.jsonl";
-const GENERATED_IGNORES = [".memory/index/**", ".memory/context/**"] as const;
+const GENERATED_IGNORES = [".memory/index/**"] as const;
 
 export interface CanonicalStorageSnapshot {
   projectRoot: string;
@@ -113,6 +114,12 @@ async function readConfig(
     return parsed;
   }
 
+  const versionGate = storageVersionGate(parsed.data);
+
+  if (versionGate !== null) {
+    return err(versionGate);
+  }
+
   const validation = validateConfig(validators, parsed.data, CONFIG_PATH);
 
   if (!validation.valid) {
@@ -124,6 +131,60 @@ async function readConfig(
   }
 
   return ok(parsed.data);
+}
+
+export function unsupportedStorageVersionError(version: unknown): MemoryError {
+  const rendered =
+    typeof version === "number" || typeof version === "string" ? String(version) : "unknown";
+
+  return memoryError(
+    "MemoryUnsupportedStorageVersion",
+    `Memory storage version ${rendered} is not supported by this release. Run \`memory reset\` then \`memory init\` to re-index with the current schema.`,
+    {
+      path: CONFIG_PATH,
+      supported_version: CURRENT_STORAGE_VERSION,
+      ...(typeof version === "number" || typeof version === "string"
+        ? { found_version: version }
+        : {})
+    }
+  );
+}
+
+/**
+ * Checks the canonical config storage version without compiling schemas.
+ * Returns the gate error for any parsed config whose version is not the
+ * current storage version. This backs commands that do not read full
+ * canonical storage up front (check, search, rebuild).
+ */
+export async function checkStorageVersion(projectRoot: string): Promise<Result<void>> {
+  const resolvedProjectRoot = resolve(projectRoot);
+  const parsed = await readJsonFile(resolvedProjectRoot, CONFIG_PATH);
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  const versionGate = storageVersionGate(parsed.data);
+
+  if (versionGate !== null) {
+    return err(versionGate);
+  }
+
+  return ok(undefined);
+}
+
+function storageVersionGate(config: unknown): MemoryError | null {
+  if (typeof config !== "object" || config === null || Array.isArray(config)) {
+    return null;
+  }
+
+  const version = (config as { version?: unknown }).version;
+
+  if (version === CURRENT_STORAGE_VERSION) {
+    return null;
+  }
+
+  return unsupportedStorageVersionError(version);
 }
 
 async function readObjects(

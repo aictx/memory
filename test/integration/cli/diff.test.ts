@@ -112,7 +112,7 @@ describe("memory diff CLI", () => {
       cwd: repo,
       stdin: Readable.from([
         JSON.stringify(
-          createNotePatch("Diff New Note", "New memory should appear before staging.")
+          createGotchaInput("Diff New Note", "New memory should appear before staging.")
         )
       ])
     });
@@ -130,19 +130,19 @@ describe("memory diff CLI", () => {
     expect(output.stderr()).toBe("");
     const envelope = JSON.parse(output.stdout()) as DiffSuccessEnvelope;
     expect(envelope.ok).toBe(true);
-    expect(envelope.data.diff).toContain(".memory/memory/notes/diff-new-note.json");
-    expect(envelope.data.diff).toContain(".memory/memory/notes/diff-new-note.md");
+    expect(envelope.data.diff).toContain(".memory/memory/gotchas/diff-new-note.json");
+    expect(envelope.data.diff).toContain(".memory/memory/gotchas/diff-new-note.md");
     expect(envelope.data.diff).toContain("New memory should appear before staging.");
     expect(envelope.data.changed_files).toEqual([
       ".memory/events.jsonl",
-      ".memory/memory/notes/diff-new-note.json",
-      ".memory/memory/notes/diff-new-note.md"
+      ".memory/memory/gotchas/diff-new-note.json",
+      ".memory/memory/gotchas/diff-new-note.md"
     ]);
     expect(envelope.data.untracked_files).toEqual([
-      ".memory/memory/notes/diff-new-note.json",
-      ".memory/memory/notes/diff-new-note.md"
+      ".memory/memory/gotchas/diff-new-note.json",
+      ".memory/memory/gotchas/diff-new-note.md"
     ]);
-    expect(envelope.data.changed_memory_ids).toEqual(["note.diff-new-note"]);
+    expect(envelope.data.changed_memory_ids).toEqual(["gotcha.diff-new-note"]);
     expect(envelope.data.changed_relation_ids).toEqual([]);
   });
 
@@ -152,20 +152,20 @@ describe("memory diff CLI", () => {
       repo,
       ".memory",
       "relations",
-      "project-mentions-architecture.json"
+      "project-related-to-decision.json"
     );
     const relation = {
-      id: "rel.project-mentions-architecture",
+      id: "rel.project-related-to-decision",
       from: await readJsonId(join(repo, ".memory", "memory", "project.json")),
-      predicate: "mentions",
-      to: "architecture.current",
+      predicate: "related_to",
+      to: "decision.diff-target",
       status: "active",
       created_at: "2026-04-25T14:00:00+02:00",
       updated_at: "2026-04-25T14:00:00+02:00"
     };
     await mkdir(join(repo, ".memory", "relations"), { recursive: true });
     await writeJsonFile(relationPath, relation);
-    await git(repo, ["add", ".memory/relations/project-mentions-architecture.json"]);
+    await git(repo, ["add", ".memory/relations/project-related-to-decision.json"]);
     await git(repo, ["commit", "-m", "Add relation"]);
     await writeJsonFile(relationPath, {
       ...relation,
@@ -184,11 +184,11 @@ describe("memory diff CLI", () => {
     const envelope = JSON.parse(output.stdout()) as DiffSuccessEnvelope;
     expect(envelope.ok).toBe(true);
     expect(envelope.data.changed_files).toEqual([
-      ".memory/relations/project-mentions-architecture.json"
+      ".memory/relations/project-related-to-decision.json"
     ]);
     expect(envelope.data.untracked_files).toEqual([]);
     expect(envelope.data.changed_memory_ids).toEqual([]);
-    expect(envelope.data.changed_relation_ids).toEqual(["rel.project-mentions-architecture"]);
+    expect(envelope.data.changed_relation_ids).toEqual(["rel.project-related-to-decision"]);
   });
 
   it("returns MemoryGitRequired outside Git", async () => {
@@ -291,16 +291,12 @@ async function writeJsonFile(path: string, value: Record<string, unknown>): Prom
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function createNotePatch(title: string, body: string) {
+function createGotchaInput(title: string, body: string) {
   return {
-    source: {
-      kind: "agent",
-      task: "Diff CLI untracked save test"
-    },
-    changes: [
+    task: "Diff CLI untracked save test",
+    nodes: [
       {
-        op: "create_object",
-        type: "note",
+        kind: "gotcha",
         title,
         body: `# ${title}\n\n${body}\n`
       }

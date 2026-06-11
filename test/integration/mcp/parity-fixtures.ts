@@ -14,7 +14,6 @@ import { main, type CliOutputWriter } from "../../../src/cli/main.js";
 import { runSubprocess } from "../../../src/core/subprocess.js";
 import type {
   Evidence,
-  ObjectFacets,
   ObjectStatus,
   ObjectType,
   Predicate,
@@ -26,7 +25,6 @@ import {
   computeRelationContentHash
 } from "../../../src/storage/hashes.js";
 import type { MemoryObjectSidecar } from "../../../src/storage/objects.js";
-import { readCanonicalStorage } from "../../../src/storage/read.js";
 import type { MemoryRelation } from "../../../src/storage/relations.js";
 import {
   FIXED_TIMESTAMP,
@@ -64,7 +62,7 @@ interface MemoryFixture {
   bodyPath: string;
   body: string;
   tags: string[];
-  facets?: ObjectFacets;
+  anchors?: string[];
   evidence?: Evidence[];
   updatedAt?: string;
 }
@@ -221,48 +219,44 @@ export async function writeParityReadFixtures(projectRoot: string): Promise<void
     title: "Parity shared read",
     bodyPath: "memory/decisions/parity-shared-read.md",
     body:
-      "# Parity shared read\n\nShared adapter parity keeps CLI JSON and MCP structured content equivalent for load_memory, search_memory, inspect_memory, and diff_memory.\n",
+      "# Parity shared read\n\nShared adapter parity keeps CLI JSON and MCP structured content equivalent for search_memory and inspect_memory.\n",
     tags: ["parity", "shared", "mcp"],
-    facets: {
-      category: "testing",
-      applies_to: ["src/data-access/service.ts"],
-      load_modes: ["coding", "review"]
-    },
+    anchors: ["src/data-access/service.ts"],
     evidence: [{ kind: "file", id: "src/data-access/service.ts" }],
     updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
   });
   await writeMemoryObject(projectRoot, {
-    id: "constraint.parity-global-targeting",
-    type: "constraint",
+    id: "decision.parity-global-targeting",
+    type: "decision",
     status: "active",
     title: "Parity global targeting",
-    bodyPath: "memory/constraints/parity-global-targeting.md",
+    bodyPath: "memory/decisions/parity-global-targeting.md",
     body:
       "# Parity global targeting\n\nGlobal MCP project_root targeting must resolve the same project boundary as CLI cwd targeting.\n",
     tags: ["parity", "targeting"],
     updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
   });
   await writeMemoryObject(projectRoot, {
-    id: "note.parity-adapter-source",
-    type: "note",
+    id: "gotcha.parity-adapter-source",
+    type: "gotcha",
     status: "active",
     title: "Parity adapter source",
-    bodyPath: "memory/notes/parity-adapter-source.md",
+    bodyPath: "memory/gotchas/parity-adapter-source.md",
     body:
       "# Parity adapter source\n\nThe data-access service is the shared source for adapter behavior tests.\n",
     tags: ["parity", "adapter"],
     updatedAt: FIXED_TIMESTAMP
   });
   await writeRelation(projectRoot, {
-    id: "rel.parity-read-requires-targeting",
+    id: "rel.parity-read-depends-on-targeting",
     from: "decision.parity-shared-read",
-    predicate: "requires",
-    to: "constraint.parity-global-targeting",
+    predicate: "depends_on",
+    to: "decision.parity-global-targeting",
     confidence: "high"
   });
   await writeRelation(projectRoot, {
     id: "rel.parity-source-affects-read",
-    from: "note.parity-adapter-source",
+    from: "gotcha.parity-adapter-source",
     predicate: "affects",
     to: "decision.parity-shared-read",
     confidence: "medium"
@@ -277,14 +271,14 @@ export async function writeParityDiffChanges(projectRoot: string): Promise<strin
     "# Updated Project\n\nChanged Memory for shared parity diff.\n",
     "utf8"
   );
-  await mkdir(join(projectRoot, ".memory", "memory", "notes"), { recursive: true });
+  await mkdir(join(projectRoot, ".memory", "memory", "gotchas"), { recursive: true });
   await writeFile(
-    join(projectRoot, ".memory", "memory", "notes", "parity-untracked-note.json"),
-    `${JSON.stringify({ id: "note.parity-untracked-note" }, null, 2)}\n`,
+    join(projectRoot, ".memory", "memory", "gotchas", "parity-untracked-note.json"),
+    `${JSON.stringify({ id: "gotcha.parity-untracked-note" }, null, 2)}\n`,
     "utf8"
   );
   await writeFile(
-    join(projectRoot, ".memory", "memory", "notes", "parity-untracked-note.md"),
+    join(projectRoot, ".memory", "memory", "gotchas", "parity-untracked-note.md"),
     "# Parity Untracked Note\n\nShared parity diff includes untracked Memory only.\n",
     "utf8"
   );
@@ -332,16 +326,12 @@ export async function readParityCanonicalSnapshot(
   return Object.fromEntries(entries);
 }
 
-export function createParityNotePatch(title: string, body: string) {
+export function createParitySaveInput(title: string, body: string) {
   return {
-    source: {
-      kind: "agent",
-      task: "Shared CLI MCP parity save"
-    },
-    changes: [
+    task: "Shared CLI MCP parity save",
+    nodes: [
       {
-        op: "create_object",
-        type: "note",
+        kind: "gotcha",
         title,
         body: `# ${title}\n\n${body}\n`
       }
@@ -364,21 +354,14 @@ async function createParityRepo(prefix: string): Promise<string> {
 }
 
 async function writeMemoryObject(projectRoot: string, fixture: MemoryFixture): Promise<void> {
-  const storage = await readStorageOrThrow(projectRoot);
   const sidecarWithoutHash = {
     id: fixture.id,
     type: fixture.type,
     status: fixture.status,
     title: fixture.title,
     body_path: fixture.bodyPath,
-    scope: {
-      kind: "project",
-      project: storage.config.project.id,
-      branch: null,
-      task: null
-    },
     tags: fixture.tags,
-    ...(fixture.facets === undefined ? {} : { facets: fixture.facets }),
+    ...(fixture.anchors === undefined ? {} : { anchors: fixture.anchors }),
     ...(fixture.evidence === undefined ? {} : { evidence: fixture.evidence }),
     source: {
       kind: "agent"
@@ -426,17 +409,6 @@ async function writeRelation(projectRoot: string, fixture: RelationFixture): Pro
     `.memory/relations/${fixture.id.replace(/^rel\./, "")}.json`,
     relation
   );
-}
-
-async function readStorageOrThrow(projectRoot: string) {
-  const storage = await readCanonicalStorage(projectRoot);
-
-  expect(storage.ok).toBe(true);
-  if (!storage.ok) {
-    throw new Error(storage.error.message);
-  }
-
-  return storage.data;
 }
 
 async function writeProjectFile(

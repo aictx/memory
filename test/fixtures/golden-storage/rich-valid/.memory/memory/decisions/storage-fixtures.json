@@ -4,22 +4,22 @@
   "status": "active",
   "title": "Golden fixtures cover storage validation",
   "body_path": "memory/decisions/storage-fixtures.md",
-  "scope": {
-    "kind": "project",
-    "project": "project.golden-rich",
-    "branch": null,
-    "task": null
-  },
   "tags": [
-    "fixtures",
+    "fixture",
     "validation"
+  ],
+  "evidence": [
+    {
+      "kind": "file",
+      "id": "test/integration/fixtures.test.ts"
+    }
   ],
   "source": {
     "kind": "agent",
     "task": "T044"
   },
   "superseded_by": null,
-  "content_hash": "sha256:057bc3780887291a5a13a959dbc8fdaab20db1ee1ec2081fc21b906c407c92c0",
   "created_at": "2026-04-25T14:00:00+02:00",
-  "updated_at": "2026-04-25T14:00:00+02:00"
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:195d921aac3abf78d69b054e27b9504b2514b620606cf1045dbbe468d5aa7efa"
 }

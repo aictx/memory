@@ -4,21 +4,15 @@
   "status": "open",
   "title": "When should fixtures be refreshed?",
   "body_path": "memory/questions/fixture-refresh.md",
-  "scope": {
-    "kind": "project",
-    "project": "project.golden-rich",
-    "branch": null,
-    "task": null
-  },
   "tags": [
-    "maintenance"
+    "fixture"
   ],
   "source": {
     "kind": "agent",
     "task": "T044"
   },
   "superseded_by": null,
-  "content_hash": "sha256:a4ca66c8f4d7e1fbd6666328905a86118bc29a16ff74cdf27ed8f4908dd00efb",
   "created_at": "2026-04-25T14:00:00+02:00",
-  "updated_at": "2026-04-25T14:00:00+02:00"
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:9fad9bd5d5252744e8cea7924ead00491178a1fbc866019979e565cfba575d33"
 }

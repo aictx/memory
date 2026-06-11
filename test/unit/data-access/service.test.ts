@@ -23,10 +23,9 @@ afterEach(async () => {
 describe("data-access service", () => {
   it("exposes exactly the host-neutral contract operations", () => {
     expect(Object.keys(dataAccessService).sort()).toEqual([
-      "applyPatch",
       "diff",
       "inspect",
-      "remember",
+      "save",
       "search"
     ]);
   });
@@ -35,23 +34,23 @@ describe("data-access service", () => {
     const alphaRoot = await createInitializedProject("memory-data-access-alpha-");
     const betaRoot = await createInitializedProject("memory-data-access-beta-");
 
-    const alphaSaved = await dataAccessService.applyPatch({
+    const alphaSaved = await dataAccessService.save({
       target: {
         kind: "project-root",
         projectRoot: alphaRoot
       },
-      patch: createNotePatch(
-        "note.alpha-deployment-fact",
+      input: createGotchaInput(
+        "gotcha.alpha-deployment-fact",
         "Alpha-only deployment fact"
       ),
       clock: createFixedTestClock(FIXED_TIMESTAMP)
     });
-    const betaSaved = await dataAccessService.applyPatch({
+    const betaSaved = await dataAccessService.save({
       target: {
         kind: "project-root",
         projectRoot: betaRoot
       },
-      patch: createNotePatch("note.beta-deployment-fact", "Beta-only deployment fact"),
+      input: createGotchaInput("gotcha.beta-deployment-fact", "Beta-only deployment fact"),
       clock: createFixedTestClock(FIXED_TIMESTAMP)
     });
 
@@ -106,12 +105,12 @@ describe("data-access service", () => {
     const nestedCwd = join(projectRoot, "packages", "app", "src");
     await mkdir(nestedCwd, { recursive: true });
 
-    const saved = await dataAccessService.applyPatch({
+    const saved = await dataAccessService.save({
       target: {
         kind: "project-root",
         projectRoot
       },
-      patch: createNotePatch("note.nested-target-memory", "Nested target memory"),
+      input: createGotchaInput("gotcha.nested-target-memory", "Nested target memory"),
       clock: createFixedTestClock(FIXED_TIMESTAMP)
     });
 
@@ -122,7 +121,7 @@ describe("data-access service", () => {
         kind: "cwd",
         cwd: nestedCwd
       },
-      id: "note.nested-target-memory"
+      id: "gotcha.nested-target-memory"
     });
 
     expect(inspected.ok).toBe(true);
@@ -134,21 +133,21 @@ describe("data-access service", () => {
     }
 
     expect(inspected.data.object).toMatchObject({
-      id: "note.nested-target-memory",
+      id: "gotcha.nested-target-memory",
       title: "Nested target memory"
     });
   });
 
   it("preserves current app result envelopes for inspect success and errors", async () => {
     const projectRoot = await createInitializedProject("memory-data-access-envelope-");
-    const id = "note.envelope-preserved";
+    const id = "gotcha.envelope-preserved";
 
-    const saved = await dataAccessService.applyPatch({
+    const saved = await dataAccessService.save({
       target: {
         kind: "project-root",
         projectRoot
       },
-      patch: createNotePatch(id, "Envelope preserved"),
+      input: createGotchaInput(id, "Envelope preserved"),
       clock: createFixedTestClock(FIXED_TIMESTAMP)
     });
 
@@ -248,17 +247,13 @@ async function createTempRoot(prefix: string): Promise<string> {
   return resolvedRoot;
 }
 
-function createNotePatch(id: string, title: string) {
+function createGotchaInput(id: string, title: string) {
   return {
-    source: {
-      kind: "agent",
-      task: "Exercise data-access service targeting."
-    },
-    changes: [
+    task: "Exercise data-access service targeting.",
+    nodes: [
       {
-        op: "create_object",
         id,
-        type: "note",
+        kind: "gotcha",
         title,
         body: `# ${title}\n\n${title}.\n`
       }

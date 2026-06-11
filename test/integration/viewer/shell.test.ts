@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { main, type CliOutputWriter } from "../../../src/cli/main.js";
 import type {
   Evidence,
-  ObjectFacets,
+  FeatureStage,
   ObjectStatus,
   ObjectType,
   Predicate,
@@ -41,7 +41,8 @@ interface MemoryFixture {
   bodyPath: string;
   body: string;
   tags: string[];
-  facets?: ObjectFacets;
+  stage?: FeatureStage;
+  anchors?: string[];
   evidence?: Evidence[];
   origin?: SourceOrigin;
   updatedAt?: string;
@@ -106,11 +107,11 @@ describe("read-only viewer shell", () => {
       await expectCount(page, '[data-testid="memory-list-view"]', 0);
       await page.getByRole("button", { name: "Open project" }).first().click();
       await expectText(page, '[data-testid="graph-view"]', "Graph");
-      await expectText(page, '[data-testid="graph-node-count"]', "11");
-      await expectText(page, '[data-testid="graph-relation-count"]', "6");
-      await expectText(page, '[data-testid="graph-unlinked-count"]', "2");
-      await expectText(page, '[data-testid="graph-inspector"]', "Agent Guidance Synthesis");
-      await expectText(page, '[data-testid="graph-inspector"]', "Source: docs/agent-integration.md");
+      await expectText(page, '[data-testid="graph-node-count"]', "9");
+      await expectText(page, '[data-testid="graph-relation-count"]', "4");
+      await expectText(page, '[data-testid="graph-unlinked-count"]', "3");
+      await expectText(page, '[data-testid="graph-inspector"]', "Agent Integration Provenance");
+      await expectText(page, '[data-testid="graph-inspector"]', "Viewer Shell Layout");
       await openSidebar(page);
       await page.locator('[data-testid="nav-memories"]').click();
       await expectSidebarClosed(page);
@@ -122,47 +123,44 @@ describe("read-only viewer shell", () => {
       await expectCount(page, '[data-testid="context-preview-panel"]', 0);
       await page.selectOption('[data-testid="viewer-tag-filter"]', "viewer");
       await expect(objectRowIds(page)).resolves.toEqual([
-        "source.agent-integration",
-        "synthesis.agent-guidance",
+        "feature.release-checklist",
+        "decision.agent-integration",
         "decision.viewer-shell",
-        "constraint.viewer-markdown",
-        "fact.viewer-unrelated-source",
-        "fact.viewer-unrelated-target",
+        "gotcha.viewer-unrelated-source",
+        "gotcha.viewer-unrelated-target",
+        "gotcha.viewer-markdown",
         "gotcha.webhook-duplicates",
-        "workflow.release-checklist",
-        "note.viewer-empty"
+        "question.viewer-empty"
       ]);
       await expectText(page, '[data-testid="object-meta-decision.viewer-shell"]', "Edited 2026-04-25 14:01");
 
       await page.selectOption('[data-testid="viewer-sort"]', "updated-desc");
       await expectText(page, '[data-testid="memory-list-view"]', "Recently edited objects");
       await expect(objectRowIds(page)).resolves.toEqual([
-        "synthesis.agent-guidance",
         "decision.viewer-shell",
-        "constraint.viewer-markdown",
-        "source.agent-integration",
-        "fact.viewer-unrelated-source",
-        "fact.viewer-unrelated-target",
+        "gotcha.viewer-markdown",
+        "feature.release-checklist",
+        "decision.agent-integration",
+        "gotcha.viewer-unrelated-source",
+        "gotcha.viewer-unrelated-target",
         "gotcha.webhook-duplicates",
-        "workflow.release-checklist",
-        "note.viewer-empty"
+        "question.viewer-empty"
       ]);
 
       await page.selectOption('[data-testid="viewer-sort"]', "updated-asc");
       await expectText(page, '[data-testid="memory-list-view"]', "Oldest edited objects");
       await expect(objectRowIds(page)).resolves.toEqual([
-        "source.agent-integration",
-        "fact.viewer-unrelated-source",
-        "fact.viewer-unrelated-target",
+        "feature.release-checklist",
+        "decision.agent-integration",
+        "gotcha.viewer-unrelated-source",
+        "gotcha.viewer-unrelated-target",
         "gotcha.webhook-duplicates",
-        "workflow.release-checklist",
-        "note.viewer-empty",
-        "synthesis.agent-guidance",
+        "question.viewer-empty",
         "decision.viewer-shell",
-        "constraint.viewer-markdown"
+        "gotcha.viewer-markdown"
       ]);
-      await page.selectOption('[data-testid="viewer-type-filter"]', "constraint");
-      await expectCount(page, '[data-testid="object-row-constraint.viewer-markdown"]', 1);
+      await page.selectOption('[data-testid="viewer-type-filter"]', "gotcha");
+      await expectCount(page, '[data-testid="object-row-gotcha.viewer-markdown"]', 1);
       await expectCount(page, '[data-testid="object-row-decision.viewer-shell"]', 0);
       await page.selectOption('[data-testid="viewer-type-filter"]', "all");
       await page.selectOption('[data-testid="viewer-tag-filter"]', "all");
@@ -174,11 +172,10 @@ describe("read-only viewer shell", () => {
       await page.locator('[data-testid="nav-graph"]').click();
       await expectSidebarClosed(page);
       await expectText(page, '[data-testid="graph-view"]', "Graph");
-      await expectText(page, '[data-testid="graph-node-count"]', "11");
-      await expectText(page, '[data-testid="graph-relation-count"]', "6");
-      await expectText(page, '[data-testid="graph-unlinked-count"]', "2");
+      await expectText(page, '[data-testid="graph-node-count"]', "9");
+      await expectText(page, '[data-testid="graph-relation-count"]', "4");
+      await expectText(page, '[data-testid="graph-unlinked-count"]', "3");
       await expectText(page, '[data-testid="graph-legend"]', "Project");
-      await expectText(page, '[data-testid="graph-legend"]', "Provenance");
       await expectCount(page, '[data-testid="relation-graph"]', 1);
       await expectText(page, '[data-testid="graph-inspector"]', "Viewer Markdown Safety");
       await expectText(page, '[data-testid="graph-inspector"]', "Viewer Shell Layout");
@@ -187,7 +184,7 @@ describe("read-only viewer shell", () => {
       await page.locator('[data-testid="graph-fit"]').click();
       await page.locator('[data-testid="graph-reset-layout"]').click();
       await page.locator('[data-testid="graph-inspector"] button', { hasText: "Viewer Markdown Safety" }).click();
-      await expectText(page, '[data-testid="graph-inspector"]', "requires");
+      await expectText(page, '[data-testid="graph-inspector"]', "depends_on");
       await expectText(page, '[data-testid="graph-inspector"]', "Confidence");
       await expectText(page, '[data-testid="graph-inspector"]', "high");
       await page.locator('[data-testid="graph-inspector"] button', { hasText: "Source node" }).click();
@@ -197,69 +194,46 @@ describe("read-only viewer shell", () => {
 
       await page.selectOption('[data-testid="viewer-type-filter"]', "decision");
       await expectCount(page, '[data-testid="object-row-decision.viewer-shell"]', 1);
-      await expectCount(page, '[data-testid="object-row-constraint.viewer-markdown"]', 0);
+      await expectCount(page, '[data-testid="object-row-gotcha.viewer-markdown"]', 0);
 
-      await page.selectOption('[data-testid="viewer-type-filter"]', "all");
-      await page.selectOption('[data-testid="viewer-facet-filter"]', "decision-rationale");
-      await expectCount(page, '[data-testid="object-row-decision.viewer-shell"]', 1);
-      await expectCount(page, '[data-testid="object-row-constraint.viewer-markdown"]', 0);
-      await expectText(page, '[data-testid="object-meta-decision.viewer-shell"]', "decision-rationale");
-      await page.selectOption('[data-testid="viewer-facet-filter"]', "all");
-
-      await page.selectOption('[data-testid="viewer-type-filter"]', "gotcha");
-      await expectCount(page, '[data-testid="object-row-gotcha.webhook-duplicates"]', 1);
-      await page.selectOption('[data-testid="viewer-type-filter"]', "workflow");
-      await expectCount(page, '[data-testid="object-row-workflow.release-checklist"]', 1);
+      await page.selectOption('[data-testid="viewer-type-filter"]', "feature");
+      await expectCount(page, '[data-testid="object-row-feature.release-checklist"]', 1);
+      await expectCount(page, '[data-testid="object-row-decision.viewer-shell"]', 0);
 
       await page.selectOption('[data-testid="viewer-type-filter"]', "all");
       await page.selectOption('[data-testid="viewer-status-filter"]', "stale");
-      await expectCount(page, '[data-testid="object-row-fact.billing-context"]', 1);
+      await expectCount(page, '[data-testid="object-row-gotcha.billing-context"]', 1);
       await expectCount(page, '[data-testid="object-row-decision.viewer-shell"]', 0);
 
       await page.selectOption('[data-testid="viewer-status-filter"]', "all");
 
       await page.locator('[data-testid="viewer-layer-inactive"]').click();
-      await expectCount(page, '[data-testid="object-row-fact.billing-context"]', 1);
+      await expectCount(page, '[data-testid="object-row-gotcha.billing-context"]', 1);
       await expectCount(page, '[data-testid="object-row-decision.viewer-shell"]', 0);
 
       await page.locator('[data-testid="viewer-layer-memories"]').click();
       await expectCount(page, '[data-testid="object-row-decision.viewer-shell"]', 1);
-      await expectCount(page, '[data-testid="object-row-synthesis.agent-guidance"]', 0);
-      await expectCount(page, '[data-testid="object-row-workflow.release-checklist"]', 1);
-
-      await page.locator('[data-testid="viewer-layer-sources"]').click();
-      await expectCount(page, '[data-testid="object-row-source.agent-integration"]', 1);
-      await expectCount(page, '[data-testid="object-row-decision.viewer-shell"]', 0);
-
-      await page.locator('[data-testid="viewer-layer-syntheses"]').click();
-      await expectCount(page, '[data-testid="object-row-synthesis.agent-guidance"]', 1);
-      await expectCount(page, '[data-testid="object-row-source.agent-integration"]', 0);
+      await expectCount(page, '[data-testid="object-row-gotcha.billing-context"]', 0);
+      await expectCount(page, '[data-testid="object-row-feature.release-checklist"]', 1);
 
       await page.locator('[data-testid="viewer-layer-all"]').click();
-      await setViewerSearch(page, "agent guidance provenance");
-      await page.locator('[data-testid="object-row-synthesis.agent-guidance"]').click();
-      await assertSelectedObject(page, "Agent Guidance Synthesis", "synthesis.agent-guidance");
-      await expectText(page, '[data-testid="selected-object"]', "Source: docs/agent-integration.md");
-      await expectText(page, '[data-testid="selected-object"]', "derived_from");
-      await expectText(page, '[data-testid="selected-object"]', "supports");
-      await expectText(page, '[data-testid="selected-object"]', "challenges");
+      await setViewerSearch(page, "agent integration provenance");
+      await page.locator('[data-testid="object-row-decision.agent-integration"]').click();
+      await assertSelectedObject(page, "Agent Integration Provenance", "decision.agent-integration");
+      await expectText(page, '[data-testid="selected-object"]', "related_to");
+      await expectText(page, '[data-testid="selected-object"]', "Viewer Shell Layout");
       await expectText(page, '[data-testid="selected-object"]', "Webhook Duplicates");
-      await page.getByRole("button", { name: "Source: docs/agent-integration.md" }).first().click();
-      await assertSelectedObject(page, "Source: docs/agent-integration.md", "source.agent-integration");
-      await expectText(page, '[data-testid="selected-object"]', "file");
       await expectText(page, '[data-testid="selected-object"]', "docs/agent-integration.md");
       await expectText(page, '[data-testid="selected-object"]', "text/markdown");
-      await page.locator('[data-testid="object-row-source.agent-integration"]').click();
-      await expectText(page, '[data-testid="memory-list-view"]', "Agent Guidance Synthesis");
+      await page.locator('[data-testid="object-row-decision.agent-integration"]').click();
+      await expectText(page, '[data-testid="memory-list-view"]', "Agent Integration Provenance");
 
       await setViewerSearch(page, "markdown safety");
-      await page.locator('[data-testid="object-row-constraint.viewer-markdown"]').click();
-      await assertSelectedObject(page, "Viewer Markdown Safety", "constraint.viewer-markdown");
-      await expectText(page, '[data-testid="selected-object"]', "business-rule");
-      await expectText(page, '[data-testid="facet-details"]', "viewer/src/App.svelte");
+      await page.locator('[data-testid="object-row-gotcha.viewer-markdown"]').click();
+      await assertSelectedObject(page, "Viewer Markdown Safety", "gotcha.viewer-markdown");
       await assertMarkdownIsSafe(page);
 
-      await page.locator('[data-testid="object-row-constraint.viewer-markdown"]').click();
+      await page.locator('[data-testid="object-row-gotcha.viewer-markdown"]').click();
       await page.selectOption('[data-testid="viewer-tag-filter"]', "security");
       await expectText(page, '[data-testid="memory-list-view"]', "Viewer Markdown Safety");
       await expectCount(page, '[data-testid="object-row-decision.viewer-shell"]', 0);
@@ -268,30 +242,30 @@ describe("read-only viewer shell", () => {
       await setViewerSearch(page, "shell layout");
       await page.locator('[data-testid="object-row-decision.viewer-shell"]').click();
       await assertSelectedObject(page, "Viewer Shell Layout", "decision.viewer-shell");
-      await expectText(page, '[data-testid="outgoing-relations"]', "requires");
+      await expectText(page, '[data-testid="outgoing-relations"]', "depends_on");
       await expectText(page, '[data-testid="outgoing-relations"]', "Viewer Markdown Safety");
       await expectNoText(page, '[data-testid="selected-object"]', "Unrelated Source");
       await expectNoText(page, '[data-testid="selected-object"]', "Unrelated Target");
       await expectCount(page, '[data-testid="relation-graph"]', 0);
 
-      await page.locator('[data-testid="relation-card-rel.viewer-shell-requires-markdown"] button').click();
-      await assertSelectedObject(page, "Viewer Markdown Safety", "constraint.viewer-markdown");
+      await page.locator('[data-testid="relation-card-rel.viewer-shell-depends-on-markdown"] button').click();
+      await assertSelectedObject(page, "Viewer Markdown Safety", "gotcha.viewer-markdown");
       await expectText(page, '[data-testid="incoming-relations"]', "Viewer Shell Layout");
-      await expectText(page, '[data-testid="incoming-relations"]', "requires");
+      await expectText(page, '[data-testid="incoming-relations"]', "depends_on");
       await expectNoText(page, '[data-testid="selected-object"]', "Unrelated Source");
 
       await page.locator('[data-testid="technical-details"] summary').click();
-      await expectText(page, '[data-testid="json-view"]', '"id": "constraint.viewer-markdown"');
-      await expectText(page, '[data-testid="json-view"]', '"body_path": ".memory/memory/constraints/viewer-markdown.md"');
+      await expectText(page, '[data-testid="json-view"]', '"id": "gotcha.viewer-markdown"');
+      await expectText(page, '[data-testid="json-view"]', '"body_path": ".memory/memory/gotchas/viewer-markdown.md"');
       await expectText(page, '[data-testid="incoming-relations"]', "Viewer Shell Layout");
 
-      await page.locator('[data-testid="object-row-constraint.viewer-markdown"]').click();
+      await page.locator('[data-testid="object-row-gotcha.viewer-markdown"]').click();
       await expectText(page, '[data-testid="memory-list-view"]', "Viewer Shell Layout");
-      await expectCount(page, '[data-testid="object-row-constraint.viewer-markdown"]', 1);
+      await expectCount(page, '[data-testid="object-row-gotcha.viewer-markdown"]', 1);
 
       await setViewerSearch(page, "empty neighborhood");
-      await page.locator('[data-testid="object-row-note.viewer-empty"]').click();
-      await assertSelectedObject(page, "Viewer Empty Neighborhood", "note.viewer-empty");
+      await page.locator('[data-testid="object-row-question.viewer-empty"]').click();
+      await assertSelectedObject(page, "Viewer Empty Neighborhood", "question.viewer-empty");
       await expectText(page, '[data-testid="outgoing-relations"]', "No outgoing related memories.");
       await expectText(page, '[data-testid="incoming-relations"]', "No incoming related memories.");
       await expectCount(page, '[data-testid="relation-graph"]', 0);
@@ -313,6 +287,7 @@ describe("read-only viewer shell", () => {
     expect(assets.isFile()).toBe(true);
 
     const projectRoot = await createInitializedProject("memory-viewer-starter-project-");
+    const projectObjectId = (await readStorageOrThrow(projectRoot)).config.project.id;
     const memoryHome = await createTempRoot("memory-viewer-starter-home-");
     const started = await startViewerServer({
       cwd: projectRoot,
@@ -345,41 +320,38 @@ describe("read-only viewer shell", () => {
 
       await expectText(page, '[data-testid="graph-view"]', "Graph");
       await expectText(page, '[data-testid="graph-mobile-selection"]', "Selected object");
-      await expectText(page, '[data-testid="graph-mobile-selection"]', "Current Architecture");
+      await expectText(page, '[data-testid="graph-mobile-selection"]', "Memory Viewer Starter Project");
       const mobileGraphBox = await page.locator('[data-testid="relation-graph"]').boundingBox();
       expect(mobileGraphBox?.height).toBeLessThan(390);
       await openSidebar(page);
       await page.locator('[data-testid="nav-memories"]').click();
       await expectSidebarClosed(page);
-      await expectText(page, '[data-testid="starter-memory-notice"]', "Starter memory only.");
-      await expectText(page, '[data-testid="starter-memory-notice"]', "memory suggest --bootstrap --patch > bootstrap-memory.json");
-      await expectText(page, '[data-testid="starter-memory-notice"]', "memory save --file bootstrap-memory.json");
       await expectText(page, '[data-testid="memory-list-view"]', "Memory Schema");
       await expectText(page, '[data-testid="memory-list-view"]', "Canonical objects");
       await expectNoText(page, '[data-testid="memory-list-view"]', "Schema projection loaded");
       await expect(page.locator('[data-testid="schema-context-toggle"]').isVisible()).resolves.toBe(true);
       await expect(page.locator('[data-testid="doc-relation-overview"]').isVisible()).resolves.toBe(true);
-      await page.locator('[data-testid="object-row-architecture.current"]').click();
+      await page.locator(`[data-testid="object-row-${projectObjectId}"]`).click();
       await expectCount(page, '[data-testid="selected-object"]', 1);
       await expectCount(page, '[data-testid="selected-object-back"]', 1);
       await expectCount(page, '[data-testid="selected-object-graph"]', 1);
       await expect(page.locator('[data-testid="schema-context-toggle"]').isHidden()).resolves.toBe(true);
-      await expectText(page, '[data-testid="incoming-relations"]', "related_to");
+      await expectText(page, '[data-testid="incoming-relations"]', "No incoming related memories.");
       await expectCount(page, '[data-testid="relation-graph"]', 0);
       await page.locator('[data-testid="selected-object-back"]').click();
       await expectCount(page, '[data-testid="selected-object"]', 0);
-      await expectCount(page, '[data-testid="object-row-architecture.current"]', 1);
+      await expectCount(page, `[data-testid="object-row-${projectObjectId}"]`, 1);
 
       await page.setViewportSize({ width: 1024, height: 760 });
-      await page.locator('[data-testid="object-row-architecture.current"]').click();
+      await page.locator(`[data-testid="object-row-${projectObjectId}"]`).click();
       await expectCount(page, '[data-testid="selected-object"]', 1);
       await expectCount(page, '[data-testid="selected-object-back"]', 1);
       await expectCount(page, '[data-testid="selected-object-graph"]', 1);
       await expect(page.locator('[data-testid="schema-context-toggle"]').isHidden()).resolves.toBe(true);
-      await expect(page.locator('[data-testid="object-row-architecture.current"]').isHidden()).resolves.toBe(true);
+      await expect(page.locator(`[data-testid="object-row-${projectObjectId}"]`).isHidden()).resolves.toBe(true);
       await page.locator('[data-testid="selected-object-graph"]').click();
       await expectText(page, '[data-testid="graph-view"]', "Graph");
-      await expectText(page, '[data-testid="graph-inspector"]', "Current Architecture");
+      await expectText(page, '[data-testid="graph-inspector"]', "Memory Viewer Starter Project");
 
       expect(consoleErrors()).toEqual([]);
     } finally {
@@ -562,11 +534,11 @@ function collectPageErrors(page: Page): () => string[] {
 
 async function writeViewerFixtures(projectRoot: string): Promise<void> {
   await writeMemoryObject(projectRoot, {
-    id: "constraint.viewer-markdown",
-    type: "constraint",
+    id: "gotcha.viewer-markdown",
+    type: "gotcha",
     status: "active",
     title: "Viewer Markdown Safety",
-    bodyPath: "memory/constraints/viewer-markdown.md",
+    bodyPath: "memory/gotchas/viewer-markdown.md",
     body: [
       "# Viewer Markdown Safety",
       "",
@@ -577,11 +549,7 @@ async function writeViewerFixtures(projectRoot: string): Promise<void> {
       ""
     ].join("\n"),
     tags: ["viewer", "security"],
-    facets: {
-      category: "business-rule",
-      applies_to: ["viewer/src/App.svelte"],
-      load_modes: ["review"]
-    },
+    anchors: ["viewer/src/App.svelte"],
     updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
   });
   await writeMemoryObject(projectRoot, {
@@ -592,31 +560,25 @@ async function writeViewerFixtures(projectRoot: string): Promise<void> {
     bodyPath: "memory/decisions/viewer-shell.md",
     body: "# Viewer Shell Layout\n\nThe shell shows a searchable object list and direct relation context.\n",
     tags: ["viewer", "ui"],
-    facets: {
-      category: "decision-rationale",
-      applies_to: ["viewer/src/App.svelte"]
-    },
+    anchors: ["viewer/src/App.svelte"],
     updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
   });
   await writeMemoryObject(projectRoot, {
-    id: "fact.billing-context",
-    type: "fact",
+    id: "gotcha.billing-context",
+    type: "gotcha",
     status: "stale",
     title: "Billing Context",
-    bodyPath: "memory/facts/billing-context.md",
+    bodyPath: "memory/gotchas/billing-context.md",
     body: "# Billing Context\n\nThis fixture proves unrelated memory can be filtered away.\n",
     tags: ["billing"],
-    facets: {
-      category: "debugging-fact"
-    },
     updatedAt: FIXED_TIMESTAMP
   });
   await writeMemoryObject(projectRoot, {
-    id: "note.viewer-empty",
-    type: "note",
-    status: "active",
+    id: "question.viewer-empty",
+    type: "question",
+    status: "open",
     title: "Viewer Empty Neighborhood",
-    bodyPath: "memory/notes/viewer-empty.md",
+    bodyPath: "memory/questions/viewer-empty.md",
     body: "# Viewer Empty Neighborhood\n\nThis fixture has no direct relation neighborhood.\n",
     tags: ["viewer", "empty"],
     updatedAt: FIXED_TIMESTAMP
@@ -629,38 +591,27 @@ async function writeViewerFixtures(projectRoot: string): Promise<void> {
     bodyPath: "memory/gotchas/webhook-duplicates.md",
     body: "# Webhook Duplicates\n\nNever assume webhook delivery is unique.\n",
     tags: ["viewer", "webhook"],
-    facets: {
-      category: "gotcha"
-    },
     updatedAt: FIXED_TIMESTAMP
   });
   await writeMemoryObject(projectRoot, {
-    id: "workflow.release-checklist",
-    type: "workflow",
+    id: "feature.release-checklist",
+    type: "feature",
     status: "active",
     title: "Release Checklist",
-    bodyPath: "memory/workflows/release-checklist.md",
+    bodyPath: "memory/features/release-checklist.md",
     body: "# Release Checklist\n\nRun pnpm test before publishing.\n",
     tags: ["viewer", "release"],
-    facets: {
-      category: "workflow",
-      load_modes: ["coding", "review"]
-    },
+    stage: "building",
     updatedAt: FIXED_TIMESTAMP
   });
   await writeMemoryObject(projectRoot, {
-    id: "source.agent-integration",
-    type: "source",
+    id: "decision.agent-integration",
+    type: "decision",
     status: "active",
-    title: "Source: docs/agent-integration.md",
-    bodyPath: "memory/sources/agent-integration.md",
-    body: "# Source: docs/agent-integration.md\n\nViewer source fixture for agent guidance provenance.\n",
-    tags: ["viewer", "source", "guidance"],
-    facets: {
-      category: "source",
-      applies_to: ["docs/agent-integration.md"],
-      load_modes: ["onboarding"]
-    },
+    title: "Agent Integration Provenance",
+    bodyPath: "memory/decisions/agent-integration.md",
+    body: "# Agent Integration Provenance\n\nViewer fixture for agent integration provenance metadata.\n",
+    tags: ["viewer", "guidance"],
     evidence: [{ kind: "file", id: "docs/agent-integration.md" }],
     origin: {
       kind: "file",
@@ -671,81 +622,56 @@ async function writeViewerFixtures(projectRoot: string): Promise<void> {
     updatedAt: FIXED_TIMESTAMP
   });
   await writeMemoryObject(projectRoot, {
-    id: "synthesis.agent-guidance",
-    type: "synthesis",
-    status: "active",
-    title: "Agent Guidance Synthesis",
-    bodyPath: "memory/syntheses/agent-guidance.md",
-    body:
-      "# Agent Guidance Synthesis\n\nThis synthesis explains agent guidance provenance for source-backed viewer tests.\n",
-    tags: ["viewer", "synthesis", "guidance"],
-    facets: {
-      category: "agent-guidance",
-      applies_to: ["docs/agent-integration.md"],
-      load_modes: ["coding", "onboarding"]
-    },
-    evidence: [{ kind: "source", id: "source.agent-integration" }],
-    updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
-  });
-  await writeMemoryObject(projectRoot, {
-    id: "fact.viewer-unrelated-source",
-    type: "fact",
+    id: "gotcha.viewer-unrelated-source",
+    type: "gotcha",
     status: "active",
     title: "Unrelated Source",
-    bodyPath: "memory/facts/viewer-unrelated-source.md",
+    bodyPath: "memory/gotchas/viewer-unrelated-source.md",
     body: "# Unrelated Source\n\nThis fixture must not appear in another object's selected graph.\n",
     tags: ["viewer", "unrelated"],
     updatedAt: FIXED_TIMESTAMP
   });
   await writeMemoryObject(projectRoot, {
-    id: "fact.viewer-unrelated-target",
-    type: "fact",
+    id: "gotcha.viewer-unrelated-target",
+    type: "gotcha",
     status: "active",
     title: "Unrelated Target",
-    bodyPath: "memory/facts/viewer-unrelated-target.md",
+    bodyPath: "memory/gotchas/viewer-unrelated-target.md",
     body: "# Unrelated Target\n\nThis fixture is linked only to the unrelated source.\n",
     tags: ["viewer", "unrelated"],
     updatedAt: FIXED_TIMESTAMP
   });
   await writeRelation(projectRoot, {
-    id: "rel.viewer-shell-requires-markdown",
+    id: "rel.viewer-shell-depends-on-markdown",
     from: "decision.viewer-shell",
-    predicate: "requires",
-    to: "constraint.viewer-markdown",
+    predicate: "depends_on",
+    to: "gotcha.viewer-markdown",
     status: "active"
   });
   await writeRelation(projectRoot, {
     id: "rel.viewer-unrelated-affects-target",
-    from: "fact.viewer-unrelated-source",
+    from: "gotcha.viewer-unrelated-source",
     predicate: "affects",
-    to: "fact.viewer-unrelated-target",
+    to: "gotcha.viewer-unrelated-target",
     status: "active"
   });
   await writeRelation(projectRoot, {
-    id: "rel.synthesis-agent-guidance-derived-from-source-agent-integration",
-    from: "synthesis.agent-guidance",
-    predicate: "derived_from",
-    to: "source.agent-integration",
+    id: "rel.agent-integration-related-to-shell",
+    from: "decision.agent-integration",
+    predicate: "related_to",
+    to: "decision.viewer-shell",
     status: "active"
   });
   await writeRelation(projectRoot, {
-    id: "rel.source-agent-integration-supports-synthesis-agent-guidance",
-    from: "source.agent-integration",
-    predicate: "supports",
-    to: "synthesis.agent-guidance",
-    status: "active"
-  });
-  await writeRelation(projectRoot, {
-    id: "rel.gotcha-webhook-duplicates-challenges-synthesis-agent-guidance",
+    id: "rel.webhook-duplicates-affects-agent-integration",
     from: "gotcha.webhook-duplicates",
-    predicate: "challenges",
-    to: "synthesis.agent-guidance",
+    predicate: "affects",
+    to: "decision.agent-integration",
     status: "active"
   });
 }
 
 async function writeMemoryObject(projectRoot: string, fixture: MemoryFixture): Promise<void> {
-  const storage = await readStorageOrThrow(projectRoot);
   const timestamp = fixture.updatedAt ?? FIXED_TIMESTAMP;
   const sidecarWithoutHash = {
     id: fixture.id,
@@ -753,14 +679,9 @@ async function writeMemoryObject(projectRoot: string, fixture: MemoryFixture): P
     status: fixture.status,
     title: fixture.title,
     body_path: fixture.bodyPath,
-    scope: {
-      kind: "project",
-      project: storage.config.project.id,
-      branch: null,
-      task: null
-    },
+    ...(fixture.stage === undefined ? {} : { stage: fixture.stage }),
+    ...(fixture.anchors === undefined ? {} : { anchors: fixture.anchors }),
     tags: fixture.tags,
-    ...(fixture.facets === undefined ? {} : { facets: fixture.facets }),
     ...(fixture.evidence === undefined ? {} : { evidence: fixture.evidence }),
     ...(fixture.origin === undefined ? {} : { origin: fixture.origin }),
     source: {

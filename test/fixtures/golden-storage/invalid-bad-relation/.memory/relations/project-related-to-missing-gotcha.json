@@ -1,0 +1,10 @@
+{
+  "id": "rel.project-related-to-missing-gotcha",
+  "from": "project.invalid-bad-relation",
+  "predicate": "related_to",
+  "to": "gotcha.missing",
+  "status": "active",
+  "created_at": "2026-04-25T14:00:00+02:00",
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:2acd78b6f12ea30d03075f775e4e53ddf3fa41f378340839ad0c8c8c14e9bd76"
+}

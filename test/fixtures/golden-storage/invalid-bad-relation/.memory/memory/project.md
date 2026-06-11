@@ -1,3 +1,3 @@
 # Invalid Bad Relation
 
-Invalid golden storage fixture.
+Project-level memory for Invalid Bad Relation.

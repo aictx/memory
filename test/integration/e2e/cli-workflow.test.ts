@@ -126,7 +126,7 @@ describe("memory full CLI workflow", () => {
     const saveEnvelope = parseSuccessEnvelope<SaveData>(saveOutput.stdout);
     expect(saveEnvelope.data.memory_updated).toContain(projectId);
     expect(saveEnvelope.data.memory_created).toContain("decision.workflow-retry-queue");
-    expect(saveEnvelope.data.memory_created).toContain("constraint.workflow-local-only");
+    expect(saveEnvelope.data.memory_created).toContain("gotcha.workflow-local-only");
     expect(saveEnvelope.data.index_updated).toBe(true);
     expect(saveEnvelope.meta.git.dirty).toBe(true);
 
@@ -236,13 +236,9 @@ describe("memory full CLI workflow", () => {
 
 function createGitWorkflowPatch(projectId: string) {
   return {
-    source: {
-      kind: "agent",
-      task: "Full CLI workflow test"
-    },
-    changes: [
+    task: "Full CLI workflow test",
+    nodes: [
       {
-        op: "update_object",
         id: projectId,
         title: "Workflow Project Memory",
         body:
@@ -250,22 +246,28 @@ function createGitWorkflowPatch(projectId: string) {
         tags: ["workflow", "retry", "e2e"]
       },
       {
-        op: "create_object",
-        id: "constraint.workflow-local-only",
-        type: "constraint",
+        id: "gotcha.workflow-local-only",
+        kind: "gotcha",
         title: "Workflow stays local",
         body:
           "# Workflow stays local\n\nFull CLI workflow tests must pass without network access and restore must stay scoped to .memory/ only.\n",
         tags: ["workflow", "local", "restore"]
       },
       {
-        op: "create_object",
         id: "decision.workflow-retry-queue",
-        type: "decision",
+        kind: "decision",
         title: "Workflow retry queue",
         body:
           "# Workflow retry queue\n\nUse the generated SQLite index and CLI adapters to load and search saved workflow retry queue memory. Do not mutate product files from the e2e test.\n",
-        tags: ["workflow", "retry", "queue"]
+        tags: ["workflow", "retry", "queue"],
+        anchors: ["src/cli/main.ts"],
+        related: [
+          {
+            predicate: "depends_on",
+            to: "gotcha.workflow-local-only",
+            confidence: "high"
+          }
+        ]
       }
     ]
   };
@@ -273,15 +275,11 @@ function createGitWorkflowPatch(projectId: string) {
 
 function createNonGitWorkflowPatch() {
   return {
-    source: {
-      kind: "agent",
-      task: "Full CLI workflow non Git test"
-    },
-    changes: [
+    task: "Full CLI workflow non Git test",
+    nodes: [
       {
-        op: "create_object",
         id: "decision.nongit-cli-workflow",
-        type: "decision",
+        kind: "decision",
         title: "Non Git CLI workflow",
         body:
           "# Non Git CLI workflow\n\nCore non git workflow search, load, check, and rebuild commands must work without Git metadata.\n",

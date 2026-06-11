@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aictx.dev/schemas/v1/relation.schema.json",
+  "$id": "https://aictx.dev/schemas/v5/relation.schema.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "from", "predicate", "to", "status", "created_at", "updated_at"],
@@ -14,7 +14,7 @@
       "pattern": "^[a-z][a-z0-9_]*\\.[a-z0-9][a-z0-9-]*$"
     },
     "predicate": {
-      "enum": ["affects", "requires", "depends_on", "supersedes", "conflicts_with", "mentions", "implements", "related_to"]
+      "enum": ["affects", "depends_on", "supersedes", "related_to"]
     },
     "to": {
       "type": "string",
@@ -34,7 +34,7 @@
         "required": ["kind", "id"],
         "properties": {
           "kind": {
-            "enum": ["memory", "relation", "file", "commit"]
+            "enum": ["memory", "relation", "file", "commit", "task", "source"]
           },
           "id": {
             "type": "string",

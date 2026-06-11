@@ -1,0 +1,11 @@
+{
+  "id": "rel.storage-fixtures-depends-on-hashes",
+  "from": "decision.storage-fixtures",
+  "predicate": "depends_on",
+  "to": "gotcha.hashes-deterministic",
+  "status": "active",
+  "confidence": "high",
+  "created_at": "2026-04-25T14:00:00+02:00",
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:61a3ec067ec81fdfd37ce888a8ff4241a66db42bd797e4feebf87bb1c3148a24"
+}

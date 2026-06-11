@@ -4,12 +4,6 @@
   "status": "active",
   "title": "Golden Rich",
   "body_path": "memory/project.md",
-  "scope": {
-    "kind": "project",
-    "project": "project.golden-rich",
-    "branch": null,
-    "task": null
-  },
   "tags": [
     "fixture"
   ],
@@ -17,7 +11,7 @@
     "kind": "system"
   },
   "superseded_by": null,
-  "content_hash": "sha256:4ac3c49a8500a447001c309840ac7f37ca3673d8d2ccb40480ab9a753bda943b",
   "created_at": "2026-04-25T14:00:00+02:00",
-  "updated_at": "2026-04-25T14:00:00+02:00"
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:bb342b73fe023ad51238f624a617fe4fd2d29fe138ffe35cb531562fea43b41b"
 }

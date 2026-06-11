@@ -11,7 +11,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { version } from "../generated/version.js";
 import type { MemoryMcpContext } from "./context.js";
 import { inspectMemoryTool } from "./tools/inspect-memory.js";
-import { rememberMemoryTool } from "./tools/remember-memory.js";
+import { saveMemoryTool } from "./tools/save-memory.js";
 import { searchMemoryTool } from "./tools/search-memory.js";
 
 export interface MemoryMcpServer {
@@ -171,13 +171,13 @@ function registerTools(mcp: MemoryMcpServer): void {
     (args) => inspectMemoryTool.call(mcp.context, args)
   );
   mcp.server.registerTool(
-    rememberMemoryTool.name,
+    saveMemoryTool.name,
     {
-      title: rememberMemoryTool.title,
-      description: rememberMemoryTool.description,
-      inputSchema: rememberMemoryTool.inputSchema,
-      annotations: rememberMemoryTool.annotations
+      title: saveMemoryTool.title,
+      description: saveMemoryTool.description,
+      inputSchema: saveMemoryTool.inputSchema,
+      annotations: saveMemoryTool.annotations
     },
-    (args) => rememberMemoryTool.call(mcp.context, args)
+    (args) => saveMemoryTool.call(mcp.context, args)
   );
 }

@@ -1,3 +1,3 @@
 # Golden Minimal
 
-Minimal golden storage fixture.
+Project-level memory for Golden Minimal.

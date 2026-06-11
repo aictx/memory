@@ -1,0 +1,23 @@
+{
+  "id": "project.legacy-v4",
+  "type": "project",
+  "status": "active",
+  "title": "Legacy V4",
+  "body_path": "memory/project.md",
+  "tags": [
+    "fixture"
+  ],
+  "source": {
+    "kind": "system"
+  },
+  "superseded_by": null,
+  "scope": {
+    "kind": "project",
+    "project": "project.legacy-v4",
+    "branch": null,
+    "task": null
+  },
+  "created_at": "2026-04-25T14:00:00+02:00",
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:1d88796b7e44c4ed302b6bc720a4c59b91039ecd8e74fecbaa8b8b556e148780"
+}

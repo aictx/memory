@@ -14,7 +14,7 @@ import {
   computeObjectContentHash,
   computeRelationContentHash
 } from "../../../src/storage/hashes.js";
-import type { Evidence, ObjectFacets } from "../../../src/core/types.js";
+import type { Evidence } from "../../../src/core/types.js";
 import type { MemoryObjectSidecar } from "../../../src/storage/objects.js";
 import { readCanonicalStorage } from "../../../src/storage/read.js";
 import type { MemoryRelation } from "../../../src/storage/relations.js";
@@ -31,13 +31,14 @@ afterEach(async () => {
 describe("incremental index update", () => {
   it("skips unchanged object rows by content hash", async () => {
     const projectRoot = await createInitializedProject("memory-incremental-skip-");
+    const projectId = await readProjectObjectId(projectRoot);
 
     const result = await updateIndexIncrementally({
       projectRoot,
       memoryRoot: join(projectRoot, ".memory"),
       clock: createFixedTestClock(FIXED_TIMESTAMP_NEXT_MINUTE),
       touched: {
-        objectIds: ["architecture.current"]
+        objectIds: [projectId]
       }
     });
 
@@ -61,19 +62,15 @@ describe("incremental index update", () => {
       return;
     }
 
-    await writeObject(projectRoot, storage.data.config.project.id, {
-      id: "note.incremental-search",
-      type: "note",
+    await writeObject(projectRoot, {
+      id: "gotcha.incremental-search",
+      type: "gotcha",
       title: "Incremental search",
-      bodyPath: "memory/notes/incremental-search.md",
-      sidecarPath: ".memory/memory/notes/incremental-search.json",
+      bodyPath: "memory/gotchas/incremental-search.md",
+      sidecarPath: ".memory/memory/gotchas/incremental-search.json",
       body: "# Incremental search\n\nSQLite FTS receives the new body for src/index/incremental.ts during updates.\n",
       tags: ["sqlite", "search"],
-      facets: {
-        category: "testing",
-        applies_to: ["src/index/incremental.ts"],
-        load_modes: ["coding"]
-      },
+      anchors: ["src/index/incremental.ts", "src/index/"],
       evidence: [
         { kind: "file", id: "src/index/incremental.ts" },
         { kind: "commit", id: "abc123" }
@@ -86,7 +83,7 @@ describe("incremental index update", () => {
       memoryRoot: join(projectRoot, ".memory"),
       clock: createFixedTestClock(FIXED_TIMESTAMP_NEXT_MINUTE),
       touched: {
-        objectIds: ["note.incremental-search"]
+        objectIds: ["gotcha.incremental-search"]
       }
     });
 
@@ -98,31 +95,26 @@ describe("incremental index update", () => {
 
     const connection = await openConnection(projectRoot);
     try {
-      expect(readObject(connection.db, "note.incremental-search")).toMatchObject({
-        id: "note.incremental-search",
+      expect(readObject(connection.db, "gotcha.incremental-search")).toMatchObject({
+        id: "gotcha.incremental-search",
         title: "Incremental search",
-        tags_json: JSON.stringify(["sqlite", "search"])
+        tags_json: JSON.stringify(["sqlite", "search"]),
+        anchors_json: JSON.stringify(["src/index/incremental.ts", "src/index/"])
       });
-      expect(readFts(connection.db, "note.incremental-search")).toMatchObject({
-        object_id: "note.incremental-search",
+      expect(readFts(connection.db, "gotcha.incremental-search")).toMatchObject({
+        object_id: "gotcha.incremental-search",
         title: "Incremental search",
         body: "# Incremental search\n\nSQLite FTS receives the new body for src/index/incremental.ts during updates.\n",
-        tags: "sqlite search"
+        tags: "sqlite search",
+        anchors: "src/index/incremental.ts src/index/"
       });
-      expect(readMemoryFileLinks(connection.db, "note.incremental-search")).toEqual([
+      expect(readMemoryFileLinks(connection.db, "gotcha.incremental-search")).toEqual([
         { file_path: "src/index/incremental.ts", link_kind: "body.reference" },
-        { file_path: "src/index/incremental.ts", link_kind: "evidence.file" },
-        { file_path: "src/index/incremental.ts", link_kind: "facets.applies_to" }
+        { file_path: "src/index/incremental.ts", link_kind: "evidence.file" }
       ]);
-      expect(readMemoryCommitLinks(connection.db, "note.incremental-search")).toEqual([
+      expect(readMemoryCommitLinks(connection.db, "gotcha.incremental-search")).toEqual([
         { commit_hash: "abc123", link_kind: "evidence.commit" },
         { commit_hash: "def456", link_kind: "source.commit" }
-      ]);
-      expect(readMemoryFacetLinks(connection.db, "note.incremental-search")).toEqual([
-        { facet: "coding", link_kind: "load_mode" },
-        { facet: "search", link_kind: "tag" },
-        { facet: "sqlite", link_kind: "tag" },
-        { facet: "testing", link_kind: "category" }
       ]);
     } finally {
       connection.close();
@@ -131,30 +123,46 @@ describe("incremental index update", () => {
 
   it("deletes touched objects from objects and FTS", async () => {
     const projectRoot = await createInitializedProject("memory-incremental-delete-object-");
-    const storage = await readCanonicalStorage(projectRoot);
-    expect(storage.ok).toBe(true);
-    if (!storage.ok) {
-      throw new Error(storage.error.message);
-    }
-    const relation = storage.data.relations.find(
-      (item) => item.relation.to === "architecture.current"
-    );
-    expect(relation).toBeDefined();
-    if (relation === undefined) {
-      throw new Error("Expected starter relation to architecture.current.");
-    }
+    const projectId = await readProjectObjectId(projectRoot);
 
-    await rm(join(projectRoot, ".memory", "memory", "architecture.md"));
-    await rm(join(projectRoot, ".memory", "memory", "architecture.json"));
-    await rm(join(projectRoot, relation.path));
+    await writeObject(projectRoot, {
+      id: "decision.delete-me",
+      type: "decision",
+      title: "Delete me",
+      bodyPath: "memory/decisions/delete-me.md",
+      sidecarPath: ".memory/memory/decisions/delete-me.json",
+      body: "# Delete me\n\nThis decision will be deleted from the index.\n",
+      tags: []
+    });
+    const relation = buildRelation("decision.delete-me", projectId);
+    await writeJsonProjectFile(
+      projectRoot,
+      ".memory/relations/decision-related-to-project.json",
+      relation
+    );
+
+    const indexed = await updateIndexIncrementally({
+      projectRoot,
+      memoryRoot: join(projectRoot, ".memory"),
+      clock: createFixedTestClock(FIXED_TIMESTAMP_NEXT_MINUTE),
+      touched: {
+        objectIds: ["decision.delete-me"],
+        relationIds: [relation.id]
+      }
+    });
+    expect(indexed.ok).toBe(true);
+
+    await rm(join(projectRoot, ".memory", "memory", "decisions", "delete-me.md"));
+    await rm(join(projectRoot, ".memory", "memory", "decisions", "delete-me.json"));
+    await rm(join(projectRoot, ".memory", "relations", "decision-related-to-project.json"));
 
     const result = await updateIndexIncrementally({
       projectRoot,
       memoryRoot: join(projectRoot, ".memory"),
       clock: createFixedTestClock(FIXED_TIMESTAMP_NEXT_MINUTE),
       touched: {
-        deletedObjectIds: ["architecture.current"],
-        deletedRelationIds: [relation.relation.id]
+        deletedObjectIds: ["decision.delete-me"],
+        deletedRelationIds: [relation.id]
       }
     });
 
@@ -166,8 +174,8 @@ describe("incremental index update", () => {
 
     const connection = await openConnection(projectRoot);
     try {
-      expect(readObject(connection.db, "architecture.current")).toBeUndefined();
-      expect(readFts(connection.db, "architecture.current")).toBeUndefined();
+      expect(readObject(connection.db, "decision.delete-me")).toBeUndefined();
+      expect(readFts(connection.db, "decision.delete-me")).toBeUndefined();
     } finally {
       connection.close();
     }
@@ -181,10 +189,11 @@ describe("incremental index update", () => {
       return;
     }
 
-    const relation = buildRelation();
+    const projectId = storage.data.config.project.id;
+    const relation = buildRelation(projectId, projectId);
     await writeJsonProjectFile(
       projectRoot,
-      ".memory/relations/project-mentions-architecture.json",
+      ".memory/relations/project-related-to-project.json",
       relation
     );
     await writeProjectFile(
@@ -196,9 +205,9 @@ describe("incremental index update", () => {
         actor: "agent",
         timestamp: FIXED_TIMESTAMP,
         payload: {
-          from: storage.data.config.project.id,
-          predicate: "mentions",
-          to: "architecture.current"
+          from: projectId,
+          predicate: "related_to",
+          to: projectId
         }
       })}\n`
     );
@@ -223,7 +232,7 @@ describe("incremental index update", () => {
     try {
       expect(readRelation(connection.db, relation.id)).toMatchObject({
         id: relation.id,
-        predicate: "mentions"
+        predicate: "related_to"
       });
       expect(readEventsRows(connection.db)).toEqual([
         {
@@ -237,7 +246,7 @@ describe("incremental index update", () => {
       connection.close();
     }
 
-    await rm(join(projectRoot, ".memory", "relations", "project-mentions-architecture.json"));
+    await rm(join(projectRoot, ".memory", "relations", "project-related-to-project.json"));
     const deleted = await updateIndexIncrementally({
       projectRoot,
       memoryRoot: join(projectRoot, ".memory"),
@@ -262,6 +271,7 @@ describe("incremental index update", () => {
 
   it("skips cleanly when auto-indexing is disabled", async () => {
     const projectRoot = await createInitializedProject("memory-incremental-auto-index-off-");
+    const projectId = await readProjectObjectId(projectRoot);
     const configPath = join(projectRoot, ".memory", "config.json");
     const config = JSON.parse(await readFile(configPath, "utf8")) as {
       memory: { autoIndex: boolean };
@@ -274,7 +284,7 @@ describe("incremental index update", () => {
       memoryRoot: join(projectRoot, ".memory"),
       clock: createFixedTestClock(FIXED_TIMESTAMP_NEXT_MINUTE),
       touched: {
-        objectIds: ["architecture.current"]
+        objectIds: [projectId]
       }
     });
 
@@ -322,6 +332,7 @@ interface ObjectRow {
   id: string;
   title: string;
   tags_json: string;
+  anchors_json: string | null;
 }
 
 interface FtsRow {
@@ -329,6 +340,7 @@ interface FtsRow {
   title: string;
   body: string;
   tags: string;
+  anchors: string;
 }
 
 interface RelationRow {
@@ -353,11 +365,6 @@ interface CommitLinkRow {
   link_kind: string;
 }
 
-interface FacetLinkRow {
-  facet: string;
-  link_kind: string;
-}
-
 async function createInitializedProject(prefix: string): Promise<string> {
   const projectRoot = await createTempRoot(prefix);
   const initialized = await initProject({
@@ -371,6 +378,16 @@ async function createInitializedProject(prefix: string): Promise<string> {
   }
 
   return projectRoot;
+}
+
+async function readProjectObjectId(projectRoot: string): Promise<string> {
+  const storage = await readCanonicalStorage(projectRoot);
+
+  if (!storage.ok) {
+    throw new Error(storage.error.message);
+  }
+
+  return storage.data.config.project.id;
 }
 
 async function createTempRoot(prefix: string): Promise<string> {
@@ -396,14 +413,16 @@ function readObject(
   id: string
 ): ObjectRow | undefined {
   return db
-    .prepare<[string], ObjectRow>("SELECT id, title, tags_json FROM objects WHERE id = ?")
+    .prepare<[string], ObjectRow>(
+      "SELECT id, title, tags_json, anchors_json FROM objects WHERE id = ?"
+    )
     .get(id);
 }
 
 function readFts(db: IndexDatabaseConnection["db"], id: string): FtsRow | undefined {
   return db
     .prepare<[string], FtsRow>(
-      "SELECT object_id, title, body, tags FROM objects_fts WHERE object_id = ?"
+      "SELECT object_id, title, body, tags, anchors FROM objects_fts WHERE object_id = ?"
     )
     .get(id);
 }
@@ -455,22 +474,8 @@ function readMemoryCommitLinks(db: IndexDatabaseConnection["db"], id: string): C
     .all(id);
 }
 
-function readMemoryFacetLinks(db: IndexDatabaseConnection["db"], id: string): FacetLinkRow[] {
-  return db
-    .prepare<[string], FacetLinkRow>(
-      `
-        SELECT facet, link_kind
-        FROM memory_facet_links
-        WHERE memory_id = ?
-        ORDER BY facet, link_kind
-      `
-    )
-    .all(id);
-}
-
 async function writeObject(
   projectRoot: string,
-  projectId: string,
   options: {
     id: string;
     type: MemoryObjectSidecar["type"];
@@ -479,7 +484,7 @@ async function writeObject(
     sidecarPath: string;
     body: string;
     tags: string[];
-    facets?: ObjectFacets;
+    anchors?: string[];
     evidence?: Evidence[];
     sourceCommit?: string;
   }
@@ -490,14 +495,8 @@ async function writeObject(
     status: "active",
     title: options.title,
     body_path: options.bodyPath,
-    scope: {
-      kind: "project",
-      project: projectId,
-      branch: null,
-      task: null
-    },
+    ...(options.anchors === undefined ? {} : { anchors: options.anchors }),
     tags: options.tags,
-    ...(options.facets === undefined ? {} : { facets: options.facets }),
     ...(options.evidence === undefined ? {} : { evidence: options.evidence }),
     source: {
       kind: "agent",
@@ -515,18 +514,18 @@ async function writeObject(
   await writeJsonProjectFile(projectRoot, options.sidecarPath, sidecar);
 }
 
-function buildRelation(): MemoryRelation {
+function buildRelation(from: string, to: string): MemoryRelation {
   const relationWithoutHash = {
-    id: "rel.project-mentions-architecture",
-    from: "architecture.current",
-    predicate: "mentions",
-    to: "architecture.current",
+    id: `rel.${from.replace(".", "-")}-related-to-${to.replace(".", "-")}`,
+    from,
+    predicate: "related_to",
+    to,
     status: "active",
     confidence: "medium",
     evidence: [
       {
         kind: "memory",
-        id: "architecture.current"
+        id: to
       }
     ],
     created_at: FIXED_TIMESTAMP,

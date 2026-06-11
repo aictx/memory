@@ -6,10 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { initProject } from "../../../src/app/operations.js";
 import { runSubprocess } from "../../../src/core/subprocess.js";
-import {
-  computeObjectContentHash,
-  computeRelationContentHash
-} from "../../../src/storage/hashes.js";
+import { computeObjectContentHash } from "../../../src/storage/hashes.js";
 import { readCanonicalStorage } from "../../../src/storage/read.js";
 import { validateProject } from "../../../src/validation/validate.js";
 import { createFixedTestClock, FIXED_TIMESTAMP } from "../../fixtures/time.js";
@@ -57,11 +54,6 @@ describe("initProject", () => {
         ".memory/events.jsonl",
         ".memory/memory/project.md",
         ".memory/memory/project.json",
-        ".memory/memory/architecture.md",
-        ".memory/memory/architecture.json",
-        expect.stringMatching(
-          /^\.memory\/relations\/project-memory-init-billing-api-.+-related-to-architecture-current\.json$/
-        ),
         ".memory/schema/config.schema.json"
       ])
     );
@@ -70,14 +62,14 @@ describe("initProject", () => {
       ".memory/index/"
     );
     await expect(readFile(join(repo, ".gitignore"), "utf8")).resolves.toContain(
-      ".memory/context/"
+      ".memory/exports/"
     );
     await expect(readFile(join(repo, ".gitignore"), "utf8")).resolves.toContain(
-      ".memory/exports/"
+      ".memory/recovery/"
     );
     await expect(readFile(join(repo, ".gitignore"), "utf8")).resolves.toContain(".memory/.lock");
     await expect(access(join(repo, ".memory", "memory", "gotchas"))).resolves.toBeUndefined();
-    await expect(access(join(repo, ".memory", "memory", "workflows"))).resolves.toBeUndefined();
+    await expect(access(join(repo, ".memory", "memory", "features"))).resolves.toBeUndefined();
     const agentsGuidance = await readFile(join(repo, "AGENTS.md"), "utf8");
     const claudeGuidance = await readFile(join(repo, "CLAUDE.md"), "utf8");
     for (const guidance of [agentsGuidance, claudeGuidance]) {
@@ -181,42 +173,12 @@ describe("initProject", () => {
     expect(storage.ok).toBe(true);
     if (storage.ok) {
       expect(storage.data.config.project.id).toMatch(/^project\.memory-init-local-project-/);
-      expect(storage.data.objects.map((object) => object.sidecar.id).sort()).toEqual([
-        "architecture.current",
+      expect(storage.data.objects.map((object) => object.sidecar.id)).toEqual([
         storage.data.config.project.id
-      ].sort());
-      expect(storage.data.relations).toHaveLength(1);
-      const relation = storage.data.relations[0]?.relation;
-      expect(relation).toEqual(
-        expect.objectContaining({
-          id: expect.stringMatching(/^rel\.project-memory-init-local-project-.+-related-to-architecture-current$/),
-          from: storage.data.config.project.id,
-          predicate: "related_to",
-          to: "architecture.current",
-          status: "active",
-          confidence: "high",
-          created_at: FIXED_TIMESTAMP,
-          updated_at: FIXED_TIMESTAMP
-        })
-      );
-      if (relation === undefined) {
-        return;
-      }
-      expect(relation?.content_hash).toBe(
-        computeRelationContentHash({
-          id: relation.id,
-          from: relation.from,
-          predicate: relation.predicate,
-          to: relation.to,
-          status: relation.status,
-          confidence: relation.confidence,
-          evidence: relation.evidence,
-          created_at: relation.created_at,
-          updated_at: relation.updated_at
-        })
-      );
+      ]);
+      expect(storage.data.relations).toHaveLength(0);
       await expect(access(join(projectRoot, ".memory", "memory", "gotchas"))).resolves.toBeUndefined();
-      await expect(access(join(projectRoot, ".memory", "memory", "workflows"))).resolves.toBeUndefined();
+      await expect(access(join(projectRoot, ".memory", "memory", "features"))).resolves.toBeUndefined();
       expect(storage.data.events).toEqual([]);
       expect(storage.data.objects[0]?.sidecar.created_at).toBe(FIXED_TIMESTAMP);
     }
@@ -249,16 +211,12 @@ describe("initProject", () => {
     await expect(readFile(join(projectRoot, ".memory", "memory", "project.md"), "utf8")).resolves.not.toContain(
       "Stripe webhook processing"
     );
-    await expect(readFile(join(projectRoot, ".memory", "memory", "architecture.md"), "utf8")).resolves.toBe(
-      "# Current Architecture\n\nArchitecture memory starts here.\n"
-    );
     const storage = await readCanonicalStorage(projectRoot);
     expect(storage.ok).toBe(true);
     if (storage.ok) {
-      expect(storage.data.objects.map((object) => object.sidecar.id).sort()).toEqual([
-        "architecture.current",
+      expect(storage.data.objects.map((object) => object.sidecar.id)).toEqual([
         storage.data.config.project.id
-      ].sort());
+      ]);
     }
   });
 
@@ -307,7 +265,7 @@ describe("initProject", () => {
       return;
     }
 
-    await writeBranchScopedMemory(repo, storage.data.config.project.id, "main");
+    await writeExtraMemory(repo);
 
     const defaultRerun = await initProject({
       cwd: repo,
@@ -320,7 +278,7 @@ describe("initProject", () => {
     }
     expect(defaultRerun.data.created).toBe(false);
     await expect(
-      access(join(repo, ".memory", "memory", "notes", "branch-note.md"))
+      access(join(repo, ".memory", "memory", "gotchas", "extra-note.md"))
     ).resolves.toBeUndefined();
 
     const forced = await initProject({
@@ -335,7 +293,7 @@ describe("initProject", () => {
     }
     expect(forced.data.created).toBe(true);
     await expect(
-      access(join(repo, ".memory", "memory", "notes", "branch-note.md"))
+      access(join(repo, ".memory", "memory", "gotchas", "extra-note.md"))
     ).rejects.toMatchObject({
       code: "ENOENT"
     });
@@ -343,10 +301,9 @@ describe("initProject", () => {
     const resetStorage = await readCanonicalStorage(repo);
     expect(resetStorage.ok).toBe(true);
     if (resetStorage.ok) {
-      expect(resetStorage.data.objects.map((object) => object.sidecar.id).sort()).toEqual([
-        "architecture.current",
+      expect(resetStorage.data.objects.map((object) => object.sidecar.id)).toEqual([
         resetStorage.data.config.project.id
-      ].sort());
+      ]);
       expect(resetStorage.data.events).toEqual([]);
     }
   });
@@ -558,8 +515,8 @@ describe("initProject", () => {
     expect(agents).not.toContain("<!-- memory:start -->");
   });
 
-  it("returns success when existing storage has branch-scoped memory for the current branch", async () => {
-    const repo = await createRepo("branch-scoped");
+  it("returns success when existing storage has additional saved memory", async () => {
+    const repo = await createRepo("extra-memory");
     const first = await initProject({
       cwd: repo,
       clock: createFixedTestClock()
@@ -576,7 +533,7 @@ describe("initProject", () => {
       return;
     }
 
-    await writeBranchScopedMemory(repo, storage.data.config.project.id, "main");
+    await writeExtraMemory(repo);
 
     const second = await initProject({
       cwd: repo,
@@ -657,24 +614,14 @@ async function createRepo(name: string): Promise<string> {
   return repo;
 }
 
-async function writeBranchScopedMemory(
-  projectRoot: string,
-  projectId: string,
-  branch: string
-): Promise<void> {
-  const body = "# Branch note\n\nOnly applies to the current branch.\n";
+async function writeExtraMemory(projectRoot: string): Promise<void> {
+  const body = "# Extra note\n\nSaved memory survives an init rerun.\n";
   const sidecarWithoutHash = {
-    id: "note.branch-note",
-    type: "note",
+    id: "gotcha.extra-note",
+    type: "gotcha",
     status: "active",
-    title: "Branch note",
-    body_path: "memory/notes/branch-note.md",
-    scope: {
-      kind: "branch",
-      project: projectId,
-      branch,
-      task: null
-    },
+    title: "Extra note",
+    body_path: "memory/gotchas/extra-note.md",
     tags: [],
     source: {
       kind: "agent"
@@ -687,10 +634,10 @@ async function writeBranchScopedMemory(
     content_hash: computeObjectContentHash(sidecarWithoutHash, body)
   };
 
-  await writeProjectFile(projectRoot, ".memory/memory/notes/branch-note.md", body);
+  await writeProjectFile(projectRoot, ".memory/memory/gotchas/extra-note.md", body);
   await writeProjectFile(
     projectRoot,
-    ".memory/memory/notes/branch-note.json",
+    ".memory/memory/gotchas/extra-note.json",
     stableJson(sidecar)
   );
 }

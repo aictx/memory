@@ -9,18 +9,18 @@ const mcpSourcePaths = [
   "src/mcp/server.ts",
   "src/mcp/tools/search-memory.ts",
   "src/mcp/tools/inspect-memory.ts",
-  "src/mcp/tools/remember-memory.ts"
+  "src/mcp/tools/save-memory.ts"
 ] as const;
 
 const toolSourcePaths = [
   "src/mcp/tools/search-memory.ts",
   "src/mcp/tools/inspect-memory.ts",
-  "src/mcp/tools/remember-memory.ts"
+  "src/mcp/tools/save-memory.ts"
 ] as const;
 
 const exactMcpToolNames = [
   "inspect_memory",
-  "remember_memory",
+  "save_memory",
   "search_memory"
 ] as const;
 
@@ -79,9 +79,9 @@ describe("MCP registration cleanup guardrail", () => {
     expect(toolNames.sort()).toEqual([...exactMcpToolNames]);
   });
 
-  it("documents workflow and how-to memory in remember_memory description", async () => {
-    const source = await readProjectFile("src/mcp/tools/remember-memory.ts");
+  it("documents the intent-first node kinds in the save_memory description", async () => {
+    const source = await readProjectFile("src/mcp/tools/save-memory.ts");
 
-    expect(source).toContain("workflows/how-tos");
+    expect(source).toContain("feature/decision/gotcha/question");
   });
 });

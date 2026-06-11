@@ -56,23 +56,23 @@ describe("core ID and slug generation", () => {
     it("adds deterministic suffixes when object IDs collide", () => {
       expect(
         generateObjectId({
-          type: "note",
+          type: "gotcha",
           title: "Stripe webhook behavior",
-          existingIds: ["note.stripe-webhook-behavior"]
+          existingIds: ["gotcha.stripe-webhook-behavior"]
         })
-      ).toBe("note.stripe-webhook-behavior-2");
+      ).toBe("gotcha.stripe-webhook-behavior-2");
 
       expect(
         generateObjectId({
-          type: "note",
+          type: "gotcha",
           title: "Stripe webhook behavior",
-          existingIds: ["note.stripe-webhook-behavior", "note.stripe-webhook-behavior-2"]
+          existingIds: ["gotcha.stripe-webhook-behavior", "gotcha.stripe-webhook-behavior-2"]
         })
-      ).toBe("note.stripe-webhook-behavior-3");
+      ).toBe("gotcha.stripe-webhook-behavior-3");
     });
 
     it("uses fallback slug text for empty object titles", () => {
-      expect(generateObjectId({ type: "fact", title: "💡" })).toBe("fact.untitled");
+      expect(generateObjectId({ type: "question", title: "💡" })).toBe("question.untitled");
     });
   });
 
@@ -80,12 +80,12 @@ describe("core ID and slug generation", () => {
     it("generates type-qualified relation IDs from endpoints and predicate", () => {
       const id = generateRelationId({
         from: "decision.billing-retries",
-        predicate: "requires",
-        to: "constraint.webhook-idempotency"
+        predicate: "affects",
+        to: "feature.webhook-idempotency"
       });
 
       expect(id).toBe(
-        "rel.decision-billing-retries-requires-constraint-webhook-idempotency"
+        "rel.decision-billing-retries-affects-feature-webhook-idempotency"
       );
       expect(isRelationId(id)).toBe(true);
     });
@@ -95,33 +95,33 @@ describe("core ID and slug generation", () => {
         generateRelationId({
           from: "decision.billing-retries",
           predicate: "depends_on",
-          to: "concept.billing"
+          to: "feature.billing"
         })
-      ).toBe("rel.decision-billing-retries-depends-on-concept-billing");
+      ).toBe("rel.decision-billing-retries-depends-on-feature-billing");
     });
 
     it("adds deterministic suffixes when relation IDs collide", () => {
       const existingIds = [
-        "rel.decision-billing-retries-requires-constraint-webhook-idempotency",
-        "rel.decision-billing-retries-requires-constraint-webhook-idempotency-2"
+        "rel.decision-billing-retries-affects-feature-webhook-idempotency",
+        "rel.decision-billing-retries-affects-feature-webhook-idempotency-2"
       ];
 
       expect(
         generateRelationId({
           from: "decision.billing-retries",
-          predicate: "requires",
-          to: "constraint.webhook-idempotency",
+          predicate: "affects",
+          to: "feature.webhook-idempotency",
           existingIds
         })
-      ).toBe("rel.decision-billing-retries-requires-constraint-webhook-idempotency-3");
+      ).toBe("rel.decision-billing-retries-affects-feature-webhook-idempotency-3");
     });
 
     it("rejects invalid relation endpoints", () => {
       expect(() =>
         generateRelationId({
           from: "not-an-object-id",
-          predicate: "requires",
-          to: "constraint.webhook-idempotency"
+          predicate: "affects",
+          to: "feature.webhook-idempotency"
         })
       ).toThrow("Invalid object ID: not-an-object-id");
     });

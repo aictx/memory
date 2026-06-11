@@ -1,7 +1,7 @@
 # Invalid Conflict Marker
 
 <<<<<<< HEAD
-Local fixture.
+Local fixture body.
 =======
-Other fixture.
+Remote fixture body.
 >>>>>>> branch

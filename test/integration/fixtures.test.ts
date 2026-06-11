@@ -42,31 +42,33 @@ const invalidFixtures = [
 
 const expectedHashes = {
   "invalid-bad-relation/.memory/memory/project.json":
-    "sha256:2f2cdbcf05fae78f8d4de7ef87a2b996841f3e623973147133068eef6809d867",
-  "invalid-bad-relation/.memory/relations/project-mentions-missing-note.json":
-    "sha256:9c1e6e96eb27cbac863ac4c000be3c9c0b6e138b33bb68633874f71fae848896",
+    "sha256:ab0cb677a4baf351f81ae4a991b39c6ba9944fde0891e0e92aec4f99723d6421",
+  "invalid-bad-relation/.memory/relations/project-related-to-missing-gotcha.json":
+    "sha256:2acd78b6f12ea30d03075f775e4e53ddf3fa41f378340839ad0c8c8c14e9bd76",
   "invalid-conflict-marker/.memory/memory/project.json":
-    "sha256:05d3f50fff04f3ecbcbb79d56fc625a85234a40f7d353b37fae1eba8ae905014",
+    "sha256:08404c23bc12531a2116ff85b5ed70909eb23655fdd14d7fb4ffd04e67be68bb",
   "invalid-jsonl/.memory/memory/project.json":
-    "sha256:91969cac20e117f500b27d97c8cbfa49742ed6c627a7c149321bb6865f978ea2",
+    "sha256:4db04ed30f3295628ea2299e0e6d74fb1198e66381455572826bc296a629cf5e",
+  "legacy-v4/.memory/memory/project.json":
+    "sha256:1d88796b7e44c4ed302b6bc720a4c59b91039ecd8e74fecbaa8b8b556e148780",
   "minimal-valid/.memory/memory/project.json":
-    "sha256:30153f876a0f023778d256e5056c4aa70860d7c9f845011a4a0959682ec59b2c",
-  "rich-valid/.memory/memory/architecture.json":
-    "sha256:926082d2792d7d2111fd4a2f09745ef5960307c3553d044ded787dd07c158feb",
-  "rich-valid/.memory/memory/constraints/hashes-deterministic.json":
-    "sha256:9d92cb730f2eb8693dbe0cd1f7a07618efb9fc3f4548767d1e291ec3df84c04a",
+    "sha256:50d85da4b75785454395c384b7bb577d43c31b6b6adfd80b5e0dfcc62b7f9eda",
   "rich-valid/.memory/memory/decisions/storage-fixtures.json":
-    "sha256:057bc3780887291a5a13a959dbc8fdaab20db1ee1ec2081fc21b906c407c92c0",
+    "sha256:195d921aac3abf78d69b054e27b9504b2514b620606cf1045dbbe468d5aa7efa",
+  "rich-valid/.memory/memory/features/golden-coverage.json":
+    "sha256:f7ce54e623cf8a6c144ed8fe3f84e8d6aa2a0db9aef470e63e1bbb66bfec70df",
+  "rich-valid/.memory/memory/gotchas/hashes-deterministic.json":
+    "sha256:9edac4ca111f5903c82e86d67d72637e817f1f97ea8fc17a88cd20f724523816",
   "rich-valid/.memory/memory/project.json":
-    "sha256:4ac3c49a8500a447001c309840ac7f37ca3673d8d2ccb40480ab9a753bda943b",
+    "sha256:bb342b73fe023ad51238f624a617fe4fd2d29fe138ffe35cb531562fea43b41b",
   "rich-valid/.memory/memory/questions/fixture-refresh.json":
-    "sha256:a4ca66c8f4d7e1fbd6666328905a86118bc29a16ff74cdf27ed8f4908dd00efb",
-  "rich-valid/.memory/relations/architecture-mentions-decision.json":
-    "sha256:b3a53094f208c6d4b1dd2bc54e5b134d3b6447fcc46c75da9e9ecadfa603c1b7",
+    "sha256:9fad9bd5d5252744e8cea7924ead00491178a1fbc866019979e565cfba575d33",
+  "rich-valid/.memory/relations/feature-related-to-decision.json":
+    "sha256:e4bcfff6f65ba5e11b9db836f03f06fdf32768b9eaf5ea834c981541add56bcd",
   "rich-valid/.memory/relations/question-related-to-decision.json":
-    "sha256:dc1cd26eb708f9ad0ffb2077c54e026729506df6424f5dc571f219fbffefbf96",
-  "rich-valid/.memory/relations/storage-fixtures-requires-hashes.json":
-    "sha256:2e4d55a556a1efadf038d79fa4f1006bd2ed45726c2c79b3ad2df914d3d59fd5"
+    "sha256:5d430e8f73e9e9a3ad6a2fa8b8238029c3fba8bf3aa2f1a16ed25d139eca5e50",
+  "rich-valid/.memory/relations/storage-fixtures-depends-on-hashes.json":
+    "sha256:61a3ec067ec81fdfd37ce888a8ff4241a66db42bd797e4feebf87bb1c3148a24"
 } as const satisfies Record<string, string>;
 
 describe("golden storage fixtures", () => {
@@ -106,6 +108,20 @@ describe("golden storage fixtures", () => {
 
   it("keeps committed fixture hashes deterministic", async () => {
     await expect(collectFixtureHashes()).resolves.toEqual(expectedHashes);
+  });
+
+  it("rejects the deliberate legacy-v4 fixture with the storage version gate", async () => {
+    const storage = await readCanonicalStorage(projectFixtureRoot("legacy-v4"));
+
+    expect(storage.ok).toBe(false);
+    if (!storage.ok) {
+      expect(storage.error.code).toBe("MemoryUnsupportedStorageVersion");
+      expect(storage.error.message).toContain("memory reset");
+      expect(storage.error.details).toMatchObject({
+        supported_version: 5,
+        found_version: 4
+      });
+    }
   });
 });
 

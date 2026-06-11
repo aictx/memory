@@ -28,12 +28,13 @@ const tempRoots: string[] = [];
 
 const REQUIRED_MCP_TOOLS = [
   "inspect_memory",
-  "remember_memory",
+  "save_memory",
   "search_memory"
 ] as const;
 
 const FORBIDDEN_MCP_TOOLS = [
   "load_memory",
+  "remember_memory",
   "save_memory_patch",
   "diff_memory",
   "init",
@@ -111,7 +112,7 @@ describe("integration security regression guardrails", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.memory_created).toContain("note.traversal-blocked");
+      expect(result.data.memory_created).toContain("gotcha.traversal-blocked");
       expect(result.data.repairs_applied).toContain(
         "Quarantined invalid memory object sidecar: .memory/memory/project.json"
       );
@@ -128,7 +129,7 @@ describe("integration security regression guardrails", () => {
       code: "ENOENT"
     });
     await expect(
-      readFile(join(projectRoot, ".memory", "memory", "notes", "traversal-blocked.md"), "utf8")
+      readFile(join(projectRoot, ".memory", "memory", "gotchas", "traversal-blocked.md"), "utf8")
     ).resolves.toContain("This write must not happen.");
     await expect(readFile(sidecarPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -139,7 +140,9 @@ describe("integration security regression guardrails", () => {
     const cliOutput = await runCli(
       ["node", "memory", "save", "--stdin", "--json"],
       cliProject,
-      Readable.from([JSON.stringify(createNotePatch("CLI secret blocked", `Secret: ${secret}`))])
+      Readable.from([
+        JSON.stringify(createGotchaSaveInput("CLI secret blocked", `Secret: ${secret}`))
+      ])
     );
 
     expect(cliOutput.exitCode).toBe(1);
@@ -150,7 +153,7 @@ describe("integration security regression guardrails", () => {
     expect(cliEnvelope.error.code).toBe("MemorySecretDetected");
     expectNoSecret(cliEnvelope, secret);
     await expect(
-      readFile(join(cliProject, ".memory", "memory", "notes", "cli-secret-blocked.md"), "utf8")
+      readFile(join(cliProject, ".memory", "memory", "gotchas", "cli-secret-blocked.md"), "utf8")
     ).rejects.toMatchObject({ code: "ENOENT" });
 
     const mcpProject = await createInitializedProject("memory-security-mcp-secret-");
@@ -158,12 +161,12 @@ describe("integration security regression guardrails", () => {
 
     try {
       const result = await started.client.callTool({
-        name: "remember_memory",
+        name: "save_memory",
         arguments: {
           task: "Security regression test",
-          memories: [
+          nodes: [
             {
-              kind: "note",
+              kind: "gotcha",
               title: "MCP secret blocked",
               body: `Secret: ${secret}`
             }
@@ -177,7 +180,7 @@ describe("integration security regression guardrails", () => {
       expectNoSecret(result, secret);
       expectNoSecret(envelope, secret);
       await expect(
-        readFile(join(mcpProject, ".memory", "memory", "notes", "mcp-secret-blocked.md"), "utf8")
+        readFile(join(mcpProject, ".memory", "memory", "gotchas", "mcp-secret-blocked.md"), "utf8")
       ).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       await started.close();
@@ -202,7 +205,7 @@ describe("integration security regression guardrails", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.memory_created).toContain("note.conflict-blocked");
+      expect(result.data.memory_created).toContain("gotcha.conflict-blocked");
       expect(result.data.repairs_applied).toEqual(
         expect.arrayContaining([
           "Quarantined invalid memory object sidecar: .memory/memory/project.json",
@@ -223,7 +226,7 @@ describe("integration security regression guardrails", () => {
       );
     }
     await expect(
-      readFile(join(projectRoot, ".memory", "memory", "notes", "conflict-blocked.md"), "utf8")
+      readFile(join(projectRoot, ".memory", "memory", "gotchas", "conflict-blocked.md"), "utf8")
     ).resolves.toContain("This write must not happen.");
     await expect(
       readFile(join(projectRoot, ".memory", "memory", "project.md"), "utf8")
@@ -374,7 +377,20 @@ function createNotePatch(title: string, body: string) {
     changes: [
       {
         op: "create_object",
-        type: "note",
+        type: "gotcha",
+        title,
+        body: `# ${title}\n\n${body}\n`
+      }
+    ]
+  };
+}
+
+function createGotchaSaveInput(title: string, body: string) {
+  return {
+    task: "Security regression test",
+    nodes: [
+      {
+        kind: "gotcha",
         title,
         body: `# ${title}\n\n${body}\n`
       }

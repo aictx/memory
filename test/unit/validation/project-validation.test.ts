@@ -16,18 +16,14 @@ const tempRoots: string[] = [];
 const timestamp = "2026-04-25T14:00:00+02:00";
 
 const validConfig = {
-  version: 1,
+  version: 5,
   project: {
     id: "project.billing-api",
     name: "Billing API"
   },
   memory: {
-    defaultTokenBudget: 6000,
-    autoIndex: true,
-    saveContextPacks: false
-  },
-  git: {
-    trackContextPacks: false
+    defaultTokenBudget: 2000,
+    autoIndex: true
   }
 };
 
@@ -50,7 +46,7 @@ describe("project validation", () => {
     });
   });
 
-  it("accepts gotcha and workflow memory objects", async () => {
+  it("accepts gotcha and feature memory objects", async () => {
     const projectRoot = await createValidProject();
     await writeMemoryObject(projectRoot, {
       path: "memory/gotchas/webhook-duplicates.md",
@@ -60,11 +56,13 @@ describe("project validation", () => {
       body: "# Webhook duplicates\n\nNever assume webhook delivery is unique.\n"
     });
     await writeMemoryObject(projectRoot, {
-      path: "memory/workflows/release-checklist.md",
-      id: "workflow.release-checklist",
-      type: "workflow",
+      path: "memory/features/release-checklist.md",
+      id: "feature.release-checklist",
+      type: "feature",
       title: "Release checklist",
-      body: "# Release checklist\n\nRun the release checklist before publishing.\n"
+      body: "# Release checklist\n\nRun the release checklist before publishing.\n",
+      stage: "building",
+      anchors: ["scripts/release/"]
     });
 
     const result = await validateProject(projectRoot);
@@ -135,7 +133,7 @@ describe("project validation", () => {
   it("detects duplicate object and relation identifiers", async () => {
     const projectRoot = await createValidProject();
     await writeMemoryObject(projectRoot, {
-      path: "memory/notes/duplicate.md",
+      path: "memory/decisions/duplicate.md",
       id: "decision.billing-retries",
       type: "decision",
       title: "Duplicate billing retries",
@@ -143,10 +141,10 @@ describe("project validation", () => {
     });
     await writeRelation(projectRoot, {
       file: "duplicate-id.json",
-      id: "rel.billing-retries-requires-idempotency",
+      id: "rel.billing-retries-depends-on-idempotency",
       from: "decision.billing-retries",
-      predicate: "mentions",
-      to: "constraint.webhook-idempotency"
+      predicate: "affects",
+      to: "gotcha.webhook-idempotency"
     });
 
     const result = await validateProject(projectRoot);
@@ -162,15 +160,15 @@ describe("project validation", () => {
       file: "duplicate-equivalent.json",
       id: "rel.duplicate-equivalent",
       from: "decision.billing-retries",
-      predicate: "requires",
-      to: "constraint.webhook-idempotency"
+      predicate: "depends_on",
+      to: "gotcha.webhook-idempotency"
     });
     await writeRelation(projectRoot, {
       file: "missing-endpoint.json",
       id: "rel.missing-endpoint",
       from: "decision.missing",
-      predicate: "mentions",
-      to: "constraint.webhook-idempotency"
+      predicate: "related_to",
+      to: "gotcha.webhook-idempotency"
     });
 
     const result = await validateProject(projectRoot);
@@ -192,19 +190,19 @@ describe("project validation", () => {
       content_hash: `sha256:${"0".repeat(64)}`
     });
     await writeMemoryObject(projectRoot, {
-      path: "memory/notes/escaping.md",
-      id: "note.escaping",
-      type: "note",
+      path: "memory/gotchas/escaping.md",
+      id: "gotcha.escaping",
+      type: "gotcha",
       title: "Escaping",
       bodyPath: "memory/../../outside.md",
       body: "# Escaping\n\nBad path.\n"
     });
     await writeMemoryObject(projectRoot, {
-      path: "memory/notes/body.md",
-      id: "note.mismatch",
-      type: "note",
+      path: "memory/gotchas/body.md",
+      id: "gotcha.mismatch",
+      type: "gotcha",
       title: "Mismatch",
-      bodyPath: "memory/notes/not-body.md",
+      bodyPath: "memory/gotchas/not-body.md",
       body: "# Mismatch\n\nDifferent basename.\n"
     });
 
@@ -222,24 +220,24 @@ describe("project validation", () => {
   it("warns for title, object hash, relation hash, related_to, and superseded issues", async () => {
     const projectRoot = await createValidProject();
     await writeMemoryObject(projectRoot, {
-      path: "memory/notes/mismatched-title.md",
-      id: "note.mismatched-title",
-      type: "note",
+      path: "memory/gotchas/mismatched-title.md",
+      id: "gotcha.mismatched-title",
+      type: "gotcha",
       title: "JSON title",
       body: "# Markdown title\n\nBody.\n"
     });
     await writeMemoryObject(projectRoot, {
-      path: "memory/notes/bad-hash.md",
-      id: "note.bad-hash",
-      type: "note",
+      path: "memory/gotchas/bad-hash.md",
+      id: "gotcha.bad-hash",
+      type: "gotcha",
       title: "Bad hash",
       body: "# Bad hash\n\nBody.\n",
       contentHash: `sha256:${"1".repeat(64)}`
     });
     await writeMemoryObject(projectRoot, {
-      path: "memory/notes/superseded.md",
-      id: "note.superseded",
-      type: "note",
+      path: "memory/gotchas/superseded.md",
+      id: "gotcha.superseded",
+      type: "gotcha",
       title: "Superseded",
       body: "# Superseded\n\nBody.\n",
       status: "superseded"
@@ -248,8 +246,8 @@ describe("project validation", () => {
       file: "bad-hash.json",
       id: "rel.bad-hash",
       from: "decision.billing-retries",
-      predicate: "mentions",
-      to: "constraint.webhook-idempotency",
+      predicate: "affects",
+      to: "gotcha.webhook-idempotency",
       contentHash: `sha256:${"2".repeat(64)}`
     });
     await writeRelatedToFixtures(projectRoot);
@@ -271,26 +269,26 @@ describe("project validation", () => {
   it("uses the supersedes relation target as the superseded object replacement", async () => {
     const validDirectionRoot = await createValidProject();
     await writeMemoryObject(validDirectionRoot, {
-      path: "memory/notes/old.md",
-      id: "note.old",
-      type: "note",
+      path: "memory/gotchas/old.md",
+      id: "gotcha.old",
+      type: "gotcha",
       title: "Old note",
       body: "# Old note\n\nOld body.\n",
       status: "superseded"
     });
     await writeMemoryObject(validDirectionRoot, {
-      path: "memory/notes/new.md",
-      id: "note.new",
-      type: "note",
+      path: "memory/gotchas/new.md",
+      id: "gotcha.new",
+      type: "gotcha",
       title: "New note",
       body: "# New note\n\nNew body.\n"
     });
     await writeRelation(validDirectionRoot, {
       file: "new-supersedes-old.json",
       id: "rel.new-supersedes-old",
-      from: "note.new",
+      from: "gotcha.new",
       predicate: "supersedes",
-      to: "note.old"
+      to: "gotcha.old"
     });
 
     const validDirection = await validateProject(validDirectionRoot);
@@ -298,32 +296,32 @@ describe("project validation", () => {
     expect(validDirection.warnings).not.toContainEqual(
       expect.objectContaining({
         code: "ObjectSupersededReplacementMissing",
-        path: ".memory/memory/notes/old.json"
+        path: ".memory/memory/gotchas/old.json"
       })
     );
 
     const reversedDirectionRoot = await createValidProject();
     await writeMemoryObject(reversedDirectionRoot, {
-      path: "memory/notes/old.md",
-      id: "note.old",
-      type: "note",
+      path: "memory/gotchas/old.md",
+      id: "gotcha.old",
+      type: "gotcha",
       title: "Old note",
       body: "# Old note\n\nOld body.\n",
       status: "superseded"
     });
     await writeMemoryObject(reversedDirectionRoot, {
-      path: "memory/notes/new.md",
-      id: "note.new",
-      type: "note",
+      path: "memory/gotchas/new.md",
+      id: "gotcha.new",
+      type: "gotcha",
       title: "New note",
       body: "# New note\n\nNew body.\n"
     });
     await writeRelation(reversedDirectionRoot, {
       file: "old-supersedes-new.json",
       id: "rel.old-supersedes-new",
-      from: "note.old",
+      from: "gotcha.old",
       predicate: "supersedes",
-      to: "note.new"
+      to: "gotcha.new"
     });
 
     const reversedDirection = await validateProject(reversedDirectionRoot);
@@ -331,47 +329,21 @@ describe("project validation", () => {
     expect(reversedDirection.warnings).toContainEqual(
       expect.objectContaining({
         code: "ObjectSupersededReplacementMissing",
-        path: ".memory/memory/notes/old.json"
+        path: ".memory/memory/gotchas/old.json"
       })
     );
   });
 
-  it("validates object scope against project and Git state", async () => {
+  it("rejects removed v4 scope metadata as schema violations", async () => {
     const projectRoot = await createValidProject();
     await writeMemoryObject(projectRoot, {
-      path: "memory/notes/wrong-project.md",
-      id: "note.wrong-project",
-      type: "note",
-      title: "Wrong project",
-      body: "# Wrong project\n\nBody.\n",
+      path: "memory/gotchas/legacy-scope.md",
+      id: "gotcha.legacy-scope",
+      type: "gotcha",
+      title: "Legacy scope",
+      body: "# Legacy scope\n\nBody.\n",
       scope: {
         kind: "project",
-        project: "project.other",
-        branch: null,
-        task: null
-      }
-    });
-    await writeMemoryObject(projectRoot, {
-      path: "memory/notes/branch-scope.md",
-      id: "note.branch-scope",
-      type: "note",
-      title: "Branch scope",
-      body: "# Branch scope\n\nBody.\n",
-      scope: {
-        kind: "branch",
-        project: "project.billing-api",
-        branch: "feature",
-        task: null
-      }
-    });
-    await writeMemoryObject(projectRoot, {
-      path: "memory/notes/task-scope.md",
-      id: "note.task-scope",
-      type: "note",
-      title: "Task scope",
-      body: "# Task scope\n\nBody.\n",
-      scope: {
-        kind: "task",
         project: "project.billing-api",
         branch: null,
         task: null
@@ -380,33 +352,28 @@ describe("project validation", () => {
 
     const result = await validateProject(projectRoot);
 
-    expect(issueCodes(result.errors)).toEqual(
-      expect.arrayContaining([
-        "ObjectScopeProjectMismatch",
-        "ObjectBranchScopeUnavailable",
-        "ObjectScopeInvalid"
-      ])
-    );
+    expect(result.valid).toBe(false);
+    expect(issueCodes(result.errors)).toContain("SchemaAdditionalProperty");
   });
 
   it("surfaces conflict markers and block or warn secret findings", async () => {
     const projectRoot = await createValidProject();
     await writeProjectFile(
       projectRoot,
-      ".memory/memory/notes/conflict.md",
+      ".memory/memory/gotchas/conflict.md",
       ["# Conflict", "<<<<<<< HEAD"].join("\n")
     );
     await writeMemoryObject(projectRoot, {
-      path: "memory/notes/block-secret.md",
-      id: "note.block-secret",
-      type: "note",
+      path: "memory/gotchas/block-secret.md",
+      id: "gotcha.block-secret",
+      type: "gotcha",
       title: "Block secret",
       body: `# Block secret\n\nsk-${"a".repeat(20)}\n`
     });
     await writeMemoryObject(projectRoot, {
-      path: "memory/notes/warn-secret.md",
-      id: "note.warn-secret",
-      type: "note",
+      path: "memory/gotchas/warn-secret.md",
+      id: "gotcha.warn-secret",
+      type: "gotcha",
       title: "Warn secret",
       body: `# Warn secret\n\nAuthorization: Bearer ${"a".repeat(20)}\n`
     });
@@ -466,18 +433,18 @@ async function createValidProject(): Promise<string> {
     body: "# Billing retries moved to queue worker\n\nRetries run in the worker.\n"
   });
   await writeMemoryObject(projectRoot, {
-    path: "memory/constraints/webhook-idempotency.md",
-    id: "constraint.webhook-idempotency",
-    type: "constraint",
+    path: "memory/gotchas/webhook-idempotency.md",
+    id: "gotcha.webhook-idempotency",
+    type: "gotcha",
     title: "Webhook idempotency",
     body: "# Webhook idempotency\n\nWebhook processing is idempotent.\n"
   });
   await writeRelation(projectRoot, {
-    file: "billing-retries-requires-idempotency.json",
-    id: "rel.billing-retries-requires-idempotency",
+    file: "billing-retries-depends-on-idempotency.json",
+    id: "rel.billing-retries-depends-on-idempotency",
     from: "decision.billing-retries",
-    predicate: "requires",
-    to: "constraint.webhook-idempotency"
+    predicate: "depends_on",
+    to: "gotcha.webhook-idempotency"
   });
   await writeProjectFile(
     projectRoot,
@@ -498,9 +465,9 @@ async function writeRelatedToFixtures(projectRoot: string): Promise<void> {
 
   for (const id of ids) {
     await writeMemoryObject(projectRoot, {
-      path: `memory/notes/${id}.md`,
-      id: `note.${id}`,
-      type: "note",
+      path: `memory/gotchas/${id}.md`,
+      id: `gotcha.${id}`,
+      type: "gotcha",
       title: `Note ${id}`,
       body: `# Note ${id}\n\nBody.\n`
     });
@@ -510,9 +477,9 @@ async function writeRelatedToFixtures(projectRoot: string): Promise<void> {
     await writeRelation(projectRoot, {
       file: `related-${ids[index]}.json`,
       id: `rel.related-${ids[index]}`,
-      from: "note.one",
+      from: "gotcha.one",
       predicate: "related_to",
-      to: `note.${ids[index]}`
+      to: `gotcha.${ids[index]}`
     });
   }
 }
@@ -527,6 +494,8 @@ async function writeMemoryObject(
     body: string;
     bodyPath?: string;
     status?: string;
+    stage?: string;
+    anchors?: string[];
     scope?: Record<string, unknown>;
     contentHash?: string;
   }
@@ -534,14 +503,18 @@ async function writeMemoryObject(
   const bodyPath = options.bodyPath ?? options.path;
   const sidecar = baseObject(options.id, options.type, options.title, bodyPath);
   sidecar.status = options.status ?? "active";
-  sidecar.scope =
-    options.scope ??
-    {
-      kind: "project",
-      project: "project.billing-api",
-      branch: null,
-      task: null
-    };
+
+  if (options.stage !== undefined) {
+    sidecar.stage = options.stage;
+  }
+
+  if (options.anchors !== undefined) {
+    sidecar.anchors = options.anchors;
+  }
+
+  if (options.scope !== undefined) {
+    sidecar.scope = options.scope;
+  }
 
   const sidecarWithHash = {
     ...sidecar,
@@ -600,12 +573,6 @@ function baseObject(
     status: "active",
     title,
     body_path: bodyPath,
-    scope: {
-      kind: "project",
-      project: "project.billing-api",
-      branch: null,
-      task: null
-    },
     tags: [],
     source: {
       kind: "agent"

@@ -3,77 +3,35 @@ import { describe, expect, it } from "vitest";
 import {
   ACTORS,
   EVENT_TYPES,
-  FACET_CATEGORIES,
+  FEATURE_STAGES,
+  OBJECT_STATUSES,
   OBJECT_TYPES,
   ORIGIN_KINDS,
   PATCH_OPERATIONS,
-  PREDICATES,
-  SCOPE_KINDS
+  PREDICATES
 } from "../../../src/core/types.js";
 
 describe("core domain type constants", () => {
   it("exports object types from the storage spec", () => {
     expect(OBJECT_TYPES).toEqual([
       "project",
-      "architecture",
-      "source",
-      "synthesis",
+      "feature",
       "decision",
-      "constraint",
-      "question",
-      "fact",
       "gotcha",
-      "workflow",
-      "note",
-      "concept"
+      "question"
     ]);
   });
 
-  it("exports facet categories from the storage spec", () => {
-    expect(FACET_CATEGORIES).toEqual([
-      "project-description",
-      "architecture",
-      "stack",
-      "convention",
-      "file-layout",
-      "product-feature",
-      "testing",
-      "decision-rationale",
-      "abandoned-attempt",
-      "workflow",
-      "gotcha",
-      "debugging-fact",
-      "source",
-      "product-intent",
-      "feature-map",
-      "roadmap",
-      "agent-guidance",
-      "concept",
-      "open-question",
-      "domain",
-      "bounded-context",
-      "capability",
-      "business-rule",
-      "unresolved-conflict"
-    ]);
+  it("exports feature stages from the storage spec", () => {
+    expect(FEATURE_STAGES).toEqual(["idea", "building", "shipped", "paused", "dead"]);
+  });
+
+  it("exports object statuses from the storage spec", () => {
+    expect(OBJECT_STATUSES).toEqual(["active", "stale", "superseded", "open", "closed"]);
   });
 
   it("exports predicates from the storage spec", () => {
-    expect(PREDICATES).toEqual([
-      "affects",
-      "requires",
-      "depends_on",
-      "supersedes",
-      "conflicts_with",
-      "supports",
-      "challenges",
-      "derived_from",
-      "summarizes",
-      "documents",
-      "mentions",
-      "implements",
-      "related_to"
-    ]);
+    expect(PREDICATES).toEqual(["affects", "depends_on", "supersedes", "related_to"]);
   });
 
   it("exports event types from the storage spec", () => {
@@ -86,14 +44,12 @@ describe("core domain type constants", () => {
       "relation.created",
       "relation.updated",
       "relation.deleted",
-      "index.rebuilt",
-      "context.generated"
+      "index.rebuilt"
     ]);
   });
 
-  it("exports actors and scope kinds from the specs", () => {
+  it("exports actors and origin kinds from the specs", () => {
     expect(ACTORS).toEqual(["agent", "user", "cli", "mcp", "system"]);
-    expect(SCOPE_KINDS).toEqual(["project", "branch", "task"]);
     expect(ORIGIN_KINDS).toEqual(["file", "url", "user", "external"]);
   });
 

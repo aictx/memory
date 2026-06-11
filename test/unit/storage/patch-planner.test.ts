@@ -44,18 +44,14 @@ const dirtyGit: GitState = {
   dirty: true
 };
 const validConfig = {
-  version: 1,
+  version: 5,
   project: {
     id: projectId,
     name: "Billing API"
   },
   memory: {
-    defaultTokenBudget: 6000,
-    autoIndex: true,
-    saveContextPacks: false
-  },
-  git: {
-    trackContextPacks: false
+    defaultTokenBudget: 2000,
+    autoIndex: true
   }
 };
 
@@ -78,7 +74,7 @@ describe("planMemoryPatch", () => {
         changes: [
           {
             op: "create_object",
-            type: "note",
+            type: "gotcha",
             title: "Billing retries follow up",
             body: "Check retry behavior after the worker change."
           },
@@ -99,35 +95,29 @@ describe("planMemoryPatch", () => {
       return;
     }
 
-    expect(result.data.memory_created).toEqual(["note.billing-retries-follow-up"]);
+    expect(result.data.memory_created).toEqual(["gotcha.billing-retries-follow-up"]);
     expect(result.data.memory_updated).toEqual(["decision.billing-retries"]);
     expect(result.data.events_appended).toBe(2);
     expect(result.data.changes[0]).toEqual(
       expect.objectContaining({
         op: "create_object",
-        id: "note.billing-retries-follow-up",
+        id: "gotcha.billing-retries-follow-up",
         status: "active",
-        scope: {
-          kind: "project",
-          project: projectId,
-          branch: null,
-          task: null
-        },
-        path: ".memory/memory/notes/billing-retries-follow-up.json",
-        bodyPath: ".memory/memory/notes/billing-retries-follow-up.md"
+        path: ".memory/memory/gotchas/billing-retries-follow-up.json",
+        bodyPath: ".memory/memory/gotchas/billing-retries-follow-up.md"
       })
     );
     expect(result.data.touchedFiles).toEqual([
       ".memory/events.jsonl",
       ".memory/memory/decisions/billing-retries.json",
       ".memory/memory/decisions/billing-retries.md",
-      ".memory/memory/notes/billing-retries-follow-up.json",
-      ".memory/memory/notes/billing-retries-follow-up.md"
+      ".memory/memory/gotchas/billing-retries-follow-up.json",
+      ".memory/memory/gotchas/billing-retries-follow-up.md"
     ]);
     expect(result.data.fileWrites).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          path: ".memory/memory/notes/billing-retries-follow-up.md",
+          path: ".memory/memory/gotchas/billing-retries-follow-up.md",
           kind: "object_body",
           operation: "create_object"
         }),
@@ -154,7 +144,7 @@ describe("planMemoryPatch", () => {
         changes: [
           {
             op: "create_object",
-            type: "note",
+            type: "gotcha",
             title: "Missing body"
           }
         ]
@@ -246,7 +236,7 @@ describe("planMemoryPatch", () => {
       runner: createGitStatusRunner(
         [
           " M .memory/memory/decisions/billing-retries.json",
-          " M .memory/memory/facts/unrelated.json",
+          " M .memory/memory/gotchas/unrelated.json",
           ""
         ].join("\n"),
         new Set([".memory/memory/decisions/billing-retries.json"])
@@ -266,7 +256,7 @@ describe("planMemoryPatch", () => {
       expect(result.warnings.join("\n")).toContain(
         ".memory/memory/decisions/billing-retries.json"
       );
-      expect(result.warnings.join("\n")).not.toContain(".memory/memory/facts/unrelated.json");
+      expect(result.warnings.join("\n")).not.toContain(".memory/memory/gotchas/unrelated.json");
     }
   });
 
@@ -282,7 +272,7 @@ describe("planMemoryPatch", () => {
         changes: [
           {
             op: "delete_relation",
-            id: "rel.billing-retries-requires-idempotency"
+            id: "rel.billing-retries-depends-on-idempotency"
           },
           {
             op: "delete_object",
@@ -407,18 +397,18 @@ async function createPatchProject(): Promise<string> {
     body: "# Billing retries moved to queue worker\n\nRetries run in the queue worker.\n"
   });
   await writeMemoryObject(projectRoot, {
-    id: "constraint.webhook-idempotency",
-    type: "constraint",
+    id: "decision.webhook-idempotency",
+    type: "decision",
     status: "active",
     title: "Webhook processing must be idempotent",
-    bodyPath: "memory/constraints/webhook-idempotency.md",
+    bodyPath: "memory/decisions/webhook-idempotency.md",
     body: "# Webhook processing must be idempotent\n\nDuplicate webhooks are expected.\n"
   });
   await writeRelation(projectRoot, {
-    id: "rel.billing-retries-requires-idempotency",
+    id: "rel.billing-retries-depends-on-idempotency",
     from: "decision.billing-retries",
-    predicate: "requires",
-    to: "constraint.webhook-idempotency",
+    predicate: "depends_on",
+    to: "decision.webhook-idempotency",
     status: "active"
   });
   await writeProjectFile(projectRoot, ".memory/events.jsonl", "");
@@ -443,12 +433,6 @@ async function writeMemoryObject(
     status: fixture.status,
     title: fixture.title,
     body_path: fixture.bodyPath,
-    scope: {
-      kind: "project",
-      project: projectId,
-      branch: null,
-      task: null
-    },
     tags: [],
     created_at: FIXED_TIMESTAMP,
     updated_at: FIXED_TIMESTAMP

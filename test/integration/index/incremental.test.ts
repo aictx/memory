@@ -76,7 +76,9 @@ describe("incremental index integration", () => {
       memoryRoot: join(projectRoot, ".memory"),
       clock: createFixedTestClock(FIXED_TIMESTAMP_NEXT_MINUTE),
       touched: {
-        objectIds: ["architecture.current"]
+        objectIds: [
+          storageBefore.ok ? storageBefore.data.config.project.id : "project.unknown"
+        ]
       }
     });
 
@@ -120,11 +122,8 @@ interface ObjectRow {
   json_path: string;
   body: string;
   content_hash: string;
-  scope_json: string;
-  scope_kind: string;
-  scope_project: string;
-  scope_branch: string | null;
-  scope_task: string | null;
+  stage: string | null;
+  anchors_json: string | null;
   tags_json: string;
   source_json: string | null;
   superseded_by: string | null;
@@ -137,6 +136,7 @@ interface FtsRow {
   title: string;
   body: string;
   tags: string;
+  anchors: string;
 }
 
 interface RelationRow {
@@ -198,45 +198,40 @@ async function writeTouchedCanonicalChanges(projectRoot: string): Promise<Touche
   }
 
   const projectId = storage.data.config.project.id;
-  const architecture = storage.data.objects.find(
-    (object) => object.sidecar.id === "architecture.current"
+  const projectObject = storage.data.objects.find(
+    (object) => object.sidecar.id === projectId
   );
 
-  if (architecture === undefined) {
-    throw new Error("Missing architecture.current fixture object.");
+  if (projectObject === undefined) {
+    throw new Error("Missing starter project fixture object.");
   }
 
-  const updatedArchitectureBody =
-    "# Current Architecture\n\nArchitecture memory starts here.\n\nIncremental updates keep SQLite current.\n";
-  const { content_hash: _oldArchitectureHash, ...architectureWithoutHash } = {
-    ...architecture.sidecar,
+  const updatedProjectBody =
+    "# Project\n\nProject memory starts here.\n\nIncremental updates keep SQLite current.\n";
+  const { content_hash: _oldProjectHash, ...projectWithoutHash } = {
+    ...projectObject.sidecar,
     updated_at: FIXED_TIMESTAMP_NEXT_MINUTE
   };
-  const updatedArchitecture: MemoryObjectSidecar = {
-    ...architectureWithoutHash,
-    content_hash: computeObjectContentHash(architectureWithoutHash, updatedArchitectureBody)
+  const updatedProject: MemoryObjectSidecar = {
+    ...projectWithoutHash,
+    content_hash: computeObjectContentHash(projectWithoutHash, updatedProjectBody)
   };
 
   await writeProjectFile(
     projectRoot,
-    `.memory/${updatedArchitecture.body_path}`,
-    updatedArchitectureBody
+    `.memory/${updatedProject.body_path}`,
+    updatedProjectBody
   );
-  await writeJsonProjectFile(projectRoot, architecture.path, updatedArchitecture);
+  await writeJsonProjectFile(projectRoot, projectObject.path, updatedProject);
 
-  const constraintBody = "# Webhook idempotency\n\nWebhook handlers must dedupe delivery IDs.\n";
-  const constraintWithoutHash = {
-    id: "constraint.webhook-idempotency",
-    type: "constraint",
+  const decisionBody = "# Webhook idempotency\n\nWebhook handlers must dedupe delivery IDs.\n";
+  const decisionWithoutHash = {
+    id: "decision.webhook-idempotency",
+    type: "decision",
     status: "active",
     title: "Webhook idempotency",
-    body_path: "memory/constraints/webhook-idempotency.md",
-    scope: {
-      kind: "project",
-      project: projectId,
-      branch: null,
-      task: null
-    },
+    body_path: "memory/decisions/webhook-idempotency.md",
+    anchors: ["src/webhooks/"],
     tags: ["stripe", "webhooks"],
     source: {
       kind: "agent"
@@ -244,21 +239,21 @@ async function writeTouchedCanonicalChanges(projectRoot: string): Promise<Touche
     created_at: FIXED_TIMESTAMP_NEXT_MINUTE,
     updated_at: FIXED_TIMESTAMP_NEXT_MINUTE
   } satisfies Omit<MemoryObjectSidecar, "content_hash">;
-  const constraint: MemoryObjectSidecar = {
-    ...constraintWithoutHash,
-    content_hash: computeObjectContentHash(constraintWithoutHash, constraintBody)
+  const decision: MemoryObjectSidecar = {
+    ...decisionWithoutHash,
+    content_hash: computeObjectContentHash(decisionWithoutHash, decisionBody)
   };
   const relationWithoutHash = {
-    id: "rel.architecture-requires-webhook-idempotency",
-    from: "architecture.current",
-    predicate: "requires",
-    to: "constraint.webhook-idempotency",
+    id: "rel.project-depends-on-webhook-idempotency",
+    from: projectId,
+    predicate: "depends_on",
+    to: "decision.webhook-idempotency",
     status: "active",
     confidence: "high",
     evidence: [
       {
         kind: "memory",
-        id: "architecture.current"
+        id: projectId
       }
     ],
     created_at: FIXED_TIMESTAMP_NEXT_MINUTE,
@@ -271,7 +266,7 @@ async function writeTouchedCanonicalChanges(projectRoot: string): Promise<Touche
   const events = [
     {
       event: "memory.created",
-      id: "constraint.webhook-idempotency",
+      id: "decision.webhook-idempotency",
       actor: "agent",
       timestamp: FIXED_TIMESTAMP_NEXT_MINUTE,
       payload: {
@@ -280,26 +275,26 @@ async function writeTouchedCanonicalChanges(projectRoot: string): Promise<Touche
     },
     {
       event: "relation.created",
-      relation_id: "rel.architecture-requires-webhook-idempotency",
+      relation_id: "rel.project-depends-on-webhook-idempotency",
       actor: "agent",
       timestamp: FIXED_TIMESTAMP_NEXT_MINUTE,
       payload: {
-        from: "architecture.current",
-        predicate: "requires",
-        to: "constraint.webhook-idempotency"
+        from: projectId,
+        predicate: "depends_on",
+        to: "decision.webhook-idempotency"
       }
     }
   ];
 
-  await writeProjectFile(projectRoot, ".memory/memory/constraints/webhook-idempotency.md", constraintBody);
+  await writeProjectFile(projectRoot, ".memory/memory/decisions/webhook-idempotency.md", decisionBody);
   await writeJsonProjectFile(
     projectRoot,
-    ".memory/memory/constraints/webhook-idempotency.json",
-    constraint
+    ".memory/memory/decisions/webhook-idempotency.json",
+    decision
   );
   await writeJsonProjectFile(
     projectRoot,
-    ".memory/relations/architecture-requires-webhook-idempotency.json",
+    ".memory/relations/project-depends-on-webhook-idempotency.json",
     relation
   );
   await writeProjectFile(
@@ -309,8 +304,8 @@ async function writeTouchedCanonicalChanges(projectRoot: string): Promise<Touche
   );
 
   return {
-    objectIds: ["architecture.current", "constraint.webhook-idempotency"],
-    relationIds: ["rel.architecture-requires-webhook-idempotency"],
+    objectIds: [projectId, "decision.webhook-idempotency"],
+    relationIds: ["rel.project-depends-on-webhook-idempotency"],
     appendedEventCount: 2
   };
 }
@@ -332,11 +327,8 @@ async function snapshotIndex(projectRoot: string) {
               json_path,
               body,
               content_hash,
-              scope_json,
-              scope_kind,
-              scope_project,
-              scope_branch,
-              scope_task,
+              stage,
+              anchors_json,
               tags_json,
               source_json,
               superseded_by,
@@ -349,7 +341,7 @@ async function snapshotIndex(projectRoot: string) {
         .all(),
       fts: connection.db
         .prepare<[], FtsRow>(
-          "SELECT object_id, title, body, tags FROM objects_fts ORDER BY object_id"
+          "SELECT object_id, title, body, tags, anchors FROM objects_fts ORDER BY object_id"
         )
         .all(),
       relations: connection.db

@@ -13,7 +13,6 @@ import { main, type CliOutputWriter } from "../../../src/cli/main.js";
 import { runSubprocess } from "../../../src/core/subprocess.js";
 import type {
   Evidence,
-  ObjectFacets,
   ObjectStatus,
   ObjectType,
   Predicate,
@@ -136,7 +135,7 @@ interface MemoryFixture {
   bodyPath: string;
   body: string;
   tags: string[];
-  facets?: ObjectFacets;
+  anchors?: string[];
   evidence?: Evidence[];
   updatedAt?: string;
 }
@@ -180,12 +179,13 @@ describe("memory MCP read tools", () => {
 
       expect(toolNames).toEqual([
         "inspect_memory",
-        "remember_memory",
+        "save_memory",
         "search_memory"
       ]);
       expect(toolNames).not.toEqual(
         expect.arrayContaining([
           "load_memory",
+          "remember_memory",
           "save_memory_patch",
           "diff_memory",
           "init",
@@ -245,8 +245,7 @@ describe("memory MCP read tools", () => {
           arguments: {
             query: "Schema validation",
             hints: {
-              files: [],
-              unexpected_hint: true
+              files: ["src/index/search.ts"]
             }
           }
         }),
@@ -260,7 +259,7 @@ describe("memory MCP read tools", () => {
       ]);
 
       for (const result of invalidCalls) {
-        expectToolError(result, /unexpected|unexpected_hint|unrecognized|unknown/i);
+        expectToolError(result, /unexpected|hints|unrecognized|unknown/i);
       }
     } finally {
       await started.close();
@@ -301,9 +300,9 @@ describe("memory MCP read tools", () => {
 
       expect(mcpEnvelope).toEqual(cliEnvelope);
       expect(mcpEnvelope.data.matches.map((match) => match.id)).toContain(
-        "constraint.webhook-idempotency"
+        "decision.webhook-idempotency"
       );
-      expect(mcpEnvelope.data.matches.map((match) => match.id)).toContain("synthesis.webhook-context");
+      expect(mcpEnvelope.data.matches.map((match) => match.id)).toContain("feature.webhook-context");
     } finally {
       await started.close();
     }
@@ -311,21 +310,18 @@ describe("memory MCP read tools", () => {
     expect(started.stderr()).toBe("");
   });
 
-  it("returns hinted search_memory data matching CLI search JSON", async () => {
-    const projectRoot = await createInitializedProject("memory-mcp-search-hints-");
+  it("matches anchor path fragments through CLI and MCP search", async () => {
+    const projectRoot = await createInitializedProject("memory-mcp-search-anchors-");
     await writeMemoryObject(projectRoot, {
-      id: "decision.hinted-ranking",
+      id: "decision.anchored-ranking",
       type: "decision",
       status: "active",
-      title: "Hinted ranking",
-      bodyPath: "memory/decisions/hinted-ranking.md",
-      body: "# Hinted ranking\n\nRanking memory is selected from retrieval hints.\n",
+      title: "Anchored ranking",
+      bodyPath: "memory/decisions/anchored-ranking.md",
+      body: "# Anchored ranking\n\nThis memory is linked to code through anchors.\n",
       tags: ["retrieval"],
-      facets: {
-        category: "decision-rationale",
-        applies_to: ["src/context/rank.ts"]
-      },
-      evidence: [{ kind: "file", id: "src/index/search.ts" }],
+      anchors: ["src/context/rank.ts"],
+      evidence: [{ kind: "file", id: "src/context/rank.ts" }],
       updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
     });
     await rebuildProject(projectRoot);
@@ -333,36 +329,14 @@ describe("memory MCP read tools", () => {
 
     try {
       const cli = await runCli(
-        [
-          "node",
-          "memory",
-          "search",
-          "opaque",
-          "--file",
-          "src/context/rank.ts",
-          "--changed-file",
-          "src/index/search.ts",
-          "--subsystem",
-          "retrieval",
-          "--history-window",
-          "30d",
-          "--limit",
-          "10",
-          "--json"
-        ],
+        ["node", "memory", "search", "rank.ts", "--limit", "10", "--json"],
         projectRoot
       );
       const mcp = await started.client.callTool({
         name: "search_memory",
         arguments: {
-          query: "opaque",
-          limit: 10,
-          hints: {
-            files: ["src/context/rank.ts"],
-            changed_files: ["src/index/search.ts"],
-            subsystems: ["retrieval"],
-            history_window: "30d"
-          }
+          query: "rank.ts",
+          limit: 10
         }
       });
       const cliEnvelope = parseCliEnvelope<SearchEnvelope>(cli);
@@ -370,7 +344,7 @@ describe("memory MCP read tools", () => {
 
       expect(mcpEnvelope).toEqual(cliEnvelope);
       expect(mcpEnvelope.data.matches[0]).toMatchObject({
-        id: "decision.hinted-ranking",
+        id: "decision.anchored-ranking",
         status: "active"
       });
     } finally {
@@ -410,7 +384,7 @@ describe("memory MCP read tools", () => {
       });
       expect(mcpEnvelope.data.object.body).toContain("Billing retries run in the worker.");
       expect(mcpEnvelope.data.relations.outgoing.map((relation) => relation.id)).toEqual([
-        "rel.decision-requires-idempotency"
+        "rel.decision-depends-on-idempotency"
       ]);
       expect(mcpEnvelope.data.relations.incoming.map((relation) => relation.id)).toEqual([
         "rel.worker-affects-decision"
@@ -433,18 +407,18 @@ describe("memory MCP read tools", () => {
         name: "inspect_memory",
         arguments: {
           project_root: projectRoot,
-          id: "constraint.webhook-idempotency"
+          id: "gotcha.webhook-idempotency"
         }
       });
       const mcpEnvelope = parseToolEnvelope<InspectEnvelope>(mcp);
 
       expect(mcpEnvelope.ok).toBe(true);
       expect(mcpEnvelope.data.object).toMatchObject({
-        id: "constraint.webhook-idempotency",
+        id: "gotcha.webhook-idempotency",
         title: "Webhook idempotency"
       });
       expect(mcpEnvelope.data.relations.incoming.map((relation) => relation.id)).toEqual([
-        "rel.decision-requires-idempotency"
+        "rel.decision-depends-on-idempotency"
       ]);
     } finally {
       await started.close();
@@ -544,7 +518,7 @@ describe("memory MCP read tools", () => {
 
       expect(mcpInspect).toEqual(cliInspect);
       expect(mcpInspect.data.relations.outgoing.map((relation) => relation.id)).toEqual([
-        "rel.parity-read-requires-targeting"
+        "rel.parity-read-depends-on-targeting"
       ]);
     } finally {
       await started.close();
@@ -674,11 +648,11 @@ async function createTempRoot(prefix: string): Promise<string> {
 
 async function writeLoadSearchFixtures(projectRoot: string): Promise<void> {
   await writeMemoryObject(projectRoot, {
-    id: "constraint.webhook-idempotency",
-    type: "constraint",
+    id: "decision.webhook-idempotency",
+    type: "decision",
     status: "active",
     title: "Webhook idempotency",
-    bodyPath: "memory/constraints/webhook-idempotency.md",
+    bodyPath: "memory/decisions/webhook-idempotency.md",
     body:
       "# Webhook idempotency\n\nStripe may deliver duplicate webhook events, so delivery IDs must be deduplicated.\n",
     tags: ["stripe", "webhooks", "idempotency"],
@@ -695,17 +669,13 @@ async function writeLoadSearchFixtures(projectRoot: string): Promise<void> {
     updatedAt: FIXED_TIMESTAMP
   });
   await writeMemoryObject(projectRoot, {
-    id: "synthesis.webhook-context",
-    type: "synthesis",
+    id: "feature.webhook-context",
+    type: "feature",
     status: "active",
     title: "Webhook context",
-    bodyPath: "memory/syntheses/webhook-context.md",
-    body: "# Webhook context\n\nStripe webhook implementation context is maintained as synthesis memory.\n",
+    bodyPath: "memory/features/webhook-context.md",
+    body: "# Webhook context\n\nStripe webhook implementation context is maintained as feature memory.\n",
     tags: ["stripe", "webhooks", "idempotency"],
-    facets: {
-      category: "feature-map",
-      load_modes: ["coding", "onboarding"]
-    },
     updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
   });
 }
@@ -722,110 +692,50 @@ async function writeInspectFixtures(projectRoot: string): Promise<void> {
     updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
   });
   await writeMemoryObject(projectRoot, {
-    id: "constraint.webhook-idempotency",
-    type: "constraint",
+    id: "gotcha.webhook-idempotency",
+    type: "gotcha",
     status: "active",
     title: "Webhook idempotency",
-    bodyPath: "memory/constraints/webhook-idempotency.md",
+    bodyPath: "memory/gotchas/webhook-idempotency.md",
     body: "# Webhook idempotency\n\nWebhook delivery IDs must be deduplicated.\n",
     tags: ["webhooks"],
     updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
   });
   await writeMemoryObject(projectRoot, {
-    id: "note.worker-details",
-    type: "note",
+    id: "gotcha.worker-details",
+    type: "gotcha",
     status: "active",
     title: "Worker details",
-    bodyPath: "memory/notes/worker-details.md",
+    bodyPath: "memory/gotchas/worker-details.md",
     body: "# Worker details\n\nThe queue worker owns retry execution.\n",
     tags: ["worker"],
     updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
   });
   await writeRelation(projectRoot, {
-    id: "rel.decision-requires-idempotency",
+    id: "rel.decision-depends-on-idempotency",
     from: "decision.billing-retries",
-    predicate: "requires",
-    to: "constraint.webhook-idempotency",
+    predicate: "depends_on",
+    to: "gotcha.webhook-idempotency",
     confidence: "high"
   });
   await writeRelation(projectRoot, {
     id: "rel.worker-affects-decision",
-    from: "note.worker-details",
+    from: "gotcha.worker-details",
     predicate: "affects",
     to: "decision.billing-retries",
     confidence: "medium"
   });
 }
 
-async function writeModeFixtures(projectRoot: string): Promise<void> {
-  const shared = {
-    status: "active" as const,
-    title: "Mode service overview",
-    tags: ["mode", "service", "overview"],
-    updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
-  };
-
-  await writeMemoryObject(projectRoot, {
-    ...shared,
-    id: "project.mode-service",
-    type: "project",
-    bodyPath: "memory/project-mode-service.md",
-    body: "# Mode service overview\n\nMode service overview project orientation.\n"
-  });
-  await writeMemoryObject(projectRoot, {
-    ...shared,
-    id: "constraint.mode-service",
-    type: "constraint",
-    bodyPath: "memory/constraints/mode-service.md",
-    body: "# Mode service overview\n\nMode service overview constraint.\n"
-  });
-  await writeMemoryObject(projectRoot, {
-    ...shared,
-    id: "gotcha.mode-service",
-    type: "gotcha",
-    bodyPath: "memory/gotchas/mode-service.md",
-    body: "# Mode service overview\n\nMode service overview gotcha for debugging.\n"
-  });
-  await writeMemoryObject(projectRoot, {
-    ...shared,
-    id: "workflow.mode-service",
-    type: "workflow",
-    bodyPath: "memory/workflows/mode-service.md",
-    body: "# Mode service overview\n\nMode service overview workflow for onboarding.\n"
-  });
-}
-
-async function writeManyBudgetFixtures(projectRoot: string, count: number): Promise<void> {
-  for (let index = 1; index <= count; index += 1) {
-    await writeMemoryObject(projectRoot, {
-      id: `decision.budget-context-${index}`,
-      type: "decision",
-      status: index <= 8 ? "active" : "stale",
-      title: `Budget compiler context ${index}`,
-      bodyPath: `memory/decisions/budget-context-${index}.md`,
-      body: `# Budget compiler context ${index}\n\n${"Budget compiler context behavior should stay visible when token_budget is omitted. ".repeat(18)}\n`,
-      tags: ["budget", "compiler", "context"],
-      updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
-    });
-  }
-}
-
 async function writeMemoryObject(projectRoot: string, fixture: MemoryFixture): Promise<void> {
-  const storage = await readStorageOrThrow(projectRoot);
   const sidecarWithoutHash = {
     id: fixture.id,
     type: fixture.type,
     status: fixture.status,
     title: fixture.title,
     body_path: fixture.bodyPath,
-    scope: {
-      kind: "project",
-      project: storage.config.project.id,
-      branch: null,
-      task: null
-    },
     tags: fixture.tags,
-    ...(fixture.facets === undefined ? {} : { facets: fixture.facets }),
+    ...(fixture.anchors === undefined ? {} : { anchors: fixture.anchors }),
     ...(fixture.evidence === undefined ? {} : { evidence: fixture.evidence }),
     source: {
       kind: "agent"
@@ -873,17 +783,6 @@ async function writeRelation(projectRoot: string, fixture: RelationFixture): Pro
     `.memory/relations/${fixture.id.replace(/^rel\./, "")}.json`,
     relation
   );
-}
-
-async function readStorageOrThrow(projectRoot: string) {
-  const storage = await readCanonicalStorage(projectRoot);
-
-  expect(storage.ok).toBe(true);
-  if (!storage.ok) {
-    throw new Error(storage.error.message);
-  }
-
-  return storage.data;
 }
 
 async function writeProjectFile(
@@ -1010,7 +909,7 @@ function expectToolAnnotations(tools: unknown[]): void {
     idempotentHint: true,
     openWorldHint: false
   });
-  expectToolAnnotation(tools, "remember_memory", {
+  expectToolAnnotation(tools, "save_memory", {
     readOnlyHint: false,
     destructiveHint: true,
     idempotentHint: false,

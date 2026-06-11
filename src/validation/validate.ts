@@ -60,10 +60,6 @@ interface ProjectValidationState {
   warnings: ValidationIssue[];
 }
 
-interface ScopeString {
-  value: string | null;
-}
-
 type RelativeFileRead =
   | {
       ok: true;
@@ -79,7 +75,7 @@ type RelativeFileRead =
       issue: ValidationIssue;
     };
 
-const SUPPORTED_STORAGE_VERSIONS = new Set([1, 2, 3, 4]);
+const SUPPORTED_STORAGE_VERSIONS = new Set([5]);
 const RELATED_TO_WARNING_MINIMUM = 5;
 
 export function validateConfig(
@@ -134,7 +130,7 @@ export function schemaValidationError(issues: readonly ValidationIssue[]): Memor
 
 export async function validateProject(
   projectRoot: string,
-  options: ValidateProjectOptions = {}
+  _options: ValidateProjectOptions = {}
 ): Promise<ProjectValidationResult> {
   const state: ProjectValidationState = {
     projectRoot,
@@ -154,7 +150,7 @@ export async function validateProject(
   await addSecretFindings(state);
   await loadSchemas(state);
   await validateConfigFile(state);
-  await validateObjectFiles(state, options);
+  await validateObjectFiles(state);
   await validateRelationFiles(state);
   await validateEventsFile(state);
   validateDuplicateObjectIds(state);
@@ -420,10 +416,7 @@ async function validateConfigFile(state: ProjectValidationState): Promise<void> 
   state.projectId = readProjectId(parsed.value);
 }
 
-async function validateObjectFiles(
-  state: ProjectValidationState,
-  options: ValidateProjectOptions
-): Promise<void> {
+async function validateObjectFiles(state: ProjectValidationState): Promise<void> {
   const paths = await globProjectPaths(state.projectRoot, ".memory/memory/**/*.json");
 
   for (const path of paths) {
@@ -446,7 +439,6 @@ async function validateObjectFiles(
     validateObjectIdentity(state, objectFile);
     await validateObjectBody(state, objectFile);
     validateObjectHash(state, objectFile);
-    validateObjectScope(state, objectFile, options);
   }
 }
 
@@ -632,87 +624,6 @@ function validateObjectHash(state: ProjectValidationState, objectFile: MemoryObj
       message: "Memory object content_hash does not match current body and metadata.",
       path: objectFile.path,
       field: "/content_hash"
-    });
-  }
-}
-
-function validateObjectScope(
-  state: ProjectValidationState,
-  objectFile: MemoryObjectFile,
-  options: ValidateProjectOptions
-): void {
-  const scope = objectFile.value.scope;
-
-  if (!isRecord(scope)) {
-    return;
-  }
-
-  const kind = readString(scope, "kind");
-  const project = readString(scope, "project");
-  const branch = readScopeString(scope, "branch");
-  const task = readScopeString(scope, "task");
-
-  if (state.projectId !== null && project !== null && project !== state.projectId) {
-    state.errors.push({
-      code: "ObjectScopeProjectMismatch",
-      message: "Object scope project must match local project id.",
-      path: objectFile.path,
-      field: "/scope/project"
-    });
-  }
-
-  if (kind === "project" && (branch.value !== null || task.value !== null)) {
-    state.errors.push({
-      code: "ObjectScopeInvalid",
-      message: "Project-scoped memory must not set branch or task.",
-      path: objectFile.path,
-      field: "/scope"
-    });
-  } else if (kind === "branch") {
-    validateBranchScope(state, objectFile, branch, task, options);
-  } else if (kind === "task" && (task.value === null || task.value.length === 0)) {
-    state.errors.push({
-      code: "ObjectScopeInvalid",
-      message: "Task-scoped memory must set task.",
-      path: objectFile.path,
-      field: "/scope/task"
-    });
-  }
-}
-
-function validateBranchScope(
-  state: ProjectValidationState,
-  objectFile: MemoryObjectFile,
-  branch: ScopeString,
-  task: ScopeString,
-  options: ValidateProjectOptions
-): void {
-  if (branch.value === null || branch.value.length === 0 || task.value !== null) {
-    state.errors.push({
-      code: "ObjectScopeInvalid",
-      message: "Branch-scoped memory must set branch and must not set task.",
-      path: objectFile.path,
-      field: "/scope"
-    });
-  }
-
-  if (
-    options.git?.available !== true ||
-    options.git.branch === null ||
-    options.git.branch === undefined
-  ) {
-    state.errors.push({
-      code: "ObjectBranchScopeUnavailable",
-      message: "Branch-scoped memory requires an available current Git branch.",
-      path: objectFile.path,
-      field: "/scope/branch"
-    });
-  } else if (branch.value !== null && branch.value !== options.git.branch) {
-    state.errors.push({
-      code: "ObjectScopeBranchMismatch",
-      message: "Branch-scoped memory must match the current Git branch.",
-      path: objectFile.path,
-      field: "/scope/branch"
     });
   }
 }
@@ -977,7 +888,7 @@ async function globProjectPaths(projectRoot: string, pattern: string): Promise<s
     await fg(pattern, {
       cwd: projectRoot,
       dot: true,
-      ignore: [".memory/index/**", ".memory/context/**"],
+      ignore: [".memory/index/**"],
       onlyFiles: true,
       unique: true
     })
@@ -1054,12 +965,6 @@ function readNullableString(record: Record<string, unknown>, key: string): strin
   const value = record[key];
 
   return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-function readScopeString(record: Record<string, unknown>, key: string): ScopeString {
-  const value = record[key];
-
-  return { value: typeof value === "string" ? value : null };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

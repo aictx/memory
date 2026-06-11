@@ -9,8 +9,7 @@ export type DataAccessOperationName =
   | "search"
   | "inspect"
   | "diff"
-  | "remember"
-  | "applyPatch";
+  | "save";
 
 export type HostAdapterProfileStatus = "active" | "inactive";
 
@@ -47,16 +46,8 @@ const HOST_ADAPTER_PROFILES = {
         operation: "inspect"
       },
       {
-        toolName: "remember_memory",
-        operation: "remember"
-      },
-      {
-        toolName: "save_memory_patch",
-        operation: "applyPatch"
-      },
-      {
-        toolName: "diff_memory",
-        operation: "diff"
+        toolName: "save_memory",
+        operation: "save"
       }
     ]
   },

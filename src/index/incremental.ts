@@ -237,13 +237,11 @@ function deleteObjects(
   const deleteFts = db.prepare<[ObjectId]>("DELETE FROM objects_fts WHERE object_id = ?");
   const deleteFileLinks = db.prepare<[ObjectId]>("DELETE FROM memory_file_links WHERE memory_id = ?");
   const deleteCommitLinks = db.prepare<[ObjectId]>("DELETE FROM memory_commit_links WHERE memory_id = ?");
-  const deleteFacetLinks = db.prepare<[ObjectId]>("DELETE FROM memory_facet_links WHERE memory_id = ?");
 
   for (const objectId of objectIds) {
     deleteFts.run(objectId);
     deleteFileLinks.run(objectId);
     deleteCommitLinks.run(objectId);
-    deleteFacetLinks.run(objectId);
     deleteObject.run(objectId);
     data.objects_deleted += 1;
   }
@@ -268,15 +266,9 @@ function upsertTouchedObjects(
       json_path,
       body,
       content_hash,
-      scope_json,
-      scope_kind,
-      scope_project,
-      scope_branch,
-      scope_task,
+      stage,
+      anchors_json,
       tags_json,
-      facets_json,
-      facet_category,
-      applies_to_json,
       evidence_json,
       source_json,
       origin_json,
@@ -292,15 +284,9 @@ function upsertTouchedObjects(
       @json_path,
       @body,
       @content_hash,
-      @scope_json,
-      @scope_kind,
-      @scope_project,
-      @scope_branch,
-      @scope_task,
+      @stage,
+      @anchors_json,
       @tags_json,
-      @facets_json,
-      @facet_category,
-      @applies_to_json,
       @evidence_json,
       @source_json,
       @origin_json,
@@ -316,15 +302,9 @@ function upsertTouchedObjects(
       json_path = excluded.json_path,
       body = excluded.body,
       content_hash = excluded.content_hash,
-      scope_json = excluded.scope_json,
-      scope_kind = excluded.scope_kind,
-      scope_project = excluded.scope_project,
-      scope_branch = excluded.scope_branch,
-      scope_task = excluded.scope_task,
+      stage = excluded.stage,
+      anchors_json = excluded.anchors_json,
       tags_json = excluded.tags_json,
-      facets_json = excluded.facets_json,
-      facet_category = excluded.facet_category,
-      applies_to_json = excluded.applies_to_json,
       evidence_json = excluded.evidence_json,
       source_json = excluded.source_json,
       origin_json = excluded.origin_json,
@@ -334,13 +314,12 @@ function upsertTouchedObjects(
   `);
   const deleteFts = db.prepare<[ObjectId]>("DELETE FROM objects_fts WHERE object_id = ?");
   const insertFts = db.prepare<Record<string, string>>(`
-    INSERT INTO objects_fts (object_id, title, body, tags, facets, evidence)
-    VALUES (@object_id, @title, @body, @tags, @facets, @evidence)
+    INSERT INTO objects_fts (object_id, title, body, tags, anchors, evidence)
+    VALUES (@object_id, @title, @body, @tags, @anchors, @evidence)
   `);
   const deleteObject = db.prepare<[ObjectId]>("DELETE FROM objects WHERE id = ?");
   const deleteFileLinks = db.prepare<[ObjectId]>("DELETE FROM memory_file_links WHERE memory_id = ?");
   const deleteCommitLinks = db.prepare<[ObjectId]>("DELETE FROM memory_commit_links WHERE memory_id = ?");
-  const deleteFacetLinks = db.prepare<[ObjectId]>("DELETE FROM memory_facet_links WHERE memory_id = ?");
 
   for (const objectId of touched.objectIds) {
     if (touched.deletedObjectIds.has(objectId)) {
@@ -353,7 +332,6 @@ function upsertTouchedObjects(
       deleteFts.run(objectId);
       deleteFileLinks.run(objectId);
       deleteCommitLinks.run(objectId);
-      deleteFacetLinks.run(objectId);
       deleteObject.run(objectId);
       data.objects_deleted += 1;
       continue;
@@ -377,15 +355,9 @@ function upsertTouchedObjects(
       json_path: object.path,
       body: object.body,
       content_hash: object.sidecar.content_hash,
-      scope_json: JSON.stringify(object.sidecar.scope),
-      scope_kind: object.sidecar.scope.kind,
-      scope_project: object.sidecar.scope.project,
-      scope_branch: object.sidecar.scope.branch,
-      scope_task: object.sidecar.scope.task,
+      stage: object.sidecar.stage ?? null,
+      anchors_json: jsonOrNull(object.sidecar.anchors),
       tags_json: JSON.stringify(tags),
-      facets_json: jsonOrNull(object.sidecar.facets),
-      facet_category: object.sidecar.facets?.category ?? null,
-      applies_to_json: jsonOrNull(object.sidecar.facets?.applies_to),
       evidence_json: jsonOrNull(object.sidecar.evidence),
       source_json: jsonOrNull(object.sidecar.source),
       origin_json: jsonOrNull(object.sidecar.origin),
@@ -399,7 +371,7 @@ function upsertTouchedObjects(
       title: object.sidecar.title,
       body: object.body,
       tags: tags.join(" "),
-      facets: facetSearchText(object.sidecar.facets),
+      anchors: anchorsSearchText(object.sidecar.anchors),
       evidence: [
         evidenceSearchText(object.sidecar.evidence),
         originSearchText(object.sidecar.origin)
@@ -556,7 +528,6 @@ function rebuildMemoryLinks(
   relations: readonly StoredMemoryRelation[]
 ): void {
   db.exec(`
-    DELETE FROM memory_facet_links;
     DELETE FROM memory_commit_links;
     DELETE FROM memory_file_links;
   `);
@@ -569,31 +540,9 @@ function rebuildMemoryLinks(
     INSERT OR IGNORE INTO memory_commit_links (memory_id, commit_hash, link_kind)
     VALUES (@memory_id, @commit_hash, @link_kind)
   `);
-  const insertFacetLink = db.prepare<Record<string, string>>(`
-    INSERT OR IGNORE INTO memory_facet_links (memory_id, facet, link_kind)
-    VALUES (@memory_id, @facet, @link_kind)
-  `);
 
   for (const object of objects) {
     const memoryId = object.sidecar.id;
-
-    for (const tag of object.sidecar.tags ?? []) {
-      insertFacetLinkIfValid(insertFacetLink, memoryId, tag, "tag");
-    }
-
-    const facets = object.sidecar.facets;
-
-    if (facets !== undefined) {
-      insertFacetLinkIfValid(insertFacetLink, memoryId, facets.category, "category");
-
-      for (const loadMode of facets.load_modes ?? []) {
-        insertFacetLinkIfValid(insertFacetLink, memoryId, loadMode, "load_mode");
-      }
-
-      for (const filePath of facets.applies_to ?? []) {
-        insertFileLinkIfValid(insertFileLink, memoryId, filePath, "facets.applies_to");
-      }
-    }
 
     for (const evidence of object.sidecar.evidence ?? []) {
       if (evidence.kind === "file") {
@@ -729,12 +678,8 @@ function indexObjectsById(
   return new Map(objects.map((object) => [object.sidecar.id, object]));
 }
 
-function facetSearchText(facets: StoredMemoryObject["sidecar"]["facets"]): string {
-  if (facets === undefined) {
-    return "";
-  }
-
-  return [facets.category, ...(facets.applies_to ?? []), ...(facets.load_modes ?? [])].join(" ");
+function anchorsSearchText(anchors: StoredMemoryObject["sidecar"]["anchors"]): string {
+  return (anchors ?? []).join(" ");
 }
 
 function evidenceSearchText(evidence: StoredMemoryObject["sidecar"]["evidence"]): string {
@@ -789,25 +734,6 @@ function insertCommitLinkIfValid(
   statement.run({
     memory_id: memoryId,
     commit_hash: normalized,
-    link_kind: linkKind
-  });
-}
-
-function insertFacetLinkIfValid(
-  statement: LinkInsertStatement,
-  memoryId: string,
-  facet: string,
-  linkKind: string
-): void {
-  const normalized = facet.toLowerCase().trim();
-
-  if (normalized === "") {
-    return;
-  }
-
-  statement.run({
-    memory_id: memoryId,
-    facet: normalized,
     link_kind: linkKind
   });
 }

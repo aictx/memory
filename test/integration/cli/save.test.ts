@@ -6,14 +6,20 @@ import { Readable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { main, type CliOutputWriter } from "../../../src/cli/main.js";
+import { searchMemory } from "../../../src/app/operations.js";
+import { runSubprocess } from "../../../src/core/subprocess.js";
 import { dataAccessService } from "../../../src/data-access/index.js";
 import { readCanonicalStorage } from "../../../src/storage/read.js";
+import { createFixedTestClock } from "../../fixtures/time.js";
 
 const tempRoots: string[] = [];
 
 interface SaveEnvelope {
   ok: true;
+  warnings: string[];
   data: {
+    dry_run: boolean;
+    patch: unknown;
     files_changed: string[];
     memory_created: string[];
     memory_updated: string[];
@@ -45,90 +51,145 @@ afterEach(async () => {
 });
 
 describe("memory save CLI", () => {
-  it("saves equivalent patches from stdin and file through the shared write path", async () => {
-    const patch = createNotePatch(
-      "Shared save note",
-      "Both CLI input sources should reach the same save service."
-    );
-    const stdinProject = await createInitializedProject("memory-cli-save-stdin-");
-    const fileProject = await createInitializedProject("memory-cli-save-file-");
-    const stdinOutput = createCapturedOutput();
-    const fileOutput = createCapturedOutput();
-    const applyPatch = vi.spyOn(dataAccessService, "applyPatch");
+  it("saves intent-first memory from stdin through the shared write path and makes it immediately searchable", async () => {
+    const projectRoot = await createInitializedProject("memory-cli-save-");
+    const output = createCapturedOutput();
+    const save = vi.spyOn(dataAccessService, "save");
+    const input = {
+      task: "Document billing retry location",
+      nodes: [
+        {
+          kind: "decision",
+          title: "Billing retries run in the worker",
+          body:
+            "Billing retry execution happens in the queue worker, not inside the HTTP webhook handler.",
+          tags: ["billing", "retries"],
+          anchors: ["services/billing/src/workers/retry.ts"],
+          evidence: [{ kind: "file", id: "services/billing/src/workers/retry.ts" }]
+        }
+      ]
+    };
 
-    const stdinExitCode = await main(["node", "memory", "save", "--stdin", "--json"], {
-      ...stdinOutput.writers,
-      cwd: stdinProject,
-      stdin: Readable.from([JSON.stringify(patch)])
+    const exitCode = await main(["node", "memory", "save", "--stdin", "--json"], {
+      ...output.writers,
+      cwd: projectRoot,
+      stdin: Readable.from([JSON.stringify(input)])
     });
-    const patchFile = join(fileProject, "patch.json");
-    await writeFile(patchFile, JSON.stringify(patch), "utf8");
-    const fileExitCode = await main(
-      ["node", "memory", "save", "--file", "patch.json", "--json"],
+
+    expect(exitCode).toBe(0);
+    expect(output.stderr()).toBe("");
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith({
+      target: {
+        kind: "cwd",
+        cwd: projectRoot
+      },
+      input,
+      dryRun: false
+    });
+    const envelope = JSON.parse(output.stdout()) as SaveEnvelope;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.data.dry_run).toBe(false);
+    expect(envelope.data.memory_created).toEqual(["decision.billing-retries-run-in-the-worker"]);
+    expect(envelope.data.events_appended).toBe(1);
+    expect(envelope.data.index_updated).toBe(true);
+
+    const storage = await readCanonicalStorage(projectRoot);
+    expect(storage.ok).toBe(true);
+    if (storage.ok) {
+      const saved = storage.data.objects.find(
+        (object) => object.sidecar.id === "decision.billing-retries-run-in-the-worker"
+      );
+      expect(saved?.sidecar.anchors).toEqual(["services/billing/src/workers/retry.ts"]);
+      expect(saved?.sidecar.evidence).toEqual([
+        { kind: "file", id: "services/billing/src/workers/retry.ts" }
+      ]);
+    }
+
+    const searched = await searchMemory({
+      cwd: projectRoot,
+      query: "billing retries worker",
+      clock: createFixedTestClock()
+    });
+    expect(searched.ok).toBe(true);
+    if (searched.ok) {
+      expect(searched.data.matches.map((match) => match.id)).toContain(
+        "decision.billing-retries-run-in-the-worker"
+      );
+    }
+  });
+
+  it("dry-runs the generated patch without writing canonical memory", async () => {
+    const projectRoot = await createInitializedProject("memory-cli-save-dry-run-");
+    const output = createCapturedOutput();
+    const eventsBefore = await readFile(join(projectRoot, ".memory", "events.jsonl"), "utf8");
+    const input = {
+      task: "Preview durable memory",
+      nodes: [
+        {
+          kind: "gotcha",
+          title: "Preview gotcha",
+          body: "This gotcha should only be planned."
+        }
+      ]
+    };
+
+    const exitCode = await main(
+      ["node", "memory", "save", "--stdin", "--dry-run", "--json"],
       {
-        ...fileOutput.writers,
-        cwd: fileProject
+        ...output.writers,
+        cwd: projectRoot,
+        stdin: Readable.from([JSON.stringify(input)])
       }
     );
 
-    expect(stdinExitCode).toBe(0);
-    expect(fileExitCode).toBe(0);
-    expect(applyPatch).toHaveBeenCalledTimes(2);
-    expect(applyPatch).toHaveBeenNthCalledWith(1, {
-      target: {
-        kind: "cwd",
-        cwd: stdinProject
-      },
-      patch
-    });
-    expect(applyPatch).toHaveBeenNthCalledWith(2, {
-      target: {
-        kind: "cwd",
-        cwd: fileProject
-      },
-      patch
-    });
-    expect(stdinOutput.stderr()).toBe("");
-    expect(fileOutput.stderr()).toBe("");
-    const stdinEnvelope = JSON.parse(stdinOutput.stdout()) as SaveEnvelope;
-    const fileEnvelope = JSON.parse(fileOutput.stdout()) as SaveEnvelope;
-    expect(stdinEnvelope.ok).toBe(true);
-    expect(fileEnvelope.ok).toBe(true);
-    expect(fileEnvelope.data).toEqual(stdinEnvelope.data);
-    expect(stdinEnvelope.data).toEqual({
-      files_changed: [
-        ".memory/events.jsonl",
-        ".memory/memory/notes/shared-save-note.json",
-        ".memory/memory/notes/shared-save-note.md"
-      ],
-      memory_created: ["note.shared-save-note"],
-      memory_updated: [],
-      memory_deleted: [],
-      relations_created: [],
-      relations_updated: [],
-      relations_deleted: [],
-      recovery_files: [],
-      repairs_applied: [],
-      events_appended: 1,
-      index_updated: true
-    });
-    await expectSavedNote(stdinProject, "note.shared-save-note");
-    await expectSavedNote(fileProject, "note.shared-save-note");
+    expect(exitCode).toBe(0);
+    const envelope = JSON.parse(output.stdout()) as SaveEnvelope;
+    expect(envelope.data.dry_run).toBe(true);
+    expect(envelope.data.memory_created).toEqual(["gotcha.preview-gotcha"]);
+    expect(envelope.data.index_updated).toBe(false);
+    await expect(readFile(join(projectRoot, ".memory", "events.jsonl"), "utf8")).resolves.toBe(
+      eventsBefore
+    );
   });
 
-  it.each([
-    ["stdin", ["node", "memory", "save", "--stdin", "--json"]] as const,
-    ["file", ["node", "memory", "save", "--file", "patch.json", "--json"]] as const
-  ])("exits 1 for invalid JSON from %s", async (source, argv) => {
-    const projectRoot = await createInitializedProject(`memory-cli-save-invalid-${source}-`);
+  it("exits 1 with a validation error for unsupported node kinds", async () => {
+    const projectRoot = await createInitializedProject("memory-cli-save-bad-kind-");
+    const output = createCapturedOutput();
+    const eventsBefore = await readFile(join(projectRoot, ".memory", "events.jsonl"), "utf8");
+    const input = {
+      task: "Use a removed kind",
+      nodes: [
+        {
+          kind: "note",
+          title: "Old kind",
+          body: "The note kind no longer exists."
+        }
+      ]
+    };
+
+    const exitCode = await main(["node", "memory", "save", "--stdin", "--json"], {
+      ...output.writers,
+      cwd: projectRoot,
+      stdin: Readable.from([JSON.stringify(input)])
+    });
+
+    expect(exitCode).toBe(1);
+    const envelope = JSON.parse(output.stdout()) as SaveErrorEnvelope;
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error.code).toBe("MemoryValidationFailed");
+    expect(JSON.stringify(envelope.error.details)).toContain("kind");
+    await expect(readFile(join(projectRoot, ".memory", "events.jsonl"), "utf8")).resolves.toBe(
+      eventsBefore
+    );
+  });
+
+  it("exits 1 for invalid JSON from stdin without touching memory", async () => {
+    const projectRoot = await createInitializedProject("memory-cli-save-invalid-json-");
     const output = createCapturedOutput();
     const eventsBefore = await readFile(join(projectRoot, ".memory", "events.jsonl"), "utf8");
 
-    if (source === "file") {
-      await writeFile(join(projectRoot, "patch.json"), "{bad json\n", "utf8");
-    }
-
-    const exitCode = await main([...argv], {
+    const exitCode = await main(["node", "memory", "save", "--stdin", "--json"], {
       ...output.writers,
       cwd: projectRoot,
       stdin: Readable.from(["{bad json\n"])
@@ -144,7 +205,7 @@ describe("memory save CLI", () => {
     );
   });
 
-  it("exits 2 when no input source is provided", async () => {
+  it("exits 2 when --stdin is not provided", async () => {
     const projectRoot = await createInitializedProject("memory-cli-save-missing-source-");
     const output = createCapturedOutput();
 
@@ -155,57 +216,88 @@ describe("memory save CLI", () => {
 
     expect(exitCode).toBe(2);
     expect(output.stdout()).toBe("");
-    expect(output.stderr()).toContain("exactly one of --file or --stdin is required");
+    expect(output.stderr()).toContain("--stdin is required");
   });
 
-  it("exits 2 when both input sources are provided", async () => {
-    const projectRoot = await createInitializedProject("memory-cli-save-duplicate-source-");
+  it("restores tracked deleted Memory storage before saving new information", async () => {
+    const projectRoot = await createInitializedGitProject("memory-cli-save-deleted-");
+    await git(projectRoot, ["add", "-A"]);
+    await git(projectRoot, ["commit", "-m", "Initialize memory"]);
+    const storageBeforeDelete = await readCanonicalStorage(projectRoot);
+    expect(storageBeforeDelete.ok).toBe(true);
+    const originalIds = storageBeforeDelete.ok
+      ? storageBeforeDelete.data.objects.map((object) => object.sidecar.id)
+      : [];
+    await rm(join(projectRoot, ".memory"), { recursive: true, force: true });
     const output = createCapturedOutput();
+    const input = {
+      task: "Capture dirty Memory behavior",
+      nodes: [
+        {
+          kind: "gotcha",
+          title: "Save restores deleted storage",
+          body: "The save command restores tracked deleted Memory storage before writing new information."
+        }
+      ]
+    };
 
-    const exitCode = await main(["node", "memory", "save", "--stdin", "--file", "patch.json"], {
+    const exitCode = await main(["node", "memory", "save", "--stdin", "--json"], {
       ...output.writers,
       cwd: projectRoot,
-      stdin: Readable.from([JSON.stringify(createNotePatch("Ignored", "Should not be read."))])
+      stdin: Readable.from([JSON.stringify(input)])
     });
 
-    expect(exitCode).toBe(2);
-    expect(output.stdout()).toBe("");
-    expect(output.stderr()).toContain("exactly one of --file or --stdin is required");
+    expect(exitCode).toBe(0);
+    expect(output.stderr()).toBe("");
+    const envelope = JSON.parse(output.stdout()) as SaveEnvelope;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.warnings).toContain(
+      "Memory storage was restored from HEAD before writing because tracked .memory files were deleted."
+    );
+    expect(envelope.data.memory_created).toEqual([
+      "gotcha.save-restores-deleted-storage"
+    ]);
+
+    const storage = await readCanonicalStorage(projectRoot);
+    expect(storage.ok).toBe(true);
+    if (storage.ok) {
+      expect(
+        storage.data.objects.some(
+          (object) => object.sidecar.id === "gotcha.save-restores-deleted-storage"
+        )
+      ).toBe(true);
+      expect(
+        originalIds.every((id) =>
+          storage.data.objects.some((object) => object.sidecar.id === id)
+        )
+      )
+        .toBe(true);
+    }
   });
 });
 
-function createNotePatch(title: string, body: string) {
-  return {
-    source: {
-      kind: "agent",
-      task: "Save CLI integration test"
-    },
-    changes: [
-      {
-        op: "create_object",
-        type: "note",
-        title,
-        body: `# ${title}\n\n${body}\n`
-      }
-    ]
-  };
-}
-
-async function expectSavedNote(projectRoot: string, id: string): Promise<void> {
-  const storage = await readCanonicalStorage(projectRoot);
-
-  expect(storage.ok).toBe(true);
-  if (!storage.ok) {
-    return;
-  }
-
-  const saved = storage.data.objects.find((object) => object.sidecar.id === id);
-  expect(saved).toBeDefined();
-  expect(saved?.body).toContain("Both CLI input sources should reach the same save service.");
-}
-
 async function createInitializedProject(prefix: string): Promise<string> {
   const projectRoot = await createTempRoot(prefix);
+  const output = createCapturedOutput();
+  const exitCode = await main(["node", "memory", "init", "--json"], {
+    ...output.writers,
+    cwd: projectRoot
+  });
+
+  expect(exitCode).toBe(0);
+  expect(output.stderr()).toBe("");
+
+  return projectRoot;
+}
+
+async function createInitializedGitProject(prefix: string): Promise<string> {
+  const projectRoot = await createTempRoot(prefix);
+  await git(projectRoot, ["init", "--initial-branch=main"]);
+  await git(projectRoot, ["config", "user.email", "test@example.com"]);
+  await git(projectRoot, ["config", "user.name", "Memory Test"]);
+  await writeFile(join(projectRoot, "README.md"), "# Test\n", "utf8");
+  await git(projectRoot, ["add", "README.md"]);
+  await git(projectRoot, ["commit", "-m", "Initial commit"]);
   const output = createCapturedOutput();
   const exitCode = await main(["node", "memory", "init", "--json"], {
     ...output.writers,
@@ -223,6 +315,20 @@ async function createTempRoot(prefix: string): Promise<string> {
   const resolvedRoot = await realpath(root);
   tempRoots.push(resolvedRoot);
   return resolvedRoot;
+}
+
+async function git(cwd: string, args: string[]): Promise<string> {
+  const result = await runSubprocess("git", args, { cwd });
+
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+
+  if (result.data.exitCode !== 0) {
+    throw new Error(result.data.stderr || result.data.stdout || `git ${args.join(" ")} failed`);
+  }
+
+  return result.data.stdout;
 }
 
 function createCapturedOutput(): {

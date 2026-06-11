@@ -4,12 +4,6 @@
   "status": "active",
   "title": "Invalid Bad Relation",
   "body_path": "memory/project.md",
-  "scope": {
-    "kind": "project",
-    "project": "project.invalid-bad-relation",
-    "branch": null,
-    "task": null
-  },
   "tags": [
     "fixture"
   ],
@@ -17,7 +11,7 @@
     "kind": "system"
   },
   "superseded_by": null,
-  "content_hash": "sha256:2f2cdbcf05fae78f8d4de7ef87a2b996841f3e623973147133068eef6809d867",
   "created_at": "2026-04-25T14:00:00+02:00",
-  "updated_at": "2026-04-25T14:00:00+02:00"
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:ab0cb677a4baf351f81ae4a991b39c6ba9944fde0891e0e92aec4f99723d6421"
 }

@@ -14,12 +14,13 @@ import {
   slugify
 } from "../core/ids.js";
 import { err, ok, type Result } from "../core/result.js";
+import { validateAnchors } from "../anchors/normalize.js";
 import type {
   Actor,
   Evidence,
+  FeatureStage,
   GitState,
   IsoDateTime,
-  ObjectFacets,
   ObjectId,
   ObjectStatus,
   ObjectType,
@@ -28,12 +29,11 @@ import type {
   RelationConfidence,
   RelationId,
   RelationStatus,
-  Scope,
   Source,
   SourceOrigin,
   ValidationIssue
 } from "../core/types.js";
-import { PATCH_OPERATIONS } from "../core/types.js";
+import { FEATURE_STAGES, PATCH_OPERATIONS } from "../core/types.js";
 import {
   compileProjectSchemas,
   type CompiledSchemaValidators
@@ -63,6 +63,7 @@ const NON_QUESTION_STATUSES = new Set<ObjectStatus>([
   "superseded"
 ]);
 const PATCH_OPERATION_SET = new Set<string>(PATCH_OPERATIONS);
+const FEATURE_STAGE_SET = new Set<string>(FEATURE_STAGES);
 
 export interface PlanMemoryPatchOptions extends GitWrapperOptions {
   projectRoot: string;
@@ -146,9 +147,9 @@ export interface NormalizedCreateObjectChange {
   status: ObjectStatus;
   title: string;
   body: string;
-  scope: Scope;
+  stage?: FeatureStage;
+  anchors?: string[];
   tags: string[];
-  facets?: ObjectFacets;
   evidence: Evidence[];
   source: Source;
   origin?: SourceOrigin;
@@ -164,9 +165,9 @@ export interface NormalizedUpdateObjectChange {
   status?: ObjectStatus;
   title?: string;
   body?: string;
-  scope?: Scope;
+  stage?: FeatureStage;
+  anchors?: string[];
   tags?: string[];
-  facets?: ObjectFacets;
   evidence?: Evidence[];
   source?: Source;
   origin?: SourceOrigin;
@@ -245,9 +246,9 @@ interface RawCreateObjectChange {
   status?: ObjectStatus;
   title: string;
   body: string;
-  scope?: Scope;
+  stage?: FeatureStage;
+  anchors?: string[];
   tags?: string[];
-  facets?: ObjectFacets;
   evidence?: Evidence[];
   source?: Source;
   origin?: SourceOrigin;
@@ -259,9 +260,9 @@ interface RawUpdateObjectChange {
   status?: ObjectStatus;
   title?: string;
   body?: string;
-  scope?: Scope;
+  stage?: FeatureStage;
+  anchors?: string[];
   tags?: string[];
-  facets?: ObjectFacets;
   evidence?: Evidence[];
   source?: Source;
   origin?: SourceOrigin;
@@ -314,7 +315,6 @@ interface ObjectPlanningRecord {
   id: ObjectId;
   type: ObjectType;
   status: ObjectStatus;
-  scope: Scope;
   path: string;
   bodyPath: string;
 }
@@ -515,7 +515,6 @@ function objectRecordFromStoredObject(object: StoredMemoryObject): ObjectPlannin
     id: object.sidecar.id,
     type: object.sidecar.type,
     status: object.sidecar.status,
-    scope: object.sidecar.scope,
     path: object.path,
     bodyPath: object.bodyPath
   };
@@ -594,11 +593,16 @@ async function planCreateObject(
     return statusValidation;
   }
 
-  const scope = change.scope ?? defaultScope(state.snapshot.config.project.id);
-  const scopeValidation = validateScope(state, scope, `/changes/${index}/scope`);
+  const stageValidation = validateObjectStage(change.type, change.stage, `/changes/${index}/stage`);
 
-  if (!scopeValidation.ok) {
-    return scopeValidation;
+  if (!stageValidation.ok) {
+    return stageValidation;
+  }
+
+  const anchors = normalizeChangeAnchors(change.anchors, `/changes/${index}/anchors`);
+
+  if (!anchors.ok) {
+    return anchors;
   }
 
   const paths = objectPaths(change.type, id);
@@ -619,9 +623,9 @@ async function planCreateObject(
     status,
     title: change.title,
     body: change.body,
-    scope,
+    ...(change.stage === undefined ? {} : { stage: change.stage }),
+    ...(anchors.data === undefined ? {} : { anchors: anchors.data }),
     tags: change.tags ?? [],
-    ...(change.facets === undefined ? {} : { facets: change.facets }),
     evidence: change.evidence ?? [],
     source,
     ...(change.origin === undefined ? {} : { origin: change.origin }),
@@ -634,7 +638,6 @@ async function planCreateObject(
     id,
     type: change.type,
     status,
-    scope,
     path: paths.sidecarPath,
     bodyPath: paths.bodyPath
   });
@@ -686,12 +689,16 @@ function planUpdateObject(
     }
   }
 
-  if (change.scope !== undefined) {
-    const scopeValidation = validateScope(state, change.scope, `/changes/${index}/scope`);
+  const stageValidation = validateObjectStage(object.type, change.stage, `/changes/${index}/stage`);
 
-    if (!scopeValidation.ok) {
-      return scopeValidation;
-    }
+  if (!stageValidation.ok) {
+    return stageValidation;
+  }
+
+  const anchors = normalizeChangeAnchors(change.anchors, `/changes/${index}/anchors`);
+
+  if (!anchors.ok) {
+    return anchors;
   }
 
   if (change.superseded_by !== undefined && !state.objectsById.has(change.superseded_by)) {
@@ -706,9 +713,9 @@ function planUpdateObject(
     ...(change.status === undefined ? {} : { status: change.status }),
     ...(change.title === undefined ? {} : { title: change.title }),
     ...(change.body === undefined ? {} : { body: change.body }),
-    ...(change.scope === undefined ? {} : { scope: change.scope }),
+    ...(change.stage === undefined ? {} : { stage: change.stage }),
+    ...(anchors.data === undefined ? {} : { anchors: anchors.data }),
     ...(change.tags === undefined ? {} : { tags: change.tags }),
-    ...(change.facets === undefined ? {} : { facets: change.facets }),
     ...(change.evidence === undefined ? {} : { evidence: change.evidence }),
     ...(change.source === undefined ? {} : { source: change.source }),
     ...(change.origin === undefined ? {} : { origin: change.origin }),
@@ -719,9 +726,9 @@ function planUpdateObject(
     touchesBody ||
     change.status !== undefined ||
     change.title !== undefined ||
-    change.scope !== undefined ||
+    change.stage !== undefined ||
+    change.anchors !== undefined ||
     change.tags !== undefined ||
-    change.facets !== undefined ||
     change.evidence !== undefined ||
     change.source !== undefined ||
     change.origin !== undefined ||
@@ -731,10 +738,6 @@ function planUpdateObject(
 
   if (change.status !== undefined) {
     object.status = change.status;
-  }
-
-  if (change.scope !== undefined) {
-    object.scope = change.scope;
   }
 
   if (touchesBody) {
@@ -1293,10 +1296,7 @@ function pushUnique<T>(values: T[], value: T): void {
 
 function objectPaths(type: ObjectType, id: ObjectId): ObjectPaths {
   const idSlug = slugFromObjectId(id);
-  const basename =
-    type === "project" || type === "architecture"
-      ? type
-      : `${objectDirectory(type)}/${idSlug}`;
+  const basename = type === "project" ? type : `${objectDirectory(type)}/${idSlug}`;
 
   return {
     sidecarPath: `.memory/memory/${basename}.json`,
@@ -1307,28 +1307,15 @@ function objectPaths(type: ObjectType, id: ObjectId): ObjectPaths {
 function objectDirectory(type: ObjectType): string {
   switch (type) {
     case "project":
-    case "architecture":
       return type;
-    case "source":
-      return "sources";
-    case "synthesis":
-      return "syntheses";
+    case "feature":
+      return "features";
     case "decision":
       return "decisions";
-    case "constraint":
-      return "constraints";
-    case "question":
-      return "questions";
-    case "fact":
-      return "facts";
     case "gotcha":
       return "gotchas";
-    case "workflow":
-      return "workflows";
-    case "note":
-      return "notes";
-    case "concept":
-      return "concepts";
+    case "question":
+      return "questions";
   }
 }
 
@@ -1351,15 +1338,6 @@ function defaultObjectStatus(type: ObjectType): ObjectStatus {
   return type === "question" ? "open" : "active";
 }
 
-function defaultScope(projectId: string): Scope {
-  return {
-    kind: "project",
-    project: projectId,
-    branch: null,
-    task: null
-  };
-}
-
 function validateObjectStatus(
   type: ObjectType,
   status: ObjectStatus,
@@ -1379,70 +1357,51 @@ function validateObjectStatus(
   });
 }
 
-function validateScope(state: PlanningState, scope: Scope, field: string): Result<void> {
-  if (scope.project !== state.snapshot.config.project.id) {
-    return patchInvalid("Object scope project must match local project id.", {
-      code: "ObjectScopeProjectMismatch",
-      message: "Object scope project must match local project id.",
-      path: PATCH_PATH,
-      field: `${field}/project`
-    });
+function validateObjectStage(
+  type: ObjectType,
+  stage: FeatureStage | undefined,
+  field: string
+): Result<void> {
+  if (stage === undefined) {
+    return ok(undefined);
   }
 
-  if (scope.kind === "project") {
-    if (scope.branch === null && scope.task === null) {
-      return ok(undefined);
-    }
-
-    return patchInvalid("Project-scoped memory must not set branch or task.", {
-      code: "ObjectScopeInvalid",
-      message: "Project-scoped memory must not set branch or task.",
+  if (type !== "feature") {
+    return patchInvalid("Stage is only allowed on feature objects.", {
+      code: "ObjectStageInvalid",
+      message: "Stage is only allowed on feature objects.",
       path: PATCH_PATH,
       field
     });
   }
 
-  if (scope.kind === "branch") {
-    if (scope.branch === null || scope.branch.length === 0 || scope.task !== null) {
-      return patchInvalid("Branch-scoped memory must set branch and must not set task.", {
-        code: "ObjectScopeInvalid",
-        message: "Branch-scoped memory must set branch and must not set task.",
-        path: PATCH_PATH,
-        field
-      });
-    }
-
-    if (!state.git.available || state.git.branch === null) {
-      return patchInvalid("Branch-scoped memory requires an available current Git branch.", {
-        code: "ObjectBranchScopeUnavailable",
-        message: "Branch-scoped memory requires an available current Git branch.",
-        path: PATCH_PATH,
-        field: `${field}/branch`
-      });
-    }
-
-    if (scope.branch !== state.git.branch) {
-      return patchInvalid("Branch-scoped memory must match the current Git branch.", {
-        code: "ObjectScopeBranchMismatch",
-        message: "Branch-scoped memory must match the current Git branch.",
-        path: PATCH_PATH,
-        field: `${field}/branch`
-      });
-    }
-
-    return ok(undefined);
-  }
-
-  if (scope.task === null || scope.task.length === 0) {
-    return patchInvalid("Task-scoped memory must set task.", {
-      code: "ObjectScopeInvalid",
-      message: "Task-scoped memory must set task.",
+  if (!FEATURE_STAGE_SET.has(stage)) {
+    return patchInvalid("Feature stage is not supported.", {
+      code: "ObjectStageInvalid",
+      message: "Feature stage is not supported.",
       path: PATCH_PATH,
-      field: `${field}/task`
+      field
     });
   }
 
   return ok(undefined);
+}
+
+function normalizeChangeAnchors(
+  anchors: readonly string[] | undefined,
+  field: string
+): Result<string[] | undefined> {
+  if (anchors === undefined) {
+    return ok(undefined);
+  }
+
+  const validated = validateAnchors(anchors, field);
+
+  if (!validated.ok) {
+    return validated;
+  }
+
+  return ok(validated.data);
 }
 
 function requireObjectEndpoint(

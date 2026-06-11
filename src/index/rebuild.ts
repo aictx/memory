@@ -256,7 +256,6 @@ function clearGeneratedRows(db: SqliteDatabase): void {
     DELETE FROM git_file_changes;
     DELETE FROM events;
     DELETE FROM relations;
-    DELETE FROM memory_facet_links;
     DELETE FROM memory_commit_links;
     DELETE FROM memory_file_links;
     DELETE FROM objects;
@@ -275,15 +274,9 @@ function insertObjects(db: SqliteDatabase, storage: CanonicalStorageSnapshot): v
       json_path,
       body,
       content_hash,
-      scope_json,
-      scope_kind,
-      scope_project,
-      scope_branch,
-      scope_task,
+      stage,
+      anchors_json,
       tags_json,
-      facets_json,
-      facet_category,
-      applies_to_json,
       evidence_json,
       source_json,
       origin_json,
@@ -299,15 +292,9 @@ function insertObjects(db: SqliteDatabase, storage: CanonicalStorageSnapshot): v
       @json_path,
       @body,
       @content_hash,
-      @scope_json,
-      @scope_kind,
-      @scope_project,
-      @scope_branch,
-      @scope_task,
+      @stage,
+      @anchors_json,
       @tags_json,
-      @facets_json,
-      @facet_category,
-      @applies_to_json,
       @evidence_json,
       @source_json,
       @origin_json,
@@ -317,8 +304,8 @@ function insertObjects(db: SqliteDatabase, storage: CanonicalStorageSnapshot): v
     )
   `);
   const insertFts = db.prepare<Record<string, string>>(`
-    INSERT INTO objects_fts (object_id, title, body, tags, facets, evidence)
-    VALUES (@object_id, @title, @body, @tags, @facets, @evidence)
+    INSERT INTO objects_fts (object_id, title, body, tags, anchors, evidence)
+    VALUES (@object_id, @title, @body, @tags, @anchors, @evidence)
   `);
   const insertFileLink = db.prepare<Record<string, string>>(`
     INSERT OR IGNORE INTO memory_file_links (memory_id, file_path, link_kind)
@@ -327,10 +314,6 @@ function insertObjects(db: SqliteDatabase, storage: CanonicalStorageSnapshot): v
   const insertCommitLink = db.prepare<Record<string, string>>(`
     INSERT OR IGNORE INTO memory_commit_links (memory_id, commit_hash, link_kind)
     VALUES (@memory_id, @commit_hash, @link_kind)
-  `);
-  const insertFacetLink = db.prepare<Record<string, string>>(`
-    INSERT OR IGNORE INTO memory_facet_links (memory_id, facet, link_kind)
-    VALUES (@memory_id, @facet, @link_kind)
   `);
 
   for (const object of storage.objects) {
@@ -346,15 +329,9 @@ function insertObjects(db: SqliteDatabase, storage: CanonicalStorageSnapshot): v
       json_path: object.path,
       body: object.body,
       content_hash: sidecar.content_hash,
-      scope_json: JSON.stringify(sidecar.scope),
-      scope_kind: sidecar.scope.kind,
-      scope_project: sidecar.scope.project,
-      scope_branch: sidecar.scope.branch,
-      scope_task: sidecar.scope.task,
+      stage: sidecar.stage ?? null,
+      anchors_json: jsonOrNull(sidecar.anchors),
       tags_json: JSON.stringify(tags),
-      facets_json: jsonOrNull(sidecar.facets),
-      facet_category: sidecar.facets?.category ?? null,
-      applies_to_json: jsonOrNull(sidecar.facets?.applies_to),
       evidence_json: jsonOrNull(sidecar.evidence),
       source_json: jsonOrNull(sidecar.source),
       origin_json: jsonOrNull(sidecar.origin),
@@ -368,12 +345,11 @@ function insertObjects(db: SqliteDatabase, storage: CanonicalStorageSnapshot): v
       title: sidecar.title,
       body: object.body,
       tags: tags.join(" "),
-      facets: facetSearchText(sidecar.facets),
+      anchors: anchorsSearchText(sidecar.anchors),
       evidence: [evidenceSearchText(sidecar.evidence), originSearchText(sidecar.origin)].join(" ")
     });
     insertObjectLinks({
       object,
-      tags,
       addFileLink: (filePath, linkKind) => {
         const normalizedPath = normalizeProjectFileReference(filePath);
 
@@ -395,17 +371,6 @@ function insertObjects(db: SqliteDatabase, storage: CanonicalStorageSnapshot): v
             link_kind: linkKind
           });
         }
-      },
-      addFacetLink: (facet, linkKind) => {
-        const normalizedFacet = normalizeFacetValue(facet);
-
-        if (normalizedFacet !== "") {
-          insertFacetLink.run({
-            memory_id: sidecar.id,
-            facet: normalizedFacet,
-            link_kind: linkKind
-          });
-        }
       }
     });
   }
@@ -413,29 +378,9 @@ function insertObjects(db: SqliteDatabase, storage: CanonicalStorageSnapshot): v
 
 function insertObjectLinks(options: {
   object: StoredMemoryObject;
-  tags: readonly string[];
   addFileLink: (filePath: string, linkKind: string) => void;
   addCommitLink: (commitHash: string, linkKind: string) => void;
-  addFacetLink: (facet: string, linkKind: string) => void;
 }): void {
-  for (const tag of options.tags) {
-    options.addFacetLink(tag, "tag");
-  }
-
-  const facets = options.object.sidecar.facets;
-
-  if (facets !== undefined) {
-    options.addFacetLink(facets.category, "category");
-
-    for (const loadMode of facets.load_modes ?? []) {
-      options.addFacetLink(loadMode, "load_mode");
-    }
-
-    for (const filePath of facets.applies_to ?? []) {
-      options.addFileLink(filePath, "facets.applies_to");
-    }
-  }
-
   for (const evidence of options.object.sidecar.evidence ?? []) {
     if (evidence.kind === "file") {
       options.addFileLink(evidence.id, "evidence.file");
@@ -459,12 +404,8 @@ function insertObjectLinks(options: {
   }
 }
 
-function facetSearchText(facets: StoredMemoryObject["sidecar"]["facets"]): string {
-  if (facets === undefined) {
-    return "";
-  }
-
-  return [facets.category, ...(facets.applies_to ?? []), ...(facets.load_modes ?? [])].join(" ");
+function anchorsSearchText(anchors: StoredMemoryObject["sidecar"]["anchors"]): string {
+  return (anchors ?? []).join(" ");
 }
 
 function evidenceSearchText(evidence: StoredMemoryObject["sidecar"]["evidence"]): string {
@@ -684,10 +625,6 @@ function insertMeta(
 
 function jsonOrNull(value: unknown | undefined): string | null {
   return value === undefined ? null : JSON.stringify(value);
-}
-
-function normalizeFacetValue(value: string): string {
-  return value.toLowerCase().trim();
 }
 
 function extractProjectFileReferences(body: string): string[] {

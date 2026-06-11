@@ -1,9 +1,16 @@
 <svelte:options runes={true} />
 
 <script lang="ts">
-  import { FACET_CATEGORIES, OBJECT_TYPES } from "../../src/core/types.js";
+  import { OBJECT_TYPES } from "../../src/core/types.js";
   import cytoscape from "cytoscape";
   import { onDestroy, onMount } from "svelte";
+
+  /**
+   * Facet categories were removed from the v5 storage schema. The viewer UI
+   * still renders a facet filter shell until its planned rework; with no
+   * categories the filter only offers "all".
+   */
+  const FACET_CATEGORIES: readonly string[] = [];
 
   type FacetCategory = (typeof FACET_CATEGORIES)[number];
   type ObjectStatus = "active" | "stale" | "superseded" | "open" | "closed";
@@ -64,9 +71,9 @@
     title: string;
     body_path: string;
     json_path: string;
-    scope: Scope;
+    scope?: Scope;
     tags: string[];
-    facets: ObjectFacets | null;
+    facets?: ObjectFacets | null;
     evidence: Evidence[];
     source: Source | null;
     origin: SourceOrigin | null;
@@ -180,8 +187,8 @@
   type ProjectDeleteEnvelope = ViewerSuccessEnvelope<ViewerProjectDeleteData> | ViewerErrorEnvelope;
   type ViewerState = "loading" | "ready" | "error";
   type ViewerScreen = "projects" | "memories" | "detail" | "graph";
-  type LayerFilter = "all" | "memories" | "syntheses" | "sources" | "inactive";
-  type PagePreset = "all" | "atomic-memory" | "syntheses" | "sources" | "inactive";
+  type LayerFilter = "all" | "memories" | "inactive";
+  type PagePreset = "all" | "atomic-memory" | "inactive";
   type ObjectSort = "type" | "updated-desc" | "updated-asc";
 
   interface MarkdownBlock {
@@ -280,9 +287,7 @@
   const isDemoMode = token === "demo";
   const layerOptions: Array<{ value: LayerFilter; label: string }> = [
     { value: "all", label: "All" },
-    { value: "memories", label: "Atomic" },
-    { value: "syntheses", label: "Syntheses" },
-    { value: "sources", label: "Sources" },
+    { value: "memories", label: "Current" },
     { value: "inactive", label: "Inactive" }
   ];
   const objectSortOptions: Array<{ value: ObjectSort; label: string }> = [
@@ -296,9 +301,10 @@
     borderColor: string;
   }> = [
     { label: "Project", color: "#2f5d62", borderColor: "#fffefa" },
-    { label: "Synthesis", color: "#574b90", borderColor: "#fffefa" },
-    { label: "Workflow", color: "#3f648c", borderColor: "#fffefa" },
-    { label: "Source", color: "#6b6f76", borderColor: "#9a968d" }
+    { label: "Feature", color: "#574b90", borderColor: "#fffefa" },
+    { label: "Decision", color: "#9a5b23", borderColor: "#fffefa" },
+    { label: "Gotcha", color: "#b54708", borderColor: "#fffefa" },
+    { label: "Question", color: "#5f6c37", borderColor: "#fffefa" }
   ];
   const graphRelationLegend: Array<{ label: string; color: string; lineStyle: "solid" | "dashed" }> = [
     { label: "Semantic", color: "#4f6f5a", lineStyle: "solid" },
@@ -884,11 +890,7 @@
       case "all":
         return true;
       case "atomic-memory":
-        return object.type !== "source" && object.type !== "synthesis" && isCurrentStatus(object.status);
-      case "syntheses":
-        return object.type === "synthesis";
-      case "sources":
-        return object.type === "source";
+        return isCurrentStatus(object.status);
       case "inactive":
         return object.status === "stale" || object.status === "superseded";
     }
@@ -927,11 +929,7 @@
       case "all":
         return true;
       case "memories":
-        return object.type !== "source" && object.type !== "synthesis" && isCurrentStatus(object.status);
-      case "syntheses":
-        return object.type === "synthesis";
-      case "sources":
-        return object.type === "source";
+        return isCurrentStatus(object.status);
       case "inactive":
         return object.status === "stale" || object.status === "superseded";
     }
@@ -1438,11 +1436,7 @@
   }
 
   function compactGraphTitle(object: MemoryObjectSummary): string {
-    const title = object.title.replace(/^Source:\s*/i, "").trim();
-
-    if (object.type !== "source") {
-      return title;
-    }
+    const title = object.title.trim();
 
     if (!looksLikePathLabel(title)) {
       return title;
@@ -1494,28 +1488,14 @@
     switch (object.type) {
       case "project":
         return "#2f5d62";
-      case "architecture":
-        return "#8b5e34";
-      case "synthesis":
+      case "feature":
         return "#574b90";
       case "decision":
         return "#9a5b23";
-      case "constraint":
-        return "#8e3b46";
-      case "question":
-        return "#5f6c37";
-      case "fact":
-        return "#356b4f";
-      case "workflow":
-        return "#3f648c";
       case "gotcha":
         return "#b54708";
-      case "source":
-        return "#6b6f76";
-      case "concept":
-        return "#7a5c99";
-      case "note":
-        return "#6f6259";
+      case "question":
+        return "#5f6c37";
       default:
         return "#5f6b65";
     }
@@ -1531,10 +1511,6 @@
   function graphObjectBorderColor(object: MemoryObjectSummary, degree = 1): string {
     if (degree === 0) {
       return "#c36a43";
-    }
-
-    if (object.type === "source") {
-      return "#9a968d";
     }
 
     return isCurrentStatus(object.status) ? "#fffefa" : "#8f8a81";
@@ -1565,8 +1541,8 @@
     }
   }
 
-  function graphEdgeClasses(relation: MemoryRelationSummary): string {
-    return relation.predicate === "derived_from" ? "graph-edge-provenance" : "";
+  function graphEdgeClasses(_relation: MemoryRelationSummary): string {
+    return "";
   }
 
   function pageFilter(section: string): void {
@@ -1586,12 +1562,6 @@
         break;
       case "atomic-memory":
         layerFilter = "memories";
-        break;
-      case "syntheses":
-        layerFilter = "syntheses";
-        break;
-      case "sources":
-        layerFilter = "sources";
         break;
       case "inactive":
         layerFilter = "inactive";
@@ -1629,30 +1599,27 @@
     memoryObjects: MemoryObjectSummary[],
     relationList: MemoryRelationSummary[]
   ): MemorySnapshotItem[] {
-    const reusableCount = memoryObjects.filter((object) =>
-      object.type !== "source" && object.type !== "synthesis" && isCurrentStatus(object.status)
+    const currentCount = memoryObjects.filter((object) => isCurrentStatus(object.status)).length;
+    const featureCount = memoryObjects.filter(
+      (object) => object.type === "feature" && isCurrentStatus(object.status)
     ).length;
-    const memoryFacetCategoryCount = uniqueSorted(
-      memoryObjects.flatMap((object) => object.facets?.category === undefined ? [] : [object.facets.category])
-    ).length;
-    const sourceCount = memoryObjects.filter((object) => object.type === "source").length;
     const activeRelationCount = relationList.filter((relation) => relation.status === "active").length;
 
     return [
       {
         label: "Active objects",
-        value: String(reusableCount),
-        detail: "canonical non-source records agents can load"
+        value: String(currentCount),
+        detail: "current product memory nodes"
       },
       {
-        label: "Facet categories",
-        value: String(memoryFacetCategoryCount),
-        detail: "typed durable categories represented in storage"
+        label: "Features",
+        value: String(featureCount),
+        detail: "current feature nodes in the product graph"
       },
       {
-        label: "Provenance trail",
-        value: `${sourceCount}/${activeRelationCount}`,
-        detail: "source records / active memory links"
+        label: "Active relations",
+        value: String(activeRelationCount),
+        detail: "active links between memory nodes"
       }
     ];
   }
@@ -1684,7 +1651,11 @@
     return match === null ? value : `${match[1]} ${match[2]}`;
   }
 
-  function scopeLabel(scope: Scope): string {
+  function scopeLabel(scope: Scope | undefined): string {
+    if (scope === undefined) {
+      return "project";
+    }
+
     if (scope.kind === "branch") {
       return `branch:${scope.branch ?? "unknown"}`;
     }
@@ -2044,15 +2015,7 @@
             </button>
             <button type="button" class:active={pagePreset === "atomic-memory"} onclick={() => pageFilter("atomic-memory")}>
               <span class="nav-row-icon" aria-hidden="true">#</span>
-              <span>Atomic memory</span>
-            </button>
-            <button type="button" class:active={pagePreset === "syntheses"} onclick={() => pageFilter("syntheses")}>
-              <span class="nav-row-icon" aria-hidden="true">S</span>
-              <span>Syntheses</span>
-            </button>
-            <button type="button" class:active={pagePreset === "sources"} onclick={() => pageFilter("sources")}>
-              <span class="nav-row-icon" aria-hidden="true">R</span>
-              <span>Sources</span>
+              <span>Current memory</span>
             </button>
             <button type="button" class:active={pagePreset === "inactive"} onclick={() => pageFilter("inactive")}>
               <span class="nav-row-icon" aria-hidden="true">!</span>
@@ -2849,7 +2812,7 @@
 
                   <details class="notion-toggle" data-testid="facet-details">
                     <summary>Facet category</summary>
-                    {#if selectedObject.facets === null}
+                    {#if selectedObject.facets == null}
                       <p class="empty-copy">No facets saved on this object.</p>
                     {:else}
                       <dl class="facet-grid">
@@ -2865,7 +2828,7 @@
                     <dl>
                       <div><dt>Body</dt><dd>{selectedObject.body_path}</dd></div>
                       <div><dt>Sidecar</dt><dd>{selectedObject.json_path}</dd></div>
-                      <div><dt>Scope</dt><dd>{selectedObject.scope.kind}</dd></div>
+                      <div><dt>Scope</dt><dd>{selectedObject.scope?.kind ?? "project"}</dd></div>
                       <div><dt>Updated</dt><dd>{selectedObject.updated_at}</dd></div>
                     </dl>
                     <section class="json-view" aria-label="Object sidecar JSON" data-testid="json-view">

@@ -36,18 +36,14 @@ const noGit: GitState = {
   dirty: null
 };
 const validConfig = {
-  version: 1,
+  version: 5,
   project: {
     id: projectId,
     name: "Billing API"
   },
   memory: {
-    defaultTokenBudget: 6000,
-    autoIndex: true,
-    saveContextPacks: false
-  },
-  git: {
-    trackContextPacks: false
+    defaultTokenBudget: 2000,
+    autoIndex: true
   }
 };
 
@@ -73,7 +69,7 @@ describe("applyMemoryPatch object operations", () => {
         changes: [
           {
             op: "create_object",
-            type: "note",
+            type: "gotcha",
             title: "Billing retries follow up",
             body: createdBody,
             tags: ["billing", "queue"]
@@ -99,40 +95,34 @@ describe("applyMemoryPatch object operations", () => {
       return;
     }
 
-    expect(result.data.memory_created).toEqual(["note.billing-retries-follow-up"]);
+    expect(result.data.memory_created).toEqual(["gotcha.billing-retries-follow-up"]);
     expect(result.data.memory_updated).toEqual(["decision.billing-retries"]);
     expect(result.data.events_appended).toBe(2);
     expect(result.data.files_changed).toEqual([
       ".memory/events.jsonl",
       ".memory/memory/decisions/billing-retries.json",
       ".memory/memory/decisions/billing-retries.md",
-      ".memory/memory/notes/billing-retries-follow-up.json",
-      ".memory/memory/notes/billing-retries-follow-up.md"
+      ".memory/memory/gotchas/billing-retries-follow-up.json",
+      ".memory/memory/gotchas/billing-retries-follow-up.md"
     ]);
 
     const createdSidecar = await readJsonProjectFile(
       projectRoot,
-      ".memory/memory/notes/billing-retries-follow-up.json"
+      ".memory/memory/gotchas/billing-retries-follow-up.json"
     );
     const storedCreatedBody = await readProjectFile(
       projectRoot,
-      ".memory/memory/notes/billing-retries-follow-up.md"
+      ".memory/memory/gotchas/billing-retries-follow-up.md"
     );
 
     expect(storedCreatedBody).toBe("# Billing retries follow up\n\nCheck retry behavior.\n");
     expect(createdSidecar).toEqual(
       expect.objectContaining({
-        id: "note.billing-retries-follow-up",
-        type: "note",
+        id: "gotcha.billing-retries-follow-up",
+        type: "gotcha",
         status: "active",
         title: "Billing retries follow up",
-        body_path: "memory/notes/billing-retries-follow-up.md",
-        scope: {
-          kind: "project",
-          project: projectId,
-          branch: null,
-          task: null
-        },
+        body_path: "memory/gotchas/billing-retries-follow-up.md",
         tags: ["billing", "queue"],
         source: {
           kind: "agent",
@@ -173,7 +163,7 @@ describe("applyMemoryPatch object operations", () => {
     expect(await readEvents(projectRoot)).toEqual([
       expect.objectContaining({
         event: "memory.created",
-        id: "note.billing-retries-follow-up",
+        id: "gotcha.billing-retries-follow-up",
         actor: "agent",
         timestamp: FIXED_TIMESTAMP
       }),
@@ -224,7 +214,7 @@ describe("applyMemoryPatch object operations", () => {
     );
   });
 
-  it("creates gotcha and workflow objects in their storage directories with active status", async () => {
+  it("creates gotcha and feature objects in their storage directories with active status", async () => {
     const projectRoot = await createObjectPatchProject();
 
     const result = await applyMemoryPatch({
@@ -242,9 +232,11 @@ describe("applyMemoryPatch object operations", () => {
           },
           {
             op: "create_object",
-            type: "workflow",
+            type: "feature",
             title: "Release checklist",
-            body: "# Release checklist\n\nRun the release checklist before publishing.\n"
+            body: "# Release checklist\n\nRun the release checklist before publishing.\n",
+            stage: "building",
+            anchors: ["scripts/release/"]
           }
         ]
       },
@@ -259,14 +251,14 @@ describe("applyMemoryPatch object operations", () => {
 
     expect(result.data.memory_created).toEqual([
       "gotcha.webhook-duplicates",
-      "workflow.release-checklist"
+      "feature.release-checklist"
     ]);
     expect(result.data.files_changed).toEqual(
       expect.arrayContaining([
         ".memory/memory/gotchas/webhook-duplicates.json",
         ".memory/memory/gotchas/webhook-duplicates.md",
-        ".memory/memory/workflows/release-checklist.json",
-        ".memory/memory/workflows/release-checklist.md"
+        ".memory/memory/features/release-checklist.json",
+        ".memory/memory/features/release-checklist.md"
       ])
     );
 
@@ -274,9 +266,9 @@ describe("applyMemoryPatch object operations", () => {
       projectRoot,
       ".memory/memory/gotchas/webhook-duplicates.json"
     );
-    const workflowSidecar = await readJsonProjectFile(
+    const featureSidecar = await readJsonProjectFile(
       projectRoot,
-      ".memory/memory/workflows/release-checklist.json"
+      ".memory/memory/features/release-checklist.json"
     );
 
     expect(gotchaSidecar).toMatchObject({
@@ -285,19 +277,21 @@ describe("applyMemoryPatch object operations", () => {
       status: "active",
       body_path: "memory/gotchas/webhook-duplicates.md"
     });
-    expect(workflowSidecar).toMatchObject({
-      id: "workflow.release-checklist",
-      type: "workflow",
+    expect(featureSidecar).toMatchObject({
+      id: "feature.release-checklist",
+      type: "feature",
       status: "active",
-      body_path: "memory/workflows/release-checklist.md"
+      body_path: "memory/features/release-checklist.md",
+      stage: "building",
+      anchors: ["scripts/release/"]
     });
     expectObjectHash(
       gotchaSidecar,
       await readProjectFile(projectRoot, ".memory/memory/gotchas/webhook-duplicates.md")
     );
     expectObjectHash(
-      workflowSidecar,
-      await readProjectFile(projectRoot, ".memory/memory/workflows/release-checklist.md")
+      featureSidecar,
+      await readProjectFile(projectRoot, ".memory/memory/features/release-checklist.md")
     );
   });
 
@@ -306,9 +300,9 @@ describe("applyMemoryPatch object operations", () => {
       name: "create",
       change: {
         op: "create_object",
-        type: "note",
-        title: "Open note",
-        body: "# Open note\n\nBody.\n",
+        type: "gotcha",
+        title: "Open gotcha",
+        body: "# Open gotcha\n\nBody.\n",
         status: "open"
       }
     },
@@ -344,9 +338,72 @@ describe("applyMemoryPatch object operations", () => {
     await expect(readMemorySnapshot(projectRoot)).resolves.toEqual(before);
   });
 
+  it("rejects stage on non-feature objects before disk mutation", async () => {
+    const projectRoot = await createObjectPatchProject();
+    const before = await readMemorySnapshot(projectRoot);
+
+    const result = await applyMemoryPatch({
+      projectRoot,
+      patch: {
+        source: {
+          kind: "agent"
+        },
+        changes: [
+          {
+            op: "update_object",
+            id: "decision.billing-retries",
+            stage: "shipped"
+          }
+        ]
+      },
+      git: noGit,
+      clock: createFixedTestClock(FIXED_TIMESTAMP)
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("MemoryPatchInvalid");
+      expect(JSON.stringify(result.error.details)).toContain("ObjectStageInvalid");
+    }
+    await expect(readMemorySnapshot(projectRoot)).resolves.toEqual(before);
+  });
+
+  it("rejects absolute and traversal anchors before disk mutation", async () => {
+    const projectRoot = await createObjectPatchProject();
+    const before = await readMemorySnapshot(projectRoot);
+
+    for (const anchor of ["/etc/passwd", "../outside/file.ts", "..", ".memory/config.json"]) {
+      const result = await applyMemoryPatch({
+        projectRoot,
+        patch: {
+          source: {
+            kind: "agent"
+          },
+          changes: [
+            {
+              op: "update_object",
+              id: "decision.billing-retries",
+              anchors: [anchor]
+            }
+          ]
+        },
+        git: noGit,
+        clock: createFixedTestClock(FIXED_TIMESTAMP)
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe("MemoryValidationFailed");
+        expect(JSON.stringify(result.error.details)).toContain("anchor");
+      }
+    }
+
+    await expect(readMemorySnapshot(projectRoot)).resolves.toEqual(before);
+  });
+
   it("marks objects stale while preserving the Markdown body", async () => {
     const projectRoot = await createObjectPatchProject();
-    const beforeBody = await readProjectFile(projectRoot, ".memory/memory/notes/old.md");
+    const beforeBody = await readProjectFile(projectRoot, ".memory/memory/gotchas/old.md");
 
     const result = await applyMemoryPatch({
       projectRoot,
@@ -357,8 +414,8 @@ describe("applyMemoryPatch object operations", () => {
         changes: [
           {
             op: "mark_stale",
-            id: "note.old",
-            reason: "The new note replaced this context."
+            id: "gotcha.old",
+            reason: "The new gotcha replaced this context."
           }
         ]
       },
@@ -371,14 +428,14 @@ describe("applyMemoryPatch object operations", () => {
       return;
     }
 
-    expect(result.data.memory_updated).toEqual(["note.old"]);
+    expect(result.data.memory_updated).toEqual(["gotcha.old"]);
     expect(result.data.events_appended).toBe(1);
-    expect(await readProjectFile(projectRoot, ".memory/memory/notes/old.md")).toBe(beforeBody);
+    expect(await readProjectFile(projectRoot, ".memory/memory/gotchas/old.md")).toBe(beforeBody);
 
-    const sidecar = await readJsonProjectFile(projectRoot, ".memory/memory/notes/old.json");
+    const sidecar = await readJsonProjectFile(projectRoot, ".memory/memory/gotchas/old.json");
     expect(sidecar).toEqual(
       expect.objectContaining({
-        id: "note.old",
+        id: "gotcha.old",
         status: "stale",
         created_at: originalTimestamp,
         updated_at: FIXED_TIMESTAMP
@@ -388,15 +445,15 @@ describe("applyMemoryPatch object operations", () => {
     expect(await readEvents(projectRoot)).toEqual([
       expect.objectContaining({
         event: "memory.marked_stale",
-        id: "note.old",
-        reason: "The new note replaced this context."
+        id: "gotcha.old",
+        reason: "The new gotcha replaced this context."
       })
     ]);
   });
 
   it("supersedes objects and creates a replacement-to-old supersedes relation", async () => {
     const projectRoot = await createObjectPatchProject();
-    const oldBody = await readProjectFile(projectRoot, ".memory/memory/notes/old.md");
+    const oldBody = await readProjectFile(projectRoot, ".memory/memory/gotchas/old.md");
 
     const result = await applyMemoryPatch({
       projectRoot,
@@ -407,9 +464,9 @@ describe("applyMemoryPatch object operations", () => {
         changes: [
           {
             op: "supersede_object",
-            id: "note.old",
-            superseded_by: "note.new",
-            reason: "New note captures the current behavior."
+            id: "gotcha.old",
+            superseded_by: "gotcha.new",
+            reason: "New gotcha captures the current behavior."
           }
         ]
       },
@@ -422,16 +479,16 @@ describe("applyMemoryPatch object operations", () => {
       return;
     }
 
-    expect(result.data.memory_updated).toEqual(["note.old"]);
-    expect(result.data.relations_created).toEqual(["rel.note-new-supersedes-note-old"]);
+    expect(result.data.memory_updated).toEqual(["gotcha.old"]);
+    expect(result.data.relations_created).toEqual(["rel.gotcha-new-supersedes-gotcha-old"]);
     expect(result.data.events_appended).toBe(1);
 
-    const sidecar = await readJsonProjectFile(projectRoot, ".memory/memory/notes/old.json");
+    const sidecar = await readJsonProjectFile(projectRoot, ".memory/memory/gotchas/old.json");
     expect(sidecar).toEqual(
       expect.objectContaining({
-        id: "note.old",
+        id: "gotcha.old",
         status: "superseded",
-        superseded_by: "note.new",
+        superseded_by: "gotcha.new",
         updated_at: FIXED_TIMESTAMP
       })
     );
@@ -439,14 +496,14 @@ describe("applyMemoryPatch object operations", () => {
 
     const relation = await readJsonProjectFile(
       projectRoot,
-      ".memory/relations/note-new-supersedes-note-old.json"
+      ".memory/relations/gotcha-new-supersedes-gotcha-old.json"
     );
     expect(relation).toEqual(
       expect.objectContaining({
-        id: "rel.note-new-supersedes-note-old",
-        from: "note.new",
+        id: "rel.gotcha-new-supersedes-gotcha-old",
+        from: "gotcha.new",
         predicate: "supersedes",
-        to: "note.old",
+        to: "gotcha.old",
         status: "active",
         created_at: FIXED_TIMESTAMP,
         updated_at: FIXED_TIMESTAMP
@@ -457,8 +514,8 @@ describe("applyMemoryPatch object operations", () => {
     expect(await readEvents(projectRoot)).toEqual([
       expect.objectContaining({
         event: "memory.superseded",
-        id: "note.old",
-        reason: "New note captures the current behavior."
+        id: "gotcha.old",
+        reason: "New gotcha captures the current behavior."
       })
     ]);
   });
@@ -479,8 +536,8 @@ describe("applyMemoryPatch object operations", () => {
         changes: [
           {
             op: "supersede_object",
-            id: "note.old",
-            superseded_by: "note.new",
+            id: "gotcha.old",
+            superseded_by: "gotcha.new",
             reason: "Existing relation already records the replacement."
           }
         ]
@@ -512,7 +569,7 @@ describe("applyMemoryPatch object operations", () => {
         changes: [
           {
             op: "delete_object",
-            id: "note.delete-me"
+            id: "gotcha.delete-me"
           }
         ]
       },
@@ -525,10 +582,10 @@ describe("applyMemoryPatch object operations", () => {
       return;
     }
 
-    expect(deleted.data.memory_deleted).toEqual(["note.delete-me"]);
+    expect(deleted.data.memory_deleted).toEqual(["gotcha.delete-me"]);
     expect(deleted.data.events_appended).toBe(1);
-    await expectPathMissing(projectRoot, ".memory/memory/notes/delete-me.md");
-    await expectPathMissing(projectRoot, ".memory/memory/notes/delete-me.json");
+    await expectPathMissing(projectRoot, ".memory/memory/gotchas/delete-me.md");
+    await expectPathMissing(projectRoot, ".memory/memory/gotchas/delete-me.json");
 
     const blockedProjectRoot = await createObjectPatchProject();
     const before = await readMemorySnapshot(blockedProjectRoot);
@@ -541,7 +598,7 @@ describe("applyMemoryPatch object operations", () => {
         changes: [
           {
             op: "delete_object",
-            id: "note.blocked"
+            id: "gotcha.blocked"
           }
         ]
       },
@@ -552,7 +609,7 @@ describe("applyMemoryPatch object operations", () => {
     expect(blocked.ok).toBe(false);
     if (!blocked.ok) {
       expect(blocked.error.code).toBe("MemoryInvalidRelation");
-      expect(JSON.stringify(blocked.error.details)).toContain("rel.blocked-mentions-decision");
+      expect(JSON.stringify(blocked.error.details)).toContain("rel.blocked-related-to-decision");
     }
     await expect(readMemorySnapshot(blockedProjectRoot)).resolves.toEqual(before);
   });
@@ -615,49 +672,49 @@ async function createObjectPatchProject(
     tags: ["billing"]
   });
   await writeMemoryObject(projectRoot, {
-    id: "constraint.webhook-idempotency",
-    type: "constraint",
+    id: "decision.webhook-idempotency",
+    type: "decision",
     status: "active",
     title: "Webhook processing must be idempotent",
-    bodyPath: "memory/constraints/webhook-idempotency.md",
+    bodyPath: "memory/decisions/webhook-idempotency.md",
     body: "# Webhook processing must be idempotent\n\nDuplicate webhooks are expected.\n"
   });
   await writeMemoryObject(projectRoot, {
-    id: "note.old",
-    type: "note",
+    id: "gotcha.old",
+    type: "gotcha",
     status: "active",
-    title: "Old note",
-    bodyPath: "memory/notes/old.md",
-    body: "# Old note\n\nOld behavior.\n"
+    title: "Old gotcha",
+    bodyPath: "memory/gotchas/old.md",
+    body: "# Old gotcha\n\nOld behavior.\n"
   });
   await writeMemoryObject(projectRoot, {
-    id: "note.new",
-    type: "note",
+    id: "gotcha.new",
+    type: "gotcha",
     status: "active",
-    title: "New note",
-    bodyPath: "memory/notes/new.md",
-    body: "# New note\n\nCurrent behavior.\n"
+    title: "New gotcha",
+    bodyPath: "memory/gotchas/new.md",
+    body: "# New gotcha\n\nCurrent behavior.\n"
   });
   await writeMemoryObject(projectRoot, {
-    id: "note.delete-me",
-    type: "note",
+    id: "gotcha.delete-me",
+    type: "gotcha",
     status: "active",
     title: "Delete me",
-    bodyPath: "memory/notes/delete-me.md",
+    bodyPath: "memory/gotchas/delete-me.md",
     body: "# Delete me\n\nThis import was accidental.\n"
   });
   await writeMemoryObject(projectRoot, {
-    id: "note.blocked",
-    type: "note",
+    id: "gotcha.blocked",
+    type: "gotcha",
     status: "active",
-    title: "Blocked note",
-    bodyPath: "memory/notes/blocked.md",
-    body: "# Blocked note\n\nA relation still points here.\n"
+    title: "Blocked gotcha",
+    bodyPath: "memory/gotchas/blocked.md",
+    body: "# Blocked gotcha\n\nA relation still points here.\n"
   });
   await writeRelation(projectRoot, {
-    id: "rel.blocked-mentions-decision",
-    from: "note.blocked",
-    predicate: "mentions",
+    id: "rel.blocked-related-to-decision",
+    from: "gotcha.blocked",
+    predicate: "related_to",
     to: "decision.billing-retries",
     status: "active"
   });
@@ -665,9 +722,9 @@ async function createObjectPatchProject(
   if (options.existingSupersedes === true) {
     await writeRelation(projectRoot, {
       id: "rel.new-supersedes-old",
-      from: "note.new",
+      from: "gotcha.new",
       predicate: "supersedes",
-      to: "note.old",
+      to: "gotcha.old",
       status: "stale"
     });
   }
@@ -697,12 +754,6 @@ async function writeMemoryObject(
     status: fixture.status,
     title: fixture.title,
     body_path: fixture.bodyPath,
-    scope: {
-      kind: "project",
-      project: projectId,
-      branch: null,
-      task: null
-    },
     tags: fixture.tags ?? [],
     created_at: originalTimestamp,
     updated_at: originalTimestamp

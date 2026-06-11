@@ -4,12 +4,6 @@
   "status": "active",
   "title": "Golden Minimal",
   "body_path": "memory/project.md",
-  "scope": {
-    "kind": "project",
-    "project": "project.golden-minimal",
-    "branch": null,
-    "task": null
-  },
   "tags": [
     "fixture"
   ],
@@ -17,7 +11,7 @@
     "kind": "system"
   },
   "superseded_by": null,
-  "content_hash": "sha256:30153f876a0f023778d256e5056c4aa70860d7c9f845011a4a0959682ec59b2c",
   "created_at": "2026-04-25T14:00:00+02:00",
-  "updated_at": "2026-04-25T14:00:00+02:00"
+  "updated_at": "2026-04-25T14:00:00+02:00",
+  "content_hash": "sha256:50d85da4b75785454395c384b7bb577d43c31b6b6adfd80b5e0dfcc62b7f9eda"
 }

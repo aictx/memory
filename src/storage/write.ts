@@ -19,8 +19,8 @@ import {
 import { err, ok, type Result } from "../core/result.js";
 import type {
   Evidence,
+  FeatureStage,
   IsoDateTime,
-  ObjectFacets,
   MemoryEvent,
   ObjectId,
   ObjectStatus,
@@ -28,7 +28,6 @@ import type {
   PatchOperation,
   RelationConfidence,
   RelationId,
-  Scope,
   Source,
   SourceOrigin
 } from "../core/types.js";
@@ -139,11 +138,11 @@ interface ObjectSidecarInput {
   status: ObjectStatus;
   title: string;
   bodyPath: string;
-  scope: Scope;
   createdAt: IsoDateTime;
   updatedAt: IsoDateTime;
+  stage?: FeatureStage | undefined;
+  anchors?: string[] | undefined;
   tags?: string[] | undefined;
-  facets?: ObjectFacets | undefined;
   evidence?: Evidence[] | undefined;
   source?: Source | undefined;
   origin?: SourceOrigin | undefined;
@@ -254,6 +253,12 @@ export async function restoreCanonicalStorageFromCommit(
 
   if (!restored.ok) {
     return restored;
+  }
+
+  // Git cannot restore empty directories, and v5 storage tracks no starter
+  // relation, so recreate the required canonical directories after restore.
+  for (const requiredDirectory of ["memory", "relations", "schema"] as const) {
+    await mkdir(resolve(projectRoot, ".memory", requiredDirectory), { recursive: true });
   }
 
   const changed = await getMemoryDirtyState(projectRoot, options);
@@ -537,7 +542,7 @@ async function discoverCanonicalJson(projectRoot: string, pattern: string): Prom
     await fg(pattern, {
       cwd: projectRoot,
       dot: true,
-      ignore: [".memory/index/**", ".memory/context/**", ".memory/recovery/**"],
+      ignore: [".memory/index/**", ".memory/recovery/**"],
       onlyFiles: true,
       unique: true
     })
@@ -658,9 +663,9 @@ function buildCreateObjectActions(
     status: change.status,
     title: change.title,
     bodyPath: bodyPath.data,
-    scope: change.scope,
+    stage: change.stage,
+    anchors: change.anchors,
     tags: change.tags,
-    facets: change.facets,
     evidence: change.evidence,
     source: change.source,
     origin: change.origin,
@@ -730,9 +735,9 @@ function buildUpdateObjectActions(
     status: change.status ?? existing.sidecar.status,
     title: change.title ?? existing.sidecar.title,
     bodyPath: existing.sidecar.body_path,
-    scope: change.scope ?? existing.sidecar.scope,
+    stage: change.stage ?? existing.sidecar.stage,
+    anchors: change.anchors ?? existing.sidecar.anchors,
     tags: change.tags ?? existing.sidecar.tags,
-    facets: change.facets ?? existing.sidecar.facets,
     evidence: change.evidence ?? existing.sidecar.evidence,
     source: change.source ?? existing.sidecar.source,
     origin: change.origin ?? existing.sidecar.origin,
@@ -855,11 +860,12 @@ function buildObjectStatusActions(
     status: update.status,
     title: existing.sidecar.title,
     bodyPath: existing.sidecar.body_path,
-    scope: existing.sidecar.scope,
+    stage: existing.sidecar.stage,
+    anchors: existing.sidecar.anchors,
     tags: existing.sidecar.tags,
-    facets: existing.sidecar.facets,
     evidence: existing.sidecar.evidence,
     source: existing.sidecar.source,
+    origin: existing.sidecar.origin,
     supersededBy:
       update.supersededBy === undefined
         ? existing.sidecar.superseded_by
@@ -1048,17 +1054,20 @@ function buildObjectSidecarWithoutHash(
     status: input.status,
     title: input.title,
     body_path: input.bodyPath,
-    scope: cloneScope(input.scope),
     created_at: input.createdAt,
     updated_at: input.updatedAt
   };
 
-  if (input.tags !== undefined) {
-    sidecar.tags = [...input.tags];
+  if (input.stage !== undefined) {
+    sidecar.stage = input.stage;
   }
 
-  if (input.facets !== undefined) {
-    sidecar.facets = cloneFacets(input.facets);
+  if (input.anchors !== undefined && input.anchors.length > 0) {
+    sidecar.anchors = [...input.anchors];
+  }
+
+  if (input.tags !== undefined) {
+    sidecar.tags = [...input.tags];
   }
 
   if (input.evidence !== undefined) {
@@ -1124,22 +1133,20 @@ function objectSidecarToJson(
     status: sidecar.status,
     title: sidecar.title,
     body_path: sidecar.body_path,
-    scope: {
-      kind: sidecar.scope.kind,
-      project: sidecar.scope.project,
-      branch: sidecar.scope.branch,
-      task: sidecar.scope.task
-    },
     created_at: sidecar.created_at,
     updated_at: sidecar.updated_at
   };
 
-  if (sidecar.tags !== undefined) {
-    json.tags = [...sidecar.tags];
+  if (sidecar.stage !== undefined) {
+    json.stage = sidecar.stage;
   }
 
-  if (sidecar.facets !== undefined) {
-    json.facets = facetsToJson(sidecar.facets);
+  if (sidecar.anchors !== undefined) {
+    json.anchors = [...sidecar.anchors];
+  }
+
+  if (sidecar.tags !== undefined) {
+    json.tags = [...sidecar.tags];
   }
 
   if (sidecar.evidence !== undefined) {
@@ -1198,14 +1205,6 @@ function sourceOriginToJson(origin: SourceOrigin): Record<string, JsonValue> {
     ...(origin.captured_at === undefined ? {} : { captured_at: origin.captured_at }),
     ...(origin.digest === undefined ? {} : { digest: origin.digest }),
     ...(origin.media_type === undefined ? {} : { media_type: origin.media_type })
-  };
-}
-
-function facetsToJson(facets: ObjectFacets): Record<string, JsonValue> {
-  return {
-    category: facets.category,
-    ...(facets.applies_to === undefined ? {} : { applies_to: [...facets.applies_to] }),
-    ...(facets.load_modes === undefined ? {} : { load_modes: [...facets.load_modes] })
   };
 }
 
@@ -1384,9 +1383,9 @@ function objectUpdateTouchesMutableField(change: NormalizedUpdateObjectChange): 
     change.status !== undefined ||
     change.title !== undefined ||
     change.body !== undefined ||
-    change.scope !== undefined ||
+    change.stage !== undefined ||
+    change.anchors !== undefined ||
     change.tags !== undefined ||
-    change.facets !== undefined ||
     change.evidence !== undefined ||
     change.source !== undefined ||
     change.origin !== undefined ||
@@ -1454,28 +1453,11 @@ function optionalEvidence(relation: MemoryRelation): { evidence: Evidence[] } | 
   return relation.evidence === undefined ? {} : { evidence: relation.evidence };
 }
 
-function cloneScope(scope: Scope): Scope {
-  return {
-    kind: scope.kind,
-    project: scope.project,
-    branch: scope.branch,
-    task: scope.task
-  };
-}
-
 function cloneSource(source: Source): Source {
   return {
     kind: source.kind,
     ...(source.task === undefined ? {} : { task: source.task }),
     ...(source.commit === undefined ? {} : { commit: source.commit })
-  };
-}
-
-function cloneFacets(facets: ObjectFacets): ObjectFacets {
-  return {
-    category: facets.category,
-    ...(facets.applies_to === undefined ? {} : { applies_to: [...facets.applies_to] }),
-    ...(facets.load_modes === undefined ? {} : { load_modes: [...facets.load_modes] })
   };
 }
 

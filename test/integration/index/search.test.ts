@@ -61,19 +61,19 @@ describe("search memory integration", () => {
 
       const ids = first.data.matches.map((match) => match.id);
       const webhook = first.data.matches.find(
-        (match) => match.id === "constraint.webhook-idempotency"
+        (match) => match.id === "decision.webhook-idempotency"
       );
 
-      expect(ids).toContain("constraint.webhook-idempotency");
+      expect(ids).toContain("decision.webhook-idempotency");
       expect(ids).toContain("decision.old-webhook-queue");
-      expect(ids).toContain("synthesis.webhook-context");
+      expect(ids).toContain("feature.webhook-context");
       expect(second.data.matches.map((match) => match.id)).toEqual(ids);
       expect(webhook).toMatchObject({
-        id: "constraint.webhook-idempotency",
-        type: "constraint",
+        id: "decision.webhook-idempotency",
+        type: "decision",
         status: "active",
         title: "Webhook idempotency",
-        body_path: ".memory/memory/constraints/webhook-idempotency.md"
+        body_path: ".memory/memory/decisions/webhook-idempotency.md"
       });
       expect(typeof webhook?.score).toBe("number");
       expect(webhook?.snippet).toContain("Stripe may deliver duplicate webhook events");
@@ -82,17 +82,20 @@ describe("search memory integration", () => {
 
   it("rebuilds and retries once when the index is missing and auto-indexing is enabled", async () => {
     const projectRoot = await createInitializedProject("memory-search-auto-rebuild-");
+    const storage = await readCanonicalStorage(projectRoot);
+    expect(storage.ok).toBe(true);
+    const projectId = storage.ok ? storage.data.config.project.id : "project.unknown";
     await rm(join(projectRoot, ".memory", "index"), { recursive: true, force: true });
 
     const result = await searchMemory({
       cwd: projectRoot,
-      query: "Architecture",
+      query: projectId,
       clock: createFixedTestClock(FIXED_TIMESTAMP_NEXT_MINUTE)
     });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.matches.map((match) => match.id)).toContain("architecture.current");
+      expect(result.data.matches.map((match) => match.id)).toContain(projectId);
       expect(result.data.matches[0]).toHaveProperty("status");
     }
   });
@@ -110,7 +113,7 @@ describe("search memory integration", () => {
 
     const result = await searchMemory({
       cwd: projectRoot,
-      query: "Architecture",
+      query: "anything",
       clock: createFixedTestClock(FIXED_TIMESTAMP_NEXT_MINUTE)
     });
 
@@ -156,11 +159,11 @@ async function createTempRoot(prefix: string): Promise<string> {
 
 async function writeSearchFixtures(projectRoot: string): Promise<void> {
   await writeMemoryObject(projectRoot, {
-    id: "constraint.webhook-idempotency",
-    type: "constraint",
+    id: "decision.webhook-idempotency",
+    type: "decision",
     status: "active",
     title: "Webhook idempotency",
-    bodyPath: "memory/constraints/webhook-idempotency.md",
+    bodyPath: "memory/decisions/webhook-idempotency.md",
     body: "# Webhook idempotency\n\nStripe may deliver duplicate webhook events, so delivery IDs must be deduplicated.\n",
     tags: ["stripe", "webhooks", "idempotency"],
     updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
@@ -176,12 +179,12 @@ async function writeSearchFixtures(projectRoot: string): Promise<void> {
     updatedAt: FIXED_TIMESTAMP
   });
   await writeMemoryObject(projectRoot, {
-    id: "synthesis.webhook-context",
-    type: "synthesis",
+    id: "feature.webhook-context",
+    type: "feature",
     status: "active",
     title: "Webhook context",
-    bodyPath: "memory/syntheses/webhook-context.md",
-    body: "# Webhook context\n\nStripe webhook implementation context is maintained as synthesis memory.\n",
+    bodyPath: "memory/features/webhook-context.md",
+    body: "# Webhook context\n\nStripe webhook implementation context is maintained as feature memory.\n",
     tags: ["stripe", "webhooks"],
     updatedAt: FIXED_TIMESTAMP_NEXT_MINUTE
   });
@@ -201,12 +204,6 @@ async function writeMemoryObject(projectRoot: string, fixture: SearchFixture): P
     status: fixture.status,
     title: fixture.title,
     body_path: fixture.bodyPath,
-    scope: {
-      kind: "project",
-      project: storage.data.config.project.id,
-      branch: null,
-      task: null
-    },
     tags: fixture.tags,
     source: {
       kind: "agent"

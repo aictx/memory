@@ -42,65 +42,61 @@ describe("full index rebuild", () => {
 
     expect(result.data).toEqual({
       index_rebuilt: true,
-      objects_indexed: 3,
-      relations_indexed: 2,
+      objects_indexed: 2,
+      relations_indexed: 1,
       events_indexed: 2,
       event_appended: false
     });
     await expect(readEvents(projectRoot)).resolves.toBe(eventsBefore);
 
+    const projectId = await readProjectObjectId(projectRoot);
     const connection = await openConnection(projectRoot);
     try {
-      expect(countRows(connection.db, "objects")).toBe(3);
-      expect(countRows(connection.db, "relations")).toBe(2);
+      expect(countRows(connection.db, "objects")).toBe(2);
+      expect(countRows(connection.db, "relations")).toBe(1);
       expect(countRows(connection.db, "events")).toBe(2);
-      expect(countRows(connection.db, "objects_fts")).toBe(3);
+      expect(countRows(connection.db, "objects_fts")).toBe(2);
 
-      expect(readObject(connection.db, "constraint.webhook-idempotency")).toMatchObject({
-        id: "constraint.webhook-idempotency",
-        type: "constraint",
+      expect(readObject(connection.db, "decision.webhook-idempotency")).toMatchObject({
+        id: "decision.webhook-idempotency",
+        type: "decision",
         status: "active",
         title: "Webhook idempotency",
-        body_path: ".memory/memory/constraints/webhook-idempotency.md",
-        json_path: ".memory/memory/constraints/webhook-idempotency.json",
-        scope_kind: "project",
+        body_path: ".memory/memory/decisions/webhook-idempotency.md",
+        json_path: ".memory/memory/decisions/webhook-idempotency.json",
+        stage: null,
+        anchors_json: JSON.stringify(["src/billing/webhook.ts"]),
         tags_json: JSON.stringify(["stripe", "webhooks"])
       });
-      expect(readFts(connection.db, "constraint.webhook-idempotency")).toMatchObject({
-        object_id: "constraint.webhook-idempotency",
+      expect(readFts(connection.db, "decision.webhook-idempotency")).toMatchObject({
+        object_id: "decision.webhook-idempotency",
         title: "Webhook idempotency",
-        tags: "stripe webhooks"
+        tags: "stripe webhooks",
+        anchors: "src/billing/webhook.ts"
       });
-      expect(readMemoryFileLinks(connection.db, "constraint.webhook-idempotency")).toEqual([
+      expect(readMemoryFileLinks(connection.db, "decision.webhook-idempotency")).toEqual([
         { file_path: "src/billing/dedupe.ts", link_kind: "body.reference" },
         { file_path: "src/billing/relation.ts", link_kind: "relation.evidence.file" },
-        { file_path: "src/billing/webhook.ts", link_kind: "evidence.file" },
-        { file_path: "src/billing/webhook.ts", link_kind: "facets.applies_to" }
+        { file_path: "src/billing/webhook.ts", link_kind: "evidence.file" }
       ]);
-      expect(readMemoryCommitLinks(connection.db, "constraint.webhook-idempotency")).toEqual([
+      expect(readMemoryCommitLinks(connection.db, "decision.webhook-idempotency")).toEqual([
         { commit_hash: "abc123", link_kind: "evidence.commit" },
         { commit_hash: "def456", link_kind: "source.commit" },
         { commit_hash: "feed123", link_kind: "relation.evidence.commit" }
       ]);
-      expect(readMemoryFileLinks(connection.db, "architecture.current")).toContainEqual({
+      expect(readMemoryFileLinks(connection.db, projectId)).toContainEqual({
         file_path: "src/billing/relation.ts",
         link_kind: "relation.evidence.file"
       });
-      expect(readMemoryCommitLinks(connection.db, "architecture.current")).toContainEqual({
+      expect(readMemoryCommitLinks(connection.db, projectId)).toContainEqual({
         commit_hash: "feed123",
         link_kind: "relation.evidence.commit"
       });
-      expect(readMemoryFacetLinks(connection.db, "constraint.webhook-idempotency")).toEqual([
-        { facet: "coding", link_kind: "load_mode" },
-        { facet: "convention", link_kind: "category" },
-        { facet: "stripe", link_kind: "tag" },
-        { facet: "webhooks", link_kind: "tag" }
-      ]);
-      expect(readRelation(connection.db, "rel.architecture-requires-webhook-idempotency")).toMatchObject({
-        id: "rel.architecture-requires-webhook-idempotency",
-        from_id: "architecture.current",
-        predicate: "requires",
-        to_id: "constraint.webhook-idempotency",
+      expect(readRelation(connection.db, "rel.project-depends-on-webhook-idempotency")).toMatchObject({
+        id: "rel.project-depends-on-webhook-idempotency",
+        from_id: projectId,
+        predicate: "depends_on",
+        to_id: "decision.webhook-idempotency",
         status: "active",
         confidence: "high"
       });
@@ -108,24 +104,24 @@ describe("full index rebuild", () => {
         {
           line_number: 1,
           event: "memory.created",
-          memory_id: "constraint.webhook-idempotency",
+          memory_id: "decision.webhook-idempotency",
           relation_id: null
         },
         {
           line_number: 2,
           event: "relation.created",
           memory_id: null,
-          relation_id: "rel.architecture-requires-webhook-idempotency"
+          relation_id: "rel.project-depends-on-webhook-idempotency"
         }
       ]);
       expect(readMeta(connection.db)).toMatchObject({
-        schema_version: "5",
+        schema_version: "6",
         built_at: FIXED_TIMESTAMP_NEXT_MINUTE,
         source_git_commit: "",
         git_available: "false",
-        storage_version: "4",
-        object_count: "3",
-        relation_count: "2",
+        storage_version: "5",
+        object_count: "2",
+        relation_count: "1",
         event_count: "2"
       });
     } finally {
@@ -161,8 +157,8 @@ describe("full index rebuild", () => {
 
     const connection = await openConnection(projectRoot);
     try {
-      expect(countRows(connection.db, "objects")).toBe(3);
-      expect(countRows(connection.db, "relations")).toBe(2);
+      expect(countRows(connection.db, "objects")).toBe(2);
+      expect(countRows(connection.db, "relations")).toBe(1);
       expect(countRows(connection.db, "events")).toBe(2);
     } finally {
       connection.close();
@@ -180,7 +176,7 @@ describe("full index rebuild", () => {
     expect(first.ok).toBe(true);
     await writeProjectFile(
       projectRoot,
-      ".memory/memory/constraints/webhook-idempotency.json",
+      ".memory/memory/decisions/webhook-idempotency.json",
       "{bad json"
     );
 
@@ -196,8 +192,8 @@ describe("full index rebuild", () => {
 
     const connection = await openConnection(projectRoot);
     try {
-      expect(countRows(connection.db, "objects")).toBe(3);
-      expect(readObject(connection.db, "constraint.webhook-idempotency")?.title).toBe(
+      expect(countRows(connection.db, "objects")).toBe(2);
+      expect(readObject(connection.db, "decision.webhook-idempotency")?.title).toBe(
         "Webhook idempotency"
       );
     } finally {
@@ -222,11 +218,11 @@ describe("full index rebuild", () => {
 
     const connection = await openConnection(projectRoot);
     try {
-      expect(countRows(connection.db, "objects")).toBe(2);
+      expect(countRows(connection.db, "objects")).toBe(1);
       expect(readMeta(connection.db)).toMatchObject({
         built_at: FIXED_TIMESTAMP,
-        object_count: "2",
-        relation_count: "1",
+        object_count: "1",
+        relation_count: "0",
         event_count: "0"
       });
     } finally {
@@ -295,7 +291,8 @@ interface ObjectRow {
   title: string;
   body_path: string;
   json_path: string;
-  scope_kind: string;
+  stage: string | null;
+  anchors_json: string | null;
   tags_json: string;
 }
 
@@ -303,6 +300,7 @@ interface FtsRow {
   object_id: string;
   title: string;
   tags: string;
+  anchors: string;
 }
 
 interface FileLinkRow {
@@ -312,11 +310,6 @@ interface FileLinkRow {
 
 interface CommitLinkRow {
   commit_hash: string;
-  link_kind: string;
-}
-
-interface FacetLinkRow {
-  facet: string;
   link_kind: string;
 }
 
@@ -364,6 +357,16 @@ async function createInitializedProject(prefix: string): Promise<string> {
   return projectRoot;
 }
 
+async function readProjectObjectId(projectRoot: string): Promise<string> {
+  const storage = await readCanonicalStorage(projectRoot);
+
+  if (!storage.ok) {
+    throw new Error(storage.error.message);
+  }
+
+  return storage.data.config.project.id;
+}
+
 async function createTempRoot(prefix: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), prefix));
   const resolvedRoot = await realpath(root);
@@ -382,23 +385,13 @@ async function writeAdditionalCanonicalMemory(projectRoot: string): Promise<void
   const body =
     "# Webhook idempotency\n\nWebhook handlers must dedupe delivery IDs in src/billing/dedupe.ts before processing.\n";
   const sidecarWithoutHash = {
-    id: "constraint.webhook-idempotency",
-    type: "constraint",
+    id: "decision.webhook-idempotency",
+    type: "decision",
     status: "active",
     title: "Webhook idempotency",
-    body_path: "memory/constraints/webhook-idempotency.md",
-    scope: {
-      kind: "project",
-      project: projectId,
-      branch: null,
-      task: null
-    },
+    body_path: "memory/decisions/webhook-idempotency.md",
+    anchors: ["src/billing/webhook.ts"],
     tags: ["stripe", "webhooks"],
-    facets: {
-      category: "convention",
-      applies_to: ["src/billing/webhook.ts"],
-      load_modes: ["coding"]
-    },
     evidence: [
       { kind: "file", id: "src/billing/webhook.ts" },
       { kind: "commit", id: "abc123" }
@@ -415,16 +408,16 @@ async function writeAdditionalCanonicalMemory(projectRoot: string): Promise<void
     content_hash: computeObjectContentHash(sidecarWithoutHash, body)
   };
   const relationWithoutHash = {
-    id: "rel.architecture-requires-webhook-idempotency",
-    from: "architecture.current",
-    predicate: "requires",
-    to: "constraint.webhook-idempotency",
+    id: "rel.project-depends-on-webhook-idempotency",
+    from: projectId,
+    predicate: "depends_on",
+    to: "decision.webhook-idempotency",
     status: "active",
     confidence: "high",
     evidence: [
       {
         kind: "memory",
-        id: "architecture.current"
+        id: projectId
       },
       {
         kind: "file",
@@ -445,7 +438,7 @@ async function writeAdditionalCanonicalMemory(projectRoot: string): Promise<void
   const events = [
     {
       event: "memory.created",
-      id: "constraint.webhook-idempotency",
+      id: "decision.webhook-idempotency",
       actor: "agent",
       timestamp: FIXED_TIMESTAMP,
       payload: {
@@ -454,26 +447,26 @@ async function writeAdditionalCanonicalMemory(projectRoot: string): Promise<void
     },
     {
       event: "relation.created",
-      relation_id: "rel.architecture-requires-webhook-idempotency",
+      relation_id: "rel.project-depends-on-webhook-idempotency",
       actor: "agent",
       timestamp: FIXED_TIMESTAMP,
       payload: {
-        from: "architecture.current",
-        predicate: "requires",
-        to: "constraint.webhook-idempotency"
+        from: projectId,
+        predicate: "depends_on",
+        to: "decision.webhook-idempotency"
       }
     }
   ];
 
-  await writeProjectFile(projectRoot, ".memory/memory/constraints/webhook-idempotency.md", body);
+  await writeProjectFile(projectRoot, ".memory/memory/decisions/webhook-idempotency.md", body);
   await writeJsonProjectFile(
     projectRoot,
-    ".memory/memory/constraints/webhook-idempotency.json",
+    ".memory/memory/decisions/webhook-idempotency.json",
     sidecar
   );
   await writeJsonProjectFile(
     projectRoot,
-    ".memory/relations/architecture-requires-webhook-idempotency.json",
+    ".memory/relations/project-depends-on-webhook-idempotency.json",
     relation
   );
   await writeProjectFile(
@@ -505,7 +498,7 @@ function readObject(db: IndexDatabaseConnection["db"], id: string): ObjectRow | 
   return db
     .prepare<[string], ObjectRow>(
       `
-        SELECT id, type, status, title, body_path, json_path, scope_kind, tags_json
+        SELECT id, type, status, title, body_path, json_path, stage, anchors_json, tags_json
         FROM objects
         WHERE id = ?
       `
@@ -516,7 +509,7 @@ function readObject(db: IndexDatabaseConnection["db"], id: string): ObjectRow | 
 function readFts(db: IndexDatabaseConnection["db"], id: string): FtsRow | undefined {
   return db
     .prepare<[string], FtsRow>(
-      "SELECT object_id, title, tags FROM objects_fts WHERE object_id = ?"
+      "SELECT object_id, title, tags, anchors FROM objects_fts WHERE object_id = ?"
     )
     .get(id);
 }
@@ -542,19 +535,6 @@ function readMemoryCommitLinks(db: IndexDatabaseConnection["db"], id: string): C
         FROM memory_commit_links
         WHERE memory_id = ?
         ORDER BY commit_hash, link_kind
-      `
-    )
-    .all(id);
-}
-
-function readMemoryFacetLinks(db: IndexDatabaseConnection["db"], id: string): FacetLinkRow[] {
-  return db
-    .prepare<[string], FacetLinkRow>(
-      `
-        SELECT facet, link_kind
-        FROM memory_facet_links
-        WHERE memory_id = ?
-        ORDER BY facet, link_kind
       `
     )
     .all(id);

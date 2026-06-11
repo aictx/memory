@@ -35,18 +35,14 @@ const noGit: GitState = {
   dirty: null
 };
 const validConfig = {
-  version: 1,
+  version: 5,
   project: {
     id: projectId,
     name: "Billing API"
   },
   memory: {
-    defaultTokenBudget: 6000,
-    autoIndex: true,
-    saveContextPacks: false
-  },
-  git: {
-    trackContextPacks: false
+    defaultTokenBudget: 2000,
+    autoIndex: true
   }
 };
 
@@ -70,20 +66,20 @@ describe("applyMemoryPatch relation operations", () => {
         changes: [
           {
             op: "create_relation",
-            from: "constraint.webhook-idempotency",
+            from: "decision.webhook-idempotency",
             predicate: "affects",
             to: "decision.billing-retries",
             confidence: "high",
             evidence: [
               {
                 kind: "memory",
-                id: "constraint.webhook-idempotency"
+                id: "decision.webhook-idempotency"
               }
             ]
           },
           {
             op: "update_relation",
-            id: "rel.billing-retries-requires-idempotency",
+            id: "rel.billing-retries-depends-on-idempotency",
             status: "stale",
             confidence: "low",
             evidence: [
@@ -95,7 +91,7 @@ describe("applyMemoryPatch relation operations", () => {
           },
           {
             op: "delete_relation",
-            id: "rel.billing-retries-mentions-idempotency"
+            id: "rel.billing-retries-related-to-idempotency"
           }
         ]
       },
@@ -109,26 +105,26 @@ describe("applyMemoryPatch relation operations", () => {
     }
 
     expect(result.data.relations_created).toEqual([
-      "rel.constraint-webhook-idempotency-affects-decision-billing-retries"
+      "rel.decision-webhook-idempotency-affects-decision-billing-retries"
     ]);
-    expect(result.data.relations_updated).toEqual(["rel.billing-retries-requires-idempotency"]);
-    expect(result.data.relations_deleted).toEqual(["rel.billing-retries-mentions-idempotency"]);
+    expect(result.data.relations_updated).toEqual(["rel.billing-retries-depends-on-idempotency"]);
+    expect(result.data.relations_deleted).toEqual(["rel.billing-retries-related-to-idempotency"]);
     expect(result.data.events_appended).toBe(3);
     expect(result.data.files_changed).toEqual([
       ".memory/events.jsonl",
-      ".memory/relations/billing-retries-mentions-idempotency.json",
-      ".memory/relations/billing-retries-requires-idempotency.json",
-      ".memory/relations/constraint-webhook-idempotency-affects-decision-billing-retries.json"
+      ".memory/relations/billing-retries-depends-on-idempotency.json",
+      ".memory/relations/billing-retries-related-to-idempotency.json",
+      ".memory/relations/decision-webhook-idempotency-affects-decision-billing-retries.json"
     ]);
 
     const created = await readJsonProjectFile(
       projectRoot,
-      ".memory/relations/constraint-webhook-idempotency-affects-decision-billing-retries.json"
+      ".memory/relations/decision-webhook-idempotency-affects-decision-billing-retries.json"
     );
     expect(created).toEqual(
       expect.objectContaining({
-        id: "rel.constraint-webhook-idempotency-affects-decision-billing-retries",
-        from: "constraint.webhook-idempotency",
+        id: "rel.decision-webhook-idempotency-affects-decision-billing-retries",
+        from: "decision.webhook-idempotency",
         predicate: "affects",
         to: "decision.billing-retries",
         status: "active",
@@ -136,7 +132,7 @@ describe("applyMemoryPatch relation operations", () => {
         evidence: [
           {
             kind: "memory",
-            id: "constraint.webhook-idempotency"
+            id: "decision.webhook-idempotency"
           }
         ],
         created_at: FIXED_TIMESTAMP,
@@ -147,14 +143,14 @@ describe("applyMemoryPatch relation operations", () => {
 
     const updated = await readJsonProjectFile(
       projectRoot,
-      ".memory/relations/billing-retries-requires-idempotency.json"
+      ".memory/relations/billing-retries-depends-on-idempotency.json"
     );
     expect(updated).toEqual(
       expect.objectContaining({
-        id: "rel.billing-retries-requires-idempotency",
+        id: "rel.billing-retries-depends-on-idempotency",
         from: "decision.billing-retries",
-        predicate: "requires",
-        to: "constraint.webhook-idempotency",
+        predicate: "depends_on",
+        to: "decision.webhook-idempotency",
         status: "stale",
         confidence: "low",
         evidence: [
@@ -170,26 +166,26 @@ describe("applyMemoryPatch relation operations", () => {
     expectRelationHash(updated);
     await expectPathMissing(
       projectRoot,
-      ".memory/relations/billing-retries-mentions-idempotency.json"
+      ".memory/relations/billing-retries-related-to-idempotency.json"
     );
 
     const events = await readEvents(projectRoot);
     expect(events).toEqual([
       expect.objectContaining({
         event: "relation.created",
-        relation_id: "rel.constraint-webhook-idempotency-affects-decision-billing-retries",
+        relation_id: "rel.decision-webhook-idempotency-affects-decision-billing-retries",
         actor: "agent",
         timestamp: FIXED_TIMESTAMP
       }),
       expect.objectContaining({
         event: "relation.updated",
-        relation_id: "rel.billing-retries-requires-idempotency",
+        relation_id: "rel.billing-retries-depends-on-idempotency",
         actor: "agent",
         timestamp: FIXED_TIMESTAMP
       }),
       expect.objectContaining({
         event: "relation.deleted",
-        relation_id: "rel.billing-retries-mentions-idempotency",
+        relation_id: "rel.billing-retries-related-to-idempotency",
         actor: "agent",
         timestamp: FIXED_TIMESTAMP
       })
@@ -202,8 +198,8 @@ describe("applyMemoryPatch relation operations", () => {
       change: {
         op: "create_relation",
         from: "decision.missing",
-        predicate: "requires",
-        to: "constraint.webhook-idempotency"
+        predicate: "depends_on",
+        to: "decision.webhook-idempotency"
       },
       field: "/changes/0/from"
     },
@@ -212,8 +208,8 @@ describe("applyMemoryPatch relation operations", () => {
       change: {
         op: "create_relation",
         from: "decision.billing-retries",
-        predicate: "requires",
-        to: "constraint.missing"
+        predicate: "depends_on",
+        to: "gotcha.missing"
       },
       field: "/changes/0/to"
     }
@@ -254,10 +250,10 @@ describe("applyMemoryPatch relation operations", () => {
         changes: [
           {
             op: "create_relation",
-            id: "rel.duplicate-requires",
+            id: "rel.duplicate-depends-on",
             from: "decision.billing-retries",
-            predicate: "requires",
-            to: "constraint.webhook-idempotency"
+            predicate: "depends_on",
+            to: "decision.webhook-idempotency"
           }
         ]
       },
@@ -285,8 +281,8 @@ describe("applyMemoryPatch relation operations", () => {
         changes: [
           {
             op: "update_relation",
-            id: "rel.billing-retries-requires-idempotency",
-            from: "constraint.webhook-idempotency"
+            id: "rel.billing-retries-depends-on-idempotency",
+            from: "decision.webhook-idempotency"
           }
         ]
       },
@@ -314,7 +310,7 @@ describe("applyMemoryPatch relation operations", () => {
         changes: [
           {
             op: "update_relation",
-            id: "rel.billing-retries-requires-idempotency"
+            id: "rel.billing-retries-depends-on-idempotency"
           }
         ]
       },
@@ -356,26 +352,26 @@ async function createRelationPatchProject(): Promise<string> {
     body: "# Billing retries moved to queue worker\n\nRetries run in the queue worker.\n"
   });
   await writeMemoryObject(projectRoot, {
-    id: "constraint.webhook-idempotency",
-    type: "constraint",
+    id: "decision.webhook-idempotency",
+    type: "decision",
     status: "active",
     title: "Webhook processing must be idempotent",
-    bodyPath: "memory/constraints/webhook-idempotency.md",
+    bodyPath: "memory/decisions/webhook-idempotency.md",
     body: "# Webhook processing must be idempotent\n\nDuplicate webhooks are expected.\n"
   });
   await writeRelation(projectRoot, {
-    id: "rel.billing-retries-requires-idempotency",
+    id: "rel.billing-retries-depends-on-idempotency",
     from: "decision.billing-retries",
-    predicate: "requires",
-    to: "constraint.webhook-idempotency",
+    predicate: "depends_on",
+    to: "decision.webhook-idempotency",
     status: "active",
     confidence: "medium"
   });
   await writeRelation(projectRoot, {
-    id: "rel.billing-retries-mentions-idempotency",
+    id: "rel.billing-retries-related-to-idempotency",
     from: "decision.billing-retries",
-    predicate: "mentions",
-    to: "constraint.webhook-idempotency",
+    predicate: "related_to",
+    to: "decision.webhook-idempotency",
     status: "active"
   });
   await writeProjectFile(projectRoot, ".memory/events.jsonl", "");
@@ -400,12 +396,6 @@ async function writeMemoryObject(
     status: fixture.status,
     title: fixture.title,
     body_path: fixture.bodyPath,
-    scope: {
-      kind: "project",
-      project: projectId,
-      branch: null,
-      task: null
-    },
     tags: [],
     created_at: originalTimestamp,
     updated_at: originalTimestamp

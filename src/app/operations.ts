@@ -20,16 +20,15 @@ import { resolveProjectPaths, type ProjectPaths } from "../core/paths.js";
 import { err, ok, type Result } from "../core/result.js";
 import { runSubprocess } from "../core/subprocess.js";
 import type {
+  FeatureStage,
   MemoryMeta,
   ObjectId,
-  ObjectFacets,
   ObjectStatus,
   ObjectType,
   Predicate,
   RelationConfidence,
   RelationId,
   RelationStatus,
-  Scope,
   Source,
   SourceOrigin,
   ValidationIssue
@@ -49,9 +48,9 @@ import {
   type SearchMemoryInput
 } from "../index/search.js";
 import {
-  buildRememberMemoryPatch,
-  type RememberMemoryPatch
-} from "../remember/plan.js";
+  buildSaveMemoryPatch,
+  type SaveMemoryPatch
+} from "../save/plan.js";
 import {
   currentProjectRegistryEntry,
   findRegisteredProject,
@@ -74,6 +73,7 @@ import {
 } from "../storage/init.js";
 import type { StoredMemoryObject } from "../storage/objects.js";
 import {
+  checkStorageVersion,
   readCanonicalStorage,
   type CanonicalStorageSnapshot
 } from "../storage/read.js";
@@ -83,10 +83,6 @@ import {
   restoreCanonicalStorageFromCommit
 } from "../storage/write.js";
 import { planMemoryPatch } from "../storage/patch.js";
-import {
-  upgradeStorageToV4,
-  type UpgradeStorageData
-} from "../storage/upgrade.js";
 import {
   detectSecretsInPatch,
   secretDetectionError
@@ -111,11 +107,6 @@ export interface RebuildIndexOptions extends GitWrapperOptions {
 
 export interface CheckProjectOptions extends GitWrapperOptions {
   cwd: string;
-}
-
-export interface UpgradeStorageOptions extends GitWrapperOptions {
-  cwd: string;
-  clock?: Clock;
 }
 
 export interface SearchMemoryOptions extends GitWrapperOptions, SearchMemoryInput {
@@ -172,14 +163,14 @@ export interface SaveMemoryPatchOptions extends GitWrapperOptions {
   clock?: Clock;
 }
 
-export interface RememberMemoryOptions extends GitWrapperOptions {
+export interface SaveMemoryOptions extends GitWrapperOptions {
   cwd: string;
   input?: unknown;
   dryRun?: boolean;
   clock?: Clock;
 }
 
-export interface SaveMemoryData {
+export interface SaveMemoryPatchData {
   files_changed: string[];
   recovery_files: {
     path: string;
@@ -197,9 +188,9 @@ export interface SaveMemoryData {
   index_updated: boolean;
 }
 
-export interface RememberMemoryData extends SaveMemoryData {
+export interface SaveMemoryData extends SaveMemoryPatchData {
   dry_run: boolean;
-  patch: RememberMemoryPatch;
+  patch: SaveMemoryPatch;
 }
 
 export interface DiffMemoryData {
@@ -216,8 +207,6 @@ export interface CheckProjectData {
   warnings: ValidationIssue[];
 }
 
-export type { UpgradeStorageData };
-
 export interface MemoryObjectSummary {
   id: ObjectId;
   type: ObjectType;
@@ -225,9 +214,9 @@ export interface MemoryObjectSummary {
   title: string;
   body_path: string;
   json_path: string;
-  scope: Scope;
+  stage: FeatureStage | null;
+  anchors: string[];
   tags: string[];
-  facets: ObjectFacets | null;
   evidence: Array<{
     kind: "memory" | "relation" | "file" | "commit" | "task" | "source";
     id: string;
@@ -277,8 +266,6 @@ export interface ViewerBootstrapData {
     relations: number;
     stale_objects: number;
     superseded_objects: number;
-    source_objects: number;
-    synthesis_objects: number;
     active_relations: number;
   };
   storage_warnings: string[];
@@ -480,6 +467,17 @@ export async function rebuildIndex(
     return meta;
   }
 
+  const versionGate = await checkStorageVersion(paths.data.projectRoot);
+
+  if (!versionGate.ok) {
+    return {
+      ok: false,
+      error: versionGate.error,
+      warnings: versionGate.warnings,
+      meta: meta.meta
+    };
+  }
+
   const rebuilt = await rebuildIndexForResolvedProject({
     paths: paths.data,
     meta: meta.meta,
@@ -501,95 +499,6 @@ export async function rebuildIndex(
     data: rebuilt.data,
     warnings: rebuilt.warnings,
     meta: meta.meta
-  };
-}
-
-export async function upgradeStorage(
-  options: UpgradeStorageOptions
-): Promise<AppResult<UpgradeStorageData>> {
-  const clock = options.clock ?? systemClock;
-  const paths = await resolveProjectPaths({
-    cwd: options.cwd,
-    mode: "require-initialized",
-    runner: options.runner
-  });
-
-  if (!paths.ok) {
-    return {
-      ok: false,
-      error: paths.error,
-      warnings: paths.warnings,
-      meta: await buildBestEffortMeta(options)
-    };
-  }
-
-  const meta = await buildMeta(paths.data, options);
-
-  if (!meta.ok) {
-    return meta;
-  }
-
-  const upgraded = await withProjectLock(
-    {
-      memoryRoot: paths.data.memoryRoot,
-      operation: "upgrade",
-      clock
-    },
-    async () => {
-      const result = await upgradeStorageToV4({
-        projectRoot: paths.data.projectRoot,
-        clock
-      });
-
-      if (!result.ok) {
-        return result;
-      }
-
-      const gitFileChanges = await recentGitFileChangesForIndex(
-        paths.data.projectRoot,
-        meta.meta,
-        options
-      );
-      const rebuilt = await rebuildGeneratedIndex({
-        projectRoot: paths.data.projectRoot,
-        memoryRoot: paths.data.memoryRoot,
-        clock,
-        git: meta.meta.git,
-        gitFileChanges: gitFileChanges.ok ? gitFileChanges.data : []
-      });
-
-      return ok(result.data, [
-        ...result.warnings,
-        ...gitFileChanges.warnings,
-        ...rebuilt.warnings,
-        ...(rebuilt.ok ? [] : [`Index warning: ${rebuilt.error.message}`])
-      ]);
-    }
-  );
-
-  if (!upgraded.ok) {
-    return {
-      ok: false,
-      error: upgraded.error,
-      warnings: upgraded.warnings,
-      meta: meta.meta
-    };
-  }
-
-  const refreshedMeta = await buildMeta(paths.data, options);
-
-  return {
-    ok: true,
-    data: upgraded.data,
-    warnings:
-      refreshedMeta.ok
-        ? upgraded.warnings
-        : [
-            ...upgraded.warnings,
-            ...refreshedMeta.warnings,
-            `Git metadata refresh failed after upgrade: ${refreshedMeta.error.message}`
-          ],
-    meta: refreshedMeta.ok ? refreshedMeta.meta : meta.meta
   };
 }
 
@@ -615,6 +524,17 @@ export async function checkProject(
 
   if (!meta.ok) {
     return meta;
+  }
+
+  const versionGate = await checkStorageVersion(paths.data.projectRoot);
+
+  if (!versionGate.ok) {
+    return {
+      ok: false,
+      error: versionGate.error,
+      warnings: versionGate.warnings,
+      meta: meta.meta
+    };
   }
 
   const validation = await validateProject(paths.data.projectRoot, {
@@ -679,6 +599,17 @@ export async function searchMemory(
 
   if (!meta.ok) {
     return meta;
+  }
+
+  const versionGate = await checkStorageVersion(paths.data.projectRoot);
+
+  if (!versionGate.ok) {
+    return {
+      ok: false,
+      error: versionGate.error,
+      warnings: versionGate.warnings,
+      meta: meta.meta
+    };
   }
 
   const searched = await searchIndex(searchIndexOptions(paths.data.memoryRoot, options));
@@ -821,8 +752,6 @@ export async function getViewerBootstrap(
         relations: relations.length,
         stale_objects: countObjectsByStatus(objects, "stale"),
         superseded_objects: countObjectsByStatus(objects, "superseded"),
-        source_objects: countObjectsByType(objects, "source"),
-        synthesis_objects: countObjectsByType(objects, "synthesis"),
         active_relations: relations.filter(
           (relation) => relation.relation.status === "active"
         ).length
@@ -1403,7 +1332,7 @@ export async function resetAllMemory(
 
 export async function saveMemoryPatch(
   options: SaveMemoryPatchOptions
-): Promise<AppResult<SaveMemoryData>> {
+): Promise<AppResult<SaveMemoryPatchData>> {
   const clock = options.clock ?? systemClock;
 
   if (options.patch === undefined) {
@@ -1539,15 +1468,15 @@ export async function saveMemoryPatch(
   };
 }
 
-export async function rememberMemory(
-  options: RememberMemoryOptions
-): Promise<AppResult<RememberMemoryData>> {
+export async function saveMemory(
+  options: SaveMemoryOptions
+): Promise<AppResult<SaveMemoryData>> {
   const clock = options.clock ?? systemClock;
 
   if (options.input === undefined) {
     return {
       ok: false,
-      error: memoryError("MemoryPatchRequired", "Remember input is required."),
+      error: memoryError("MemoryPatchRequired", "Save input is required."),
       warnings: [],
       meta: await buildBestEffortMeta(options)
     };
@@ -1590,7 +1519,7 @@ export async function rememberMemory(
     };
   }
 
-  const patch = buildRememberMemoryPatch({
+  const patch = buildSaveMemoryPatch({
     input: options.input,
     storage: storage.data
   });
@@ -1841,10 +1770,9 @@ export const applicationOperations = {
   removeRegisteredProject,
   resetAllMemory,
   resetMemory,
-  saveMemoryPatch,
+  saveMemory,
   searchMemory,
-  unregisterProjectRoot,
-  upgradeStorage
+  unregisterProjectRoot
 };
 
 type ReadOnlyCanonicalStorageResult =
@@ -1939,9 +1867,9 @@ function summarizeObject(object: StoredMemoryObject): MemoryObjectSummary {
     title: sidecar.title,
     body_path: object.bodyPath,
     json_path: object.path,
-    scope: sidecar.scope,
+    stage: sidecar.stage ?? null,
+    anchors: [...(sidecar.anchors ?? [])],
     tags: [...(sidecar.tags ?? [])],
-    facets: sidecar.facets ?? null,
     evidence: [...(sidecar.evidence ?? [])],
     source: sidecar.source ?? null,
     origin: sidecar.origin ?? null,
@@ -1963,13 +1891,6 @@ function countObjectsByStatus(
   status: ObjectStatus
 ): number {
   return objects.filter((object) => object.sidecar.status === status).length;
-}
-
-function countObjectsByType(
-  objects: readonly StoredMemoryObject[],
-  type: ObjectType
-): number {
-  return objects.filter((object) => object.sidecar.type === type).length;
 }
 
 function summarizeRelation(relation: StoredMemoryRelation): MemoryRelationSummary {
@@ -2264,8 +2185,7 @@ function searchIndexOptions(memoryRoot: string, input: SearchMemoryInput): Searc
   return {
     memoryRoot,
     query: input.query,
-    ...(input.limit === undefined ? {} : { limit: input.limit }),
-    ...(input.hints === undefined ? {} : { hints: input.hints })
+    ...(input.limit === undefined ? {} : { limit: input.limit })
   };
 }
 

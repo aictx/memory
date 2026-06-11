@@ -9,14 +9,6 @@ import {
   type ObjectType
 } from "../core/types.js";
 import {
-  hintSearchText,
-  hintedFiles,
-  normalizeRetrievalHints,
-  retrievalHintsHaveSignal,
-  type NormalizedRetrievalHints,
-  type RetrievalHints
-} from "../retrieval/hints.js";
-import {
   CURRENT_INDEX_SCHEMA_VERSION,
   getIndexSchemaVersion
 } from "./migrations.js";
@@ -36,26 +28,19 @@ const SNIPPET_CONTEXT = 48;
 const SCORE = {
   exactId: 100,
   exactBodyPath: 80,
-  hintMatch: 45,
   tagMatch: 40,
   titleFtsMatch: 30,
+  anchorMatch: 25,
   bodyFtsMatch: 15,
   recentMemoryBoost: 5
 } as const;
 
 const TYPE_MODIFIERS = {
-  constraint: 20,
   decision: 18,
-  synthesis: 16,
-  architecture: 12,
-  question: 10,
-  fact: 8,
   gotcha: 14,
-  workflow: 10,
-  source: 5,
-  concept: 6,
-  project: 8,
-  note: 0
+  feature: 12,
+  question: 10,
+  project: 8
 } as const satisfies Record<ObjectType, number>;
 
 const STATUS_MODIFIERS = {
@@ -67,24 +52,16 @@ const STATUS_MODIFIERS = {
 } as const satisfies Record<ObjectStatus, number>;
 
 const TYPE_PRIORITY = {
-  constraint: 0,
-  decision: 1,
-  synthesis: 2,
-  gotcha: 3,
-  architecture: 4,
-  workflow: 5,
-  question: 6,
-  fact: 7,
-  concept: 8,
-  project: 9,
-  source: 10,
-  note: 11
+  decision: 0,
+  gotcha: 1,
+  feature: 2,
+  question: 3,
+  project: 4
 } as const satisfies Record<ObjectType, number>;
 
 export interface SearchMemoryInput {
   query: string;
   limit?: number;
-  hints?: RetrievalHints;
 }
 
 export interface SearchIndexOptions extends SearchMemoryInput {
@@ -114,7 +91,6 @@ interface NormalizedSearchInput {
   limit: number;
   terms: string[];
   ftsQuery: string | null;
-  hints: NormalizedRetrievalHints;
 }
 
 interface ObjectRow {
@@ -125,7 +101,7 @@ interface ObjectRow {
   body_path: string;
   body: string;
   tags_json: string;
-  facets_json: string | null;
+  anchors_json: string | null;
   evidence_json: string | null;
   origin_json: string | null;
   updated_at: string;
@@ -139,7 +115,7 @@ interface IndexedObject {
   bodyPath: string;
   body: string;
   tags: string[];
-  facetsText: string;
+  anchorsText: string;
   evidenceText: string;
   updatedAt: string;
 }
@@ -152,9 +128,9 @@ interface SearchCandidate {
 type ScoreSource =
   | "exactId"
   | "exactBodyPath"
-  | "hintMatch"
   | "tagMatch"
   | "titleFtsMatch"
+  | "anchorMatch"
   | "bodyFtsMatch";
 
 export async function searchIndex(options: SearchIndexOptions): Promise<Result<SearchMemoryData>> {
@@ -219,20 +195,13 @@ function normalizeSearchInput(input: SearchMemoryInput): Result<NormalizedSearch
     });
   }
 
-  const hints = normalizeRetrievalHints(input.hints);
-
-  if (!hints.ok) {
-    return hints;
-  }
-
-  const terms = extractSearchTerms([query, hintSearchText(hints.data)].join(" "));
+  const terms = extractSearchTerms(query);
 
   return ok({
     query,
     limit,
     terms,
-    ftsQuery: buildFtsQuery(terms),
-    hints: hints.data
+    ftsQuery: buildFtsQuery(terms)
   });
 }
 
@@ -306,12 +275,6 @@ function searchDatabase(
       }
     }
 
-    if (retrievalHintsHaveSignal(input.hints)) {
-      for (const row of selectObjectsByHints(connection.db, input.hints)) {
-        addCandidate(candidates, row, ["hintMatch"]);
-      }
-    }
-
     const recentBoostIds = newestBoostableCandidateIds(candidates);
     const matches = [...candidates.values()]
       .map((candidate) => resultFromCandidate(candidate, input.terms, recentBoostIds))
@@ -328,11 +291,14 @@ function searchDatabase(
   }
 }
 
+const OBJECT_ROW_COLUMNS =
+  "id, type, status, title, body_path, body, tags_json, anchors_json, evidence_json, origin_json, updated_at";
+
 function selectObjectById(db: SqliteDatabase, id: string): IndexedObject | undefined {
   const row = db
     .prepare<[string], ObjectRow>(
       `
-        SELECT id, type, status, title, body_path, body, tags_json, facets_json, evidence_json, origin_json, updated_at
+        SELECT ${OBJECT_ROW_COLUMNS}
         FROM objects
         WHERE id = ? AND status <> 'rejected'
       `
@@ -346,7 +312,7 @@ function selectObjectByBodyPath(db: SqliteDatabase, bodyPath: string): IndexedOb
   const row = db
     .prepare<[string], ObjectRow>(
       `
-        SELECT id, type, status, title, body_path, body, tags_json, facets_json, evidence_json, origin_json, updated_at
+        SELECT ${OBJECT_ROW_COLUMNS}
         FROM objects
         WHERE body_path = ? AND status <> 'rejected'
       `
@@ -368,7 +334,7 @@ function selectObjectsByFts(db: SqliteDatabase, ftsQuery: string): IndexedObject
           o.body_path,
           o.body,
           o.tags_json,
-          o.facets_json,
+          o.anchors_json,
           o.evidence_json,
           o.origin_json,
           o.updated_at
@@ -380,97 +346,6 @@ function selectObjectsByFts(db: SqliteDatabase, ftsQuery: string): IndexedObject
     .all(ftsQuery);
 
   return rows.map(indexedObjectFromRow);
-}
-
-function selectObjectsByHints(
-  db: SqliteDatabase,
-  hints: NormalizedRetrievalHints
-): IndexedObject[] {
-  const ids = new Set<string>();
-
-  for (const id of selectObjectIdsByHintedFiles(db, hintedFiles(hints))) {
-    ids.add(id);
-  }
-
-  for (const id of selectObjectIdsByFacetHints(db, [...hints.subsystems, ...hints.symbols])) {
-    ids.add(id);
-  }
-
-  for (const id of selectObjectIdsByPathTerms(db, [...hints.subsystems, ...hints.symbols])) {
-    ids.add(id);
-  }
-
-  if (ids.size === 0) {
-    return [];
-  }
-
-  const select = db.prepare<[string], ObjectRow>(
-    `
-      SELECT id, type, status, title, body_path, body, tags_json, facets_json, evidence_json, origin_json, updated_at
-      FROM objects
-      WHERE id = ? AND status <> 'rejected'
-    `
-  );
-
-  return [...ids]
-    .map((id) => select.get(id))
-    .filter((row): row is ObjectRow => row !== undefined)
-    .map(indexedObjectFromRow);
-}
-
-function selectObjectIdsByHintedFiles(
-  db: SqliteDatabase,
-  files: readonly string[]
-): string[] {
-  if (files.length === 0) {
-    return [];
-  }
-
-  const select = db.prepare<[string], { memory_id: string }>(
-    "SELECT memory_id FROM memory_file_links WHERE file_path = ?"
-  );
-
-  return files.flatMap((file) => select.all(file).map((row) => row.memory_id));
-}
-
-function selectObjectIdsByFacetHints(
-  db: SqliteDatabase,
-  values: readonly string[]
-): string[] {
-  const facets = values
-    .map((value) => value.toLowerCase().trim())
-    .filter((value) => value !== "");
-
-  if (facets.length === 0) {
-    return [];
-  }
-
-  const select = db.prepare<[string], { memory_id: string }>(
-    "SELECT memory_id FROM memory_facet_links WHERE facet = ?"
-  );
-
-  return facets.flatMap((facet) => select.all(facet).map((row) => row.memory_id));
-}
-
-function selectObjectIdsByPathTerms(
-  db: SqliteDatabase,
-  values: readonly string[]
-): string[] {
-  const terms = values
-    .flatMap(extractSearchTerms)
-    .filter((term) => term.length >= 2);
-
-  if (terms.length === 0) {
-    return [];
-  }
-
-  const select = db.prepare<[string], { memory_id: string }>(
-    "SELECT memory_id FROM memory_file_links WHERE file_path LIKE ? ESCAPE '\\'"
-  );
-
-  return terms.flatMap((term) =>
-    select.all(`%${escapeLike(term)}%`).map((row) => row.memory_id)
-  );
 }
 
 function indexedObjectFromRow(row: ObjectRow): IndexedObject {
@@ -492,7 +367,7 @@ function indexedObjectFromRow(row: ObjectRow): IndexedObject {
     bodyPath: row.body_path,
     body: row.body,
     tags: parseTags(row.tags_json),
-    facetsText: jsonSearchText(row.facets_json),
+    anchorsText: jsonSearchText(row.anchors_json),
     evidenceText: [jsonSearchText(row.evidence_json), jsonSearchText(row.origin_json)].join(" "),
     updatedAt: row.updated_at
   };
@@ -523,7 +398,7 @@ function sourcesForTerms(object: IndexedObject, terms: readonly string[]): Score
   const normalizedTitle = normalizeForMatch(object.title);
   const normalizedBody = normalizeForMatch(object.body);
   const normalizedTags = object.tags.map(normalizeForMatch);
-  const normalizedFacets = normalizeForMatch(object.facetsText);
+  const normalizedAnchors = normalizeForMatch(object.anchorsText);
   const normalizedEvidence = normalizeForMatch(object.evidenceText);
 
   for (const term of terms) {
@@ -531,11 +406,11 @@ function sourcesForTerms(object: IndexedObject, terms: readonly string[]): Score
       sources.add("titleFtsMatch");
     }
 
-    if (
-      normalizedBody.includes(term) ||
-      normalizedFacets.includes(term) ||
-      normalizedEvidence.includes(term)
-    ) {
+    if (normalizedAnchors.includes(term)) {
+      sources.add("anchorMatch");
+    }
+
+    if (normalizedBody.includes(term) || normalizedEvidence.includes(term)) {
       sources.add("bodyFtsMatch");
     }
 
@@ -591,16 +466,16 @@ function scoreSources(sources: ReadonlySet<ScoreSource>): number {
     score += SCORE.exactBodyPath;
   }
 
-  if (sources.has("hintMatch")) {
-    score += SCORE.hintMatch;
-  }
-
   if (sources.has("tagMatch")) {
     score += SCORE.tagMatch;
   }
 
   if (sources.has("titleFtsMatch")) {
     score += SCORE.titleFtsMatch;
+  }
+
+  if (sources.has("anchorMatch")) {
+    score += SCORE.anchorMatch;
   }
 
   if (sources.has("bodyFtsMatch")) {
@@ -777,10 +652,6 @@ function normalizeForMatch(value: string): string {
 
 function collapseWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
-}
-
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/gu, (character) => `\\${character}`);
 }
 
 function invalidInput<T>(message: string, details: JsonValue): Result<T> {

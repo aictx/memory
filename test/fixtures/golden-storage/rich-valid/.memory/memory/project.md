@@ -1,3 +1,3 @@
 # Golden Rich
 
-Golden storage regression fixture for a richer project.
+Project-level memory for Golden Rich.

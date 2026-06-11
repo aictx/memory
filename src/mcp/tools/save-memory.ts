@@ -2,13 +2,12 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import {
-  FACET_CATEGORIES,
-  ORIGIN_KINDS,
+  FEATURE_STAGES,
   PREDICATES,
   RELATION_CONFIDENCES
 } from "../../core/types.js";
 import { dataAccessService } from "../../data-access/index.js";
-import { REMEMBER_MEMORY_KINDS } from "../../remember/types.js";
+import { SAVE_NODE_KINDS } from "../../save/types.js";
 import {
   PROJECT_ROOT_ARGUMENT_DESCRIPTION,
   resolveMcpProjectCwd,
@@ -27,6 +26,9 @@ import {
 const OBJECT_ID_SCHEMA = z
   .string()
   .regex(/^[a-z][a-z0-9_]*\.[a-z0-9][a-z0-9-]*$/u);
+const ANCHORS_SCHEMA = z
+  .array(z.string().min(1))
+  .describe("Repo-relative glob strings linking this node to code, e.g. src/index/ or src/**/*.ts.");
 const UNIQUE_NON_EMPTY_STRINGS_SCHEMA = z.array(z.string().min(1)).refine(hasUniqueItems);
 const EVIDENCE_SCHEMA = z.array(
   z
@@ -36,47 +38,26 @@ const EVIDENCE_SCHEMA = z.array(
     })
     .strict()
 );
-const ORIGIN_SCHEMA = z
-  .object({
-    kind: z.enum(ORIGIN_KINDS),
-    locator: z.string().min(1),
-    captured_at: z.string().min(1).optional(),
-    digest: z.string().regex(/^sha256:[a-f0-9]{64}$/u).optional(),
-    media_type: z.string().min(1).optional()
-  })
-  .strict();
 const RELATED_SCHEMA = z
   .object({
     predicate: z.enum(PREDICATES),
     to: OBJECT_ID_SCHEMA,
-    confidence: z.enum(RELATION_CONFIDENCES).optional(),
-    evidence: EVIDENCE_SCHEMA.optional()
+    confidence: z.enum(RELATION_CONFIDENCES).optional()
   })
   .strict();
-const MEMORY_SCHEMA = z
+const NODE_SCHEMA = z
   .object({
-    id: OBJECT_ID_SCHEMA.optional(),
-    kind: z.enum(REMEMBER_MEMORY_KINDS),
-    title: z.string().min(1),
-    body: z.string().min(1),
+    id: OBJECT_ID_SCHEMA.optional().describe(
+      "Existing object id to update, or an explicit id for a new object."
+    ),
+    kind: z.enum(SAVE_NODE_KINDS).optional().describe("Required when creating a node."),
+    title: z.string().min(1).optional().describe("Required when creating a node."),
+    body: z.string().min(1).optional().describe("Required when creating a node."),
+    stage: z.enum(FEATURE_STAGES).optional().describe("Feature-only lifecycle stage."),
+    anchors: ANCHORS_SCHEMA.optional(),
     tags: UNIQUE_NON_EMPTY_STRINGS_SCHEMA.optional(),
-    applies_to: UNIQUE_NON_EMPTY_STRINGS_SCHEMA.optional(),
-    category: z.enum(FACET_CATEGORIES).optional(),
     evidence: EVIDENCE_SCHEMA.optional(),
-    origin: ORIGIN_SCHEMA.optional(),
     related: z.array(RELATED_SCHEMA).optional()
-  })
-  .strict();
-const UPDATE_SCHEMA = z
-  .object({
-    id: OBJECT_ID_SCHEMA,
-    title: z.string().min(1).optional(),
-    body: z.string().min(1).optional(),
-    tags: UNIQUE_NON_EMPTY_STRINGS_SCHEMA.optional(),
-    applies_to: UNIQUE_NON_EMPTY_STRINGS_SCHEMA.optional(),
-    category: z.enum(FACET_CATEGORIES).optional(),
-    evidence: EVIDENCE_SCHEMA.optional(),
-    origin: ORIGIN_SCHEMA.optional()
   })
   .strict();
 const STALE_SCHEMA = z
@@ -92,23 +73,19 @@ const SUPERSEDE_SCHEMA = z
     reason: z.string().min(1)
   })
   .strict();
-const RELATION_SCHEMA = z
+const DELETE_SCHEMA = z
   .object({
-    from: OBJECT_ID_SCHEMA,
-    predicate: z.enum(PREDICATES),
-    to: OBJECT_ID_SCHEMA,
-    confidence: z.enum(RELATION_CONFIDENCES).optional(),
-    evidence: EVIDENCE_SCHEMA.optional()
+    id: OBJECT_ID_SCHEMA,
+    reason: z.string().min(1)
   })
   .strict();
-const REMEMBER_MEMORY_INPUT_SCHEMA = z
+const SAVE_MEMORY_INPUT_SCHEMA = z
   .object({
     task: z.string().min(1).describe("Task or reason for this durable memory update."),
-    memories: z.array(MEMORY_SCHEMA).optional(),
-    updates: z.array(UPDATE_SCHEMA).optional(),
+    nodes: z.array(NODE_SCHEMA).optional(),
     stale: z.array(STALE_SCHEMA).optional(),
     supersede: z.array(SUPERSEDE_SCHEMA).optional(),
-    relations: z.array(RELATION_SCHEMA).optional(),
+    delete: z.array(DELETE_SCHEMA).optional(),
     project_root: z
       .string()
       .optional()
@@ -116,33 +93,33 @@ const REMEMBER_MEMORY_INPUT_SCHEMA = z
   })
   .strict();
 
-type RememberMemoryArgs = z.infer<typeof REMEMBER_MEMORY_INPUT_SCHEMA> &
-  ProjectScopedMcpArgs;
+type SaveMemoryArgs = z.infer<typeof SAVE_MEMORY_INPUT_SCHEMA> & ProjectScopedMcpArgs;
 
-export const rememberMemoryTool = {
-  name: "remember_memory",
-  title: "Remember Memory",
+export const saveMemoryTool = {
+  name: "save_memory",
+  title: "Save Memory",
   description:
-    "Create or repair Memory, including durable workflows/how-tos, from intent-first agent input. Converts to a structured patch internally.",
-  inputSchema: REMEMBER_MEMORY_INPUT_SCHEMA,
+    "Save durable project memory from intent-first agent input: create or update feature/decision/gotcha/question nodes, mark stale, supersede, or delete.",
+  inputSchema: SAVE_MEMORY_INPUT_SCHEMA,
   annotations: WRITE_TOOL_ANNOTATIONS,
-  call: callRememberMemoryTool
+  call: callSaveMemoryTool
 };
 
-async function callRememberMemoryTool(
+async function callSaveMemoryTool(
   context: MemoryMcpContext,
-  args: RememberMemoryArgs
+  args: SaveMemoryArgs
 ): Promise<CallToolResult> {
   const cwd = resolveMcpProjectCwd(context, args);
   const projectKey = await resolveWriteQueueKey(cwd);
+  const { project_root: _projectRoot, ...input } = args;
 
   return serializeProjectWrite(projectKey, async () => {
-    const result = await dataAccessService.remember({
+    const result = await dataAccessService.save({
       target: {
         kind: "cwd",
         cwd
       },
-      input: args
+      input
     });
 
     return toMcpToolResult(result);

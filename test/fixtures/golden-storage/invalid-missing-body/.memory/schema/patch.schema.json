@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aictx.dev/schemas/v1/patch.schema.json",
+  "$id": "https://aictx.dev/schemas/v5/patch.schema.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["source", "changes"],
@@ -64,25 +64,16 @@
       "type": "string",
       "pattern": "^rel\\.[a-z0-9][a-z0-9-]*$"
     },
-    "scope": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "project", "branch", "task"],
-      "properties": {
-        "kind": {
-          "enum": ["project", "branch", "task"]
-        },
-        "project": {
-          "type": "string",
-          "pattern": "^project\\.[a-z0-9][a-z0-9-]*$"
-        },
-        "branch": {
-          "type": ["string", "null"]
-        },
-        "task": {
-          "type": ["string", "null"]
-        }
-      }
+    "stage": {
+      "enum": ["idea", "building", "shipped", "paused", "dead"]
+    },
+    "anchors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
     },
     "tags": {
       "type": "array",
@@ -109,6 +100,32 @@
         }
       }
     },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "locator"],
+      "properties": {
+        "kind": {
+          "enum": ["file", "url", "user", "external"]
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1
+        },
+        "captured_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "evidence": {
       "type": "array",
       "items": {
@@ -117,7 +134,7 @@
         "required": ["kind", "id"],
         "properties": {
           "kind": {
-            "enum": ["memory", "relation", "file", "commit"]
+            "enum": ["memory", "relation", "file", "commit", "task", "source"]
           },
           "id": {
             "type": "string",
@@ -138,10 +155,10 @@
           "$ref": "#/$defs/objectId"
         },
         "type": {
-          "enum": ["project", "architecture", "decision", "constraint", "question", "fact", "note", "concept"]
+          "enum": ["project", "feature", "decision", "gotcha", "question"]
         },
         "status": {
-          "enum": ["active", "draft", "stale", "superseded", "rejected", "open", "closed"]
+          "enum": ["active", "stale", "superseded", "open", "closed"]
         },
         "title": {
           "type": "string",
@@ -151,14 +168,23 @@
           "type": "string",
           "minLength": 1
         },
-        "scope": {
-          "$ref": "#/$defs/scope"
+        "stage": {
+          "$ref": "#/$defs/stage"
+        },
+        "anchors": {
+          "$ref": "#/$defs/anchors"
         },
         "tags": {
           "$ref": "#/$defs/tags"
         },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        },
         "source": {
           "$ref": "#/$defs/source"
+        },
+        "origin": {
+          "$ref": "#/$defs/origin"
         }
       }
     },
@@ -174,7 +200,7 @@
           "$ref": "#/$defs/objectId"
         },
         "status": {
-          "enum": ["active", "draft", "stale", "superseded", "rejected", "open", "closed"]
+          "enum": ["active", "stale", "superseded", "open", "closed"]
         },
         "title": {
           "type": "string",
@@ -184,14 +210,23 @@
           "type": "string",
           "minLength": 1
         },
-        "scope": {
-          "$ref": "#/$defs/scope"
+        "stage": {
+          "$ref": "#/$defs/stage"
+        },
+        "anchors": {
+          "$ref": "#/$defs/anchors"
         },
         "tags": {
           "$ref": "#/$defs/tags"
         },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        },
         "source": {
           "$ref": "#/$defs/source"
+        },
+        "origin": {
+          "$ref": "#/$defs/origin"
         },
         "superseded_by": {
           "$ref": "#/$defs/objectId"
@@ -263,7 +298,7 @@
           "$ref": "#/$defs/objectId"
         },
         "predicate": {
-          "enum": ["affects", "requires", "depends_on", "supersedes", "conflicts_with", "mentions", "implements", "related_to"]
+          "enum": ["affects", "depends_on", "supersedes", "related_to"]
         },
         "to": {
           "$ref": "#/$defs/objectId"

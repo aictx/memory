@@ -9,49 +9,23 @@ export type Sha256Hash = string;
 
 export const OBJECT_TYPES = [
   "project",
-  "architecture",
-  "source",
-  "synthesis",
+  "feature",
   "decision",
-  "constraint",
-  "question",
-  "fact",
   "gotcha",
-  "workflow",
-  "note",
-  "concept"
+  "question"
 ] as const;
 
 export type ObjectType = (typeof OBJECT_TYPES)[number];
 
-export const FACET_CATEGORIES = [
-  "project-description",
-  "architecture",
-  "stack",
-  "convention",
-  "file-layout",
-  "product-feature",
-  "testing",
-  "decision-rationale",
-  "abandoned-attempt",
-  "workflow",
-  "gotcha",
-  "debugging-fact",
-  "source",
-  "product-intent",
-  "feature-map",
-  "roadmap",
-  "agent-guidance",
-  "concept",
-  "open-question",
-  "domain",
-  "bounded-context",
-  "capability",
-  "business-rule",
-  "unresolved-conflict"
+export const FEATURE_STAGES = [
+  "idea",
+  "building",
+  "shipped",
+  "paused",
+  "dead"
 ] as const;
 
-export type FacetCategory = (typeof FACET_CATEGORIES)[number];
+export type FeatureStage = (typeof FEATURE_STAGES)[number];
 
 export const OBJECT_STATUSES = [
   "active",
@@ -69,17 +43,8 @@ export type RelationStatus = (typeof RELATION_STATUSES)[number];
 
 export const PREDICATES = [
   "affects",
-  "requires",
   "depends_on",
   "supersedes",
-  "conflicts_with",
-  "supports",
-  "challenges",
-  "derived_from",
-  "summarizes",
-  "documents",
-  "mentions",
-  "implements",
   "related_to"
 ] as const;
 
@@ -98,8 +63,7 @@ export const EVENT_TYPES = [
   "relation.created",
   "relation.updated",
   "relation.deleted",
-  "index.rebuilt",
-  "context.generated"
+  "index.rebuilt"
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -112,10 +76,6 @@ export type SourceKind = Actor;
 export const ORIGIN_KINDS = ["file", "url", "user", "external"] as const;
 
 export type OriginKind = (typeof ORIGIN_KINDS)[number];
-
-export const SCOPE_KINDS = ["project", "branch", "task"] as const;
-
-export type ScopeKind = (typeof SCOPE_KINDS)[number];
 
 export const PATCH_OPERATIONS = [
   "create_object",
@@ -150,13 +110,6 @@ export interface MemoryMeta {
   git: GitState;
 }
 
-export interface Scope {
-  kind: ScopeKind;
-  project: ProjectId;
-  branch: string | null;
-  task: string | null;
-}
-
 export interface Source {
   kind: SourceKind;
   task?: string;
@@ -175,19 +128,6 @@ export interface Evidence {
   kind: "memory" | "relation" | "file" | "commit" | "task" | "source";
   id: string;
 }
-
-export interface ObjectFacets {
-  category: FacetCategory;
-  applies_to?: string[];
-  load_modes?: LoadMemoryModeName[];
-}
-
-export type LoadMemoryModeName =
-  | "coding"
-  | "debugging"
-  | "review"
-  | "architecture"
-  | "onboarding";
 
 export interface MemoryEvent {
   event: EventType;

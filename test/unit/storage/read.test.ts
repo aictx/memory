@@ -13,18 +13,14 @@ const hash = `sha256:${"0".repeat(64)}`;
 const timestamp = "2026-04-25T14:00:00+02:00";
 
 const validConfig = {
-  version: 1,
+  version: 5,
   project: {
     id: "project.billing-api",
     name: "Billing API"
   },
   memory: {
-    defaultTokenBudget: 6000,
-    autoIndex: true,
-    saveContextPacks: false
-  },
-  git: {
-    trackContextPacks: false
+    defaultTokenBudget: 2000,
+    autoIndex: true
   }
 };
 
@@ -34,12 +30,7 @@ const validObject = {
   status: "active",
   title: "Billing retries moved to queue worker",
   body_path: "memory/decisions/billing-retries.md",
-  scope: {
-    kind: "project",
-    project: "project.billing-api",
-    branch: null,
-    task: null
-  },
+  anchors: ["src/billing/retries.ts"],
   tags: ["billing", "stripe"],
   content_hash: hash,
   created_at: timestamp,
@@ -47,10 +38,10 @@ const validObject = {
 };
 
 const validRelation = {
-  id: "rel.billing-retries-requires-idempotency",
+  id: "rel.billing-retries-depends-on-idempotency",
   from: "decision.billing-retries",
-  predicate: "requires",
-  to: "constraint.webhook-idempotency",
+  predicate: "depends_on",
+  to: "gotcha.webhook-idempotency",
   status: "active",
   confidence: "high",
   content_hash: hash,
@@ -70,13 +61,13 @@ const createdEvent = {
 
 const relationEvent = {
   event: "relation.created",
-  relation_id: "rel.billing-retries-requires-idempotency",
+  relation_id: "rel.billing-retries-depends-on-idempotency",
   actor: "agent",
   timestamp,
   payload: {
     from: "decision.billing-retries",
-    predicate: "requires",
-    to: "constraint.webhook-idempotency"
+    predicate: "depends_on",
+    to: "gotcha.webhook-idempotency"
   }
 };
 
@@ -105,7 +96,7 @@ describe("readCanonicalStorage", () => {
     });
     expect(result.data.relations).toEqual([
       {
-        path: ".memory/relations/billing-retries-requires-idempotency.json",
+        path: ".memory/relations/billing-retries-depends-on-idempotency.json",
         relation: validRelation
       }
     ]);
@@ -148,7 +139,7 @@ describe("readCanonicalStorage", () => {
     const projectRoot = await createReadableProject();
     await writeProjectFile(
       projectRoot,
-      ".memory/relations/billing-retries-requires-idempotency.json",
+      ".memory/relations/billing-retries-depends-on-idempotency.json",
       "{bad json"
     );
 
@@ -158,7 +149,7 @@ describe("readCanonicalStorage", () => {
     if (!result.ok) {
       expect(result.error.code).toBe("MemoryInvalidJson");
       expect(JSON.stringify(result.error.details)).toContain(
-        ".memory/relations/billing-retries-requires-idempotency.json"
+        ".memory/relations/billing-retries-depends-on-idempotency.json"
       );
     }
   });
@@ -315,7 +306,7 @@ async function createReadableProject(): Promise<string> {
   );
   await writeJsonProjectFile(
     projectRoot,
-    ".memory/relations/billing-retries-requires-idempotency.json",
+    ".memory/relations/billing-retries-depends-on-idempotency.json",
     validRelation
   );
   await writeProjectFile(

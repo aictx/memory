@@ -13,8 +13,7 @@ import {
 import type {
   MemoryEvent,
   ObjectId,
-  Predicate,
-  ProjectId
+  Predicate
 } from "../../../src/core/types.js";
 import {
   computeObjectContentHash,
@@ -39,11 +38,9 @@ const OPERATION_TIMEOUT_MS = 30_000;
 const WRITE_BATCH_SIZE = 64;
 const PERFORMANCE_QUERY = "decision.perf-smoke-0001 performance smoke query";
 const RELATION_PREDICATES = [
-  "requires",
-  "mentions",
   "depends_on",
   "affects",
-  "implements"
+  "related_to"
 ] as const satisfies readonly Predicate[];
 
 const tempRoots: string[] = [];
@@ -89,8 +86,8 @@ describe("performance smoke tests", () => {
       }
       expect(rebuilt.data).toMatchObject({
         index_rebuilt: true,
-        objects_indexed: GENERATED_OBJECT_COUNT + 2,
-        relations_indexed: GENERATED_RELATION_COUNT + 1,
+        objects_indexed: GENERATED_OBJECT_COUNT + 1,
+        relations_indexed: GENERATED_RELATION_COUNT,
         events_indexed: GENERATED_EVENT_COUNT,
         event_appended: false
       });
@@ -126,7 +123,7 @@ describe("performance smoke tests", () => {
             changes: [
               {
                 op: "create_object",
-                type: "note",
+                type: "gotcha",
                 title: "Performance smoke saved note",
                 body:
                   "# Performance smoke saved note\n\nThis local note proves save patch updates remain searchable in the performance smoke fixture.\n",
@@ -141,7 +138,7 @@ describe("performance smoke tests", () => {
       if (!saved.ok) {
         throw new Error(saved.error.message);
       }
-      expect(saved.data.memory_created).toEqual(["note.performance-smoke-saved-note"]);
+      expect(saved.data.memory_created).toEqual(["gotcha.performance-smoke-saved-note"]);
       expect(saved.data.events_appended).toBe(1);
       expect(saved.data.index_updated).toBe(true);
 
@@ -151,7 +148,7 @@ describe("performance smoke tests", () => {
         () =>
           searchMemory({
             cwd: projectRoot,
-            query: "note.performance-smoke-saved-note",
+            query: "gotcha.performance-smoke-saved-note",
             limit: 10
           })
       );
@@ -161,7 +158,7 @@ describe("performance smoke tests", () => {
         throw new Error(searchedAfterSave.error.message);
       }
       expect(searchedAfterSave.data.matches.map((match) => match.id)).toContain(
-        "note.performance-smoke-saved-note"
+        "gotcha.performance-smoke-saved-note"
       );
     },
     TEST_TIMEOUT_MS
@@ -199,12 +196,11 @@ async function writePerformanceFixture(projectRoot: string): Promise<ObjectId[]>
     throw new Error(storage.error.message);
   }
 
-  const projectId = storage.data.config.project.id;
   const objectIds = Array.from({ length: GENERATED_OBJECT_COUNT }, (_value, index) =>
     objectIdForIndex(index + 1)
   );
   const writes = [
-    ...buildObjectWrites(projectId, objectIds),
+    ...buildObjectWrites(objectIds),
     ...buildRelationWrites(objectIds)
   ];
 
@@ -220,7 +216,7 @@ async function writePerformanceFixture(projectRoot: string): Promise<ObjectId[]>
   return objectIds;
 }
 
-function buildObjectWrites(projectId: ProjectId, objectIds: readonly ObjectId[]): FileWrite[] {
+function buildObjectWrites(objectIds: readonly ObjectId[]): FileWrite[] {
   return objectIds.flatMap((id, index) => {
     const fixtureIndex = index + 1;
     const slug = slugForIndex(fixtureIndex);
@@ -238,12 +234,6 @@ function buildObjectWrites(projectId: ProjectId, objectIds: readonly ObjectId[])
       status: "active",
       title,
       body_path: bodyPath,
-      scope: {
-        kind: "project",
-        project: projectId,
-        branch: null,
-        task: null
-      },
       tags: ["performance", "smoke", "local"],
       source: {
         kind: "agent",
@@ -279,7 +269,7 @@ function buildRelationWrites(objectIds: readonly ObjectId[]): FileWrite[] {
     const relationWithoutHash = {
       id: `rel.perf-smoke-${padIndex(fixtureIndex)}`,
       from: objectIds[sourceIndex] ?? objectIds[0] ?? "decision.perf-smoke-0001",
-      predicate: RELATION_PREDICATES[index % RELATION_PREDICATES.length] ?? "requires",
+      predicate: RELATION_PREDICATES[index % RELATION_PREDICATES.length] ?? "related_to",
       to: objectIds[targetIndex] ?? objectIds[0] ?? "decision.perf-smoke-0001",
       status: "active",
       confidence: "high",
