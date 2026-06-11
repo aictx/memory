@@ -1,0 +1,1 @@
+memory sync is deliberately not an MCP tool and not part of the data-access service. It is a session-end / post-merge ritual driven from the terminal; exposing it mid-conversation would invite per-task ceremony again.

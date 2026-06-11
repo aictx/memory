@@ -1,0 +1,1 @@
+memory query answers a natural-language question with a token-budgeted markdown subgraph: SQLite FTS seeds (score floor), one-hop expansion over active relations, connected open questions always surface. Default budget 2000 tokens; the cap applies to the whole output. MCP equivalent: query_memory. Replaces all per-task context loading.

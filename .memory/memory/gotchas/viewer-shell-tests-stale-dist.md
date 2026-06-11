@@ -1,0 +1,1 @@
+The Playwright viewer shell suite serves the built bundle. After changing viewer/src, run `pnpm build:viewer` (or full `pnpm build`) before `pnpm test`, or shell tests fail against the stale bundle.

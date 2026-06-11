@@ -1,1 +1,0 @@
-During the Memory token-savings pilot, `p-limit`'s full `npm test` failed on local Node 24 because of an existing `clearQueue rejects pending promises when enabled` DOMException assertion unrelated to the benchmark task. The pilot config therefore uses focused XO and `tsd` checks plus a hidden `mapSettled` verifier instead of treating full `npm test` as the stable baseline check.

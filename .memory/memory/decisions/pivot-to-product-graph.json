@@ -1,0 +1,19 @@
+{
+  "body_path": "memory/decisions/pivot-to-product-graph.md",
+  "content_hash": "sha256:4ee302b04d40eca3f9c8ac52380aba5368b725092a0dade3498773f2f1605feb",
+  "created_at": "2026-06-11T11:03:56+02:00",
+  "evidence": [],
+  "id": "decision.pivot-to-product-graph",
+  "source": {
+    "kind": "agent",
+    "task": "Initial product graph after the v2 product-graph rework (M1-M7)"
+  },
+  "status": "active",
+  "tags": [
+    "pivot",
+    "direction"
+  ],
+  "title": "Pivot to the product graph (2026-06-11)",
+  "type": "decision",
+  "updated_at": "2026-06-11T11:03:56+02:00"
+}

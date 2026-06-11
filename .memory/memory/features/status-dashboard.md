@@ -1,0 +1,1 @@
+memory status summarizes one repo: features by stage, open questions, stale anchors, last activity and last sync. memory status --all renders one row per registered project from ~/.memory/projects.json, sorted by activity, with needs-reset rows for gated storage — the dashboard for developers running many projects with agents. MCP equivalent: status_memory (single project).

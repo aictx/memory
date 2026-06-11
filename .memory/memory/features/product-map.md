@@ -1,0 +1,1 @@
+A ~1200-token generated overview (features by stage with intent fragments and top anchors, last five decisions, open questions, stale-anchor warnings) written into marker sections of AGENTS.md and CLAUDE.md. It is the only always-loaded context; it refreshes on save and sync.

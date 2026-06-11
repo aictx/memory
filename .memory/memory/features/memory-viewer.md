@@ -1,0 +1,1 @@
+Svelte 5 + Cytoscape local viewer with four screens (projects, memories, detail, graph), stage pills on feature rows, anchors in the detail panel, and kind-colored relation graph. Read-only for graph content; demo data ships a sample product graph.

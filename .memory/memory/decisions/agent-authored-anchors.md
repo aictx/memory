@@ -1,0 +1,1 @@
+No code derivation (no tree-sitter, no framework heuristics) ships in the CLI. The coding agent authors anchors while indexing; the CLI verifies them mechanically (picomatch vs git ls-files) in map, check, and sync. Chosen for simplicity; graphify-style derivation remains a possible later interop, not a v1 dependency.

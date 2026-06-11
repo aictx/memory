@@ -119,7 +119,7 @@ describe("release package", () => {
     expect(packageJson.publishConfig).toEqual({
       access: "public"
     });
-    expect(packageJson.description).toBe("Local-first project memory for AI coding agents.");
+    expect(packageJson.description).toBe("Local-first product graph for AI coding agents.");
     expect(packageJson.repository).toEqual({
       type: "git",
       url: "git+https://github.com/aictx/memory.git"

@@ -1,0 +1,1 @@
+The product is now a queryable product map/graph, not a memory archive. A rename was considered during the 2026-06-11 pivot and deferred. Revisit after the repositioning ships and early feedback arrives.

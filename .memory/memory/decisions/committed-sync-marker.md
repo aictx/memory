@@ -1,0 +1,1 @@
+.memory/sync-state.json (last_sync_commit, last_sync_at) is committed, not gitignored: memory is shared repo state, so a teammate's sync reconciled the shared graph. Merge conflicts on the one-line file are trivial and any resolution is safe because sync validates the marker with an ancestor check and falls back to merge-base or full verification.

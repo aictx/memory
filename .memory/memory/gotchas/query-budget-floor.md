@@ -1,0 +1,1 @@
+normalizeTokenBudget rejects token budgets <= 500 (MIN_TOKEN_BUDGET_EXCLUSIVE). memory query --budget 500 errors; the minimum accepted budget is 501. Revisit if small budgets become a real use case.

@@ -1,0 +1,1 @@
+site/src/pages/use-cases/, seo-pages.ts, and blog/ still describe the per-task wiki product, and seo-pages.ts links to the deleted agent-recipes docs page. Rewrite or delete them in a follow-up pass.

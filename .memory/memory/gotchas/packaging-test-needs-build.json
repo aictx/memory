@@ -1,0 +1,22 @@
+{
+  "anchors": [
+    "test/integration/release/"
+  ],
+  "body_path": "memory/gotchas/packaging-test-needs-build.md",
+  "content_hash": "sha256:312fe7eb81ff9a030c3b450b68fa5cf37cf823d35074e0bcb227b4ef0027b880",
+  "created_at": "2026-06-11T11:03:56+02:00",
+  "evidence": [],
+  "id": "gotcha.packaging-test-needs-build",
+  "source": {
+    "kind": "agent",
+    "task": "Initial product graph after the v2 product-graph rework (M1-M7)"
+  },
+  "status": "active",
+  "tags": [
+    "testing",
+    "release"
+  ],
+  "title": "Packaging test runs the built binary",
+  "type": "gotcha",
+  "updated_at": "2026-06-11T11:03:56+02:00"
+}

@@ -1,0 +1,1 @@
+memory init activates a repo in one command: storage v5, guidance + map marker sections installed into AGENTS.md/CLAUDE.md, viewer autostart, and an indexing brief instructing the coding agent to explore the repo, interview the user for underivable facts, and save the initial graph in one call. The CLI stays mechanical; the agent does the semantics.

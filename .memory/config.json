@@ -1,15 +1,11 @@
 {
-  "git": {
-    "trackContextPacks": false
-  },
   "memory": {
     "autoIndex": true,
-    "defaultTokenBudget": 6000,
-    "saveContextPacks": false
+    "defaultTokenBudget": 2000
   },
   "project": {
     "id": "project.aictx",
     "name": "Aictx"
   },
-  "version": 4
+  "version": 5
 }

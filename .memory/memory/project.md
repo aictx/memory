@@ -1,5 +1,1 @@
-# Aictx
-
-Local-first project memory for AI coding agents.
-
-Package: `@aictx/memory`.
+Local-first product graph for AI coding agents: features, decisions, gotchas, and open questions anchored to code paths — built once by the agent, queried on demand, kept current by diff-driven sync.

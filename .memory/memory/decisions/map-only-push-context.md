@@ -1,0 +1,1 @@
+The generated product map (~1200 tokens) in AGENTS.md/CLAUDE.md is the only memory loaded into every agent session. Everything else is strictly pull via memory query. This is the core lesson from the benchmark: constant context must stay around one screen; detail must be fetched on demand.

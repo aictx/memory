@@ -1,0 +1,1 @@
+readme-value-header.png, readme-how-it-works.png, readme-visual-memory.png, and the site viewer screenshot still show old UI and 'local wiki' copy; the brand-asset generator scripts also embed old taglines. Regenerate after the new viewer and positioning settle.

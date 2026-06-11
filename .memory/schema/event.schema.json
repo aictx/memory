@@ -1,5 +1,5 @@
 {
-  "$id": "https://aictx.dev/schemas/v4/event.schema.json",
+  "$id": "https://aictx.dev/schemas/v5/event.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "allOf": [
@@ -52,8 +52,7 @@
         "relation.created",
         "relation.updated",
         "relation.deleted",
-        "index.rebuilt",
-        "context.generated"
+        "index.rebuilt"
       ]
     },
     "id": {

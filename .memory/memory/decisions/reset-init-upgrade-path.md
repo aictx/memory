@@ -1,0 +1,1 @@
+Storage versions below 5 are hard-gated at read time with MemoryUnsupportedStorageVersion instructing `memory reset && memory init`. memory upgrade is a stub that always prints that instruction. Re-indexing is cheap with the agent brief; migration tooling is not worth maintaining pre-1.0.

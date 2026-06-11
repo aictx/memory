@@ -1,0 +1,25 @@
+{
+  "anchors": [
+    "src/core/types.ts",
+    "src/storage/",
+    "src/schemas/"
+  ],
+  "body_path": "memory/features/product-graph-schema.md",
+  "content_hash": "sha256:2bfdae7fe71f906539d75d9dfdf19d3f580fa690b1718a47e5819b31fe5f1615",
+  "created_at": "2026-06-11T11:03:56+02:00",
+  "evidence": [],
+  "id": "feature.product-graph-schema",
+  "source": {
+    "kind": "agent",
+    "task": "Initial product graph after the v2 product-graph rework (M1-M7)"
+  },
+  "stage": "shipped",
+  "status": "active",
+  "tags": [
+    "schema",
+    "storage"
+  ],
+  "title": "Product graph schema",
+  "type": "feature",
+  "updated_at": "2026-06-11T11:03:56+02:00"
+}

@@ -1,0 +1,1 @@
+Anchors are verified with picomatch against git ls-files plus untracked additions: bare directory anchors get dir/** semantics. Powers the map's stale section, check's AnchorOrphaned warnings, and sync's verdicts. Anchors are agent-authored; the CLI only verifies.

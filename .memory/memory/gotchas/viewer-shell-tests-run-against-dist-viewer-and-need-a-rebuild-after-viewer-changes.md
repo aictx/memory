@@ -1,1 +1,0 @@
-test/integration/viewer/shell.test.ts serves the built bundle in dist/viewer, not viewer/src. After changing viewer source (screens, nav, testids), run pnpm build:viewer before pnpm test, or the shell suite fails confusingly against the stale old UI (for example old audit/maintenance screens reappearing in assertions).

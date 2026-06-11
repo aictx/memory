@@ -19,7 +19,7 @@ process.stdout.write(renderFormula({ version, sha256 }));
 
 function renderFormula({ version, sha256 }) {
   return `class Memory < Formula
-  desc "Local-first project memory for AI coding agents"
+  desc "Local-first product graph for AI coding agents"
   homepage "https://memory.aictx.dev"
   url "https://registry.npmjs.org/@aictx/memory/-/memory-${version}.tgz"
   sha256 "${sha256}"

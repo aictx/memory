@@ -1,0 +1,19 @@
+{
+  "body_path": "memory/decisions/committed-sync-marker.md",
+  "content_hash": "sha256:79f126f504e387aeb746977a5fb5e77dfe2e5ca46dbd3abffb0e20cfcf11b5c7",
+  "created_at": "2026-06-11T11:03:56+02:00",
+  "evidence": [],
+  "id": "decision.committed-sync-marker",
+  "source": {
+    "kind": "agent",
+    "task": "Initial product graph after the v2 product-graph rework (M1-M7)"
+  },
+  "status": "active",
+  "tags": [
+    "sync",
+    "git"
+  ],
+  "title": "Sync marker is committed state",
+  "type": "decision",
+  "updated_at": "2026-06-11T11:03:56+02:00"
+}

@@ -1,7 +1,7 @@
 {
   "name": "@aictx/memory",
-  "version": "0.1.55",
-  "description": "Local-first project memory for AI coding agents.",
+  "version": "0.2.0",
+  "description": "Local-first product graph for AI coding agents.",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.11.0",

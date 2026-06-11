@@ -1,0 +1,1 @@
+If a repo has graphify-out/graph.json, its nodes and communities could seed feature anchors during init — positioning Memory as the product layer on top of a code graph. Deferred from v1; depends on demand.

@@ -1,0 +1,11 @@
+{
+  "confidence": "high",
+  "content_hash": "sha256:102c74f56a8b01e61d3ba3b7c959c936e18c3896818c313d79d71a4f7137595b",
+  "created_at": "2026-06-11T11:03:56+02:00",
+  "from": "decision.agent-authored-anchors",
+  "id": "rel.decision-agent-authored-anchors-affects-feature-anchor-verification",
+  "predicate": "affects",
+  "status": "active",
+  "to": "feature.anchor-verification",
+  "updated_at": "2026-06-11T11:03:56+02:00"
+}

@@ -1,0 +1,23 @@
+{
+  "anchors": [
+    "viewer/",
+    "src/viewer/"
+  ],
+  "body_path": "memory/features/memory-viewer.md",
+  "content_hash": "sha256:1520c7b525bd878de0b005f6e90b5862816169b22340bbb398ca924d17d405ff",
+  "created_at": "2026-06-11T11:03:56+02:00",
+  "evidence": [],
+  "id": "feature.memory-viewer",
+  "source": {
+    "kind": "agent",
+    "task": "Initial product graph after the v2 product-graph rework (M1-M7)"
+  },
+  "stage": "shipped",
+  "status": "active",
+  "tags": [
+    "viewer"
+  ],
+  "title": "Local memory viewer",
+  "type": "feature",
+  "updated_at": "2026-06-11T11:03:56+02:00"
+}

@@ -1,0 +1,1 @@
+memory save --stdin is the single write verb: one JSON payload with nodes (create or update by id), stale, supersede, and delete. Compiles to the internal patch engine; the product map refreshes automatically after every successful write. MCP equivalent: save_memory.

@@ -1,0 +1,1 @@
+test/integration/release/packaging.test.ts executes the published-artifact layout from dist/. After schema, CLI-surface, or integrations changes, run `pnpm build` first or the packaging test fails on stale dist output.

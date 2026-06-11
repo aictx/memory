@@ -1,0 +1,25 @@
+{
+  "anchors": [
+    "src/init/",
+    "src/cli/commands/init.ts",
+    "src/storage/init.ts"
+  ],
+  "body_path": "memory/features/init-and-brief.md",
+  "content_hash": "sha256:c9e2a778c8099d9306875cf6891ec6fb1af40d397ebc24a58a2d212bae0c46ea",
+  "created_at": "2026-06-11T11:03:56+02:00",
+  "evidence": [],
+  "id": "feature.init-and-brief",
+  "source": {
+    "kind": "agent",
+    "task": "Initial product graph after the v2 product-graph rework (M1-M7)"
+  },
+  "stage": "shipped",
+  "status": "active",
+  "tags": [
+    "cli",
+    "onboarding"
+  ],
+  "title": "Init with agent indexing brief",
+  "type": "feature",
+  "updated_at": "2026-06-11T11:03:56+02:00"
+}

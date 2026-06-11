@@ -1,0 +1,1 @@
+Five-kind schema (project, feature, decision, gotcha, question) stored as json+md sidecars under .memory/ with relations and an events log. Features carry a product stage (idea|building|shipped|paused|dead) and code anchors (repo-relative path globs). Four relation predicates: affects, depends_on, supersedes, related_to. Storage v5; non-v5 storage is hard-gated.

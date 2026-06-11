@@ -1,0 +1,23 @@
+{
+  "anchors": [
+    "site/src/pages/",
+    "site/src/seo-pages.ts"
+  ],
+  "body_path": "memory/questions/site-secondary-pages.md",
+  "content_hash": "sha256:225e2788680250d8f5ac9bb8d7cba896de20903e65d0500f5f6f3249b2ccd516",
+  "created_at": "2026-06-11T11:03:56+02:00",
+  "evidence": [],
+  "id": "question.site-secondary-pages",
+  "source": {
+    "kind": "agent",
+    "task": "Initial product graph after the v2 product-graph rework (M1-M7)"
+  },
+  "status": "open",
+  "tags": [
+    "site",
+    "follow-up"
+  ],
+  "title": "Site secondary pages still carry old positioning",
+  "type": "question",
+  "updated_at": "2026-06-11T11:03:56+02:00"
+}
