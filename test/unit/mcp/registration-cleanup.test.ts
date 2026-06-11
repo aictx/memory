@@ -9,19 +9,22 @@ const mcpSourcePaths = [
   "src/mcp/server.ts",
   "src/mcp/tools/query-memory.ts",
   "src/mcp/tools/inspect-memory.ts",
-  "src/mcp/tools/save-memory.ts"
+  "src/mcp/tools/save-memory.ts",
+  "src/mcp/tools/status-memory.ts"
 ] as const;
 
 const toolSourcePaths = [
   "src/mcp/tools/query-memory.ts",
   "src/mcp/tools/inspect-memory.ts",
-  "src/mcp/tools/save-memory.ts"
+  "src/mcp/tools/save-memory.ts",
+  "src/mcp/tools/status-memory.ts"
 ] as const;
 
 const exactMcpToolNames = [
   "inspect_memory",
   "query_memory",
-  "save_memory"
+  "save_memory",
+  "status_memory"
 ] as const;
 
 async function readProjectFile(path: string): Promise<string> {

@@ -126,7 +126,8 @@ describe("memory MCP server bootstrap", () => {
       expect(toolNames).toEqual([
         "inspect_memory",
         "query_memory",
-        "save_memory"
+        "save_memory",
+        "status_memory"
       ]);
       expect(toolNames).not.toEqual(
         expect.arrayContaining([
@@ -181,7 +182,7 @@ describe("memory MCP server bootstrap", () => {
       const result = await started.client.listTools();
       const descriptions = getProjectRootDescriptions(result.tools);
 
-      expect(descriptions).toHaveLength(3);
+      expect(descriptions).toHaveLength(4);
 
       for (const description of descriptions) {
         expect(description).toContain("select");

@@ -120,7 +120,8 @@ interface TextContent {
 const REQUIRED_MCP_TOOLS = [
   "inspect_memory",
   "query_memory",
-  "save_memory"
+  "save_memory",
+  "status_memory"
 ] as const;
 
 const FORBIDDEN_MCP_TOOLS = [

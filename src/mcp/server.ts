@@ -13,6 +13,7 @@ import type { MemoryMcpContext } from "./context.js";
 import { inspectMemoryTool } from "./tools/inspect-memory.js";
 import { queryMemoryTool } from "./tools/query-memory.js";
 import { saveMemoryTool } from "./tools/save-memory.js";
+import { statusMemoryTool } from "./tools/status-memory.js";
 
 export interface MemoryMcpServer {
   context: MemoryMcpContext;
@@ -179,5 +180,15 @@ function registerTools(mcp: MemoryMcpServer): void {
       annotations: saveMemoryTool.annotations
     },
     (args) => saveMemoryTool.call(mcp.context, args)
+  );
+  mcp.server.registerTool(
+    statusMemoryTool.name,
+    {
+      title: statusMemoryTool.title,
+      description: statusMemoryTool.description,
+      inputSchema: statusMemoryTool.inputSchema,
+      annotations: statusMemoryTool.annotations
+    },
+    (args) => statusMemoryTool.call(mcp.context, args)
   );
 }

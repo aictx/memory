@@ -14,14 +14,35 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { main, type CliOutputWriter } from "../../../src/cli/main.js";
+import type { ViewerDetacher } from "../../../src/cli/commands/view.js";
 import { runSubprocess } from "../../../src/core/subprocess.js";
 
 const tempRoots: string[] = [];
+
+const REMOVED_V1_VERBS = [
+  "memory load",
+  "memory remember",
+  "memory setup",
+  "memory suggest",
+  "memory wiki",
+  "memory lens",
+  "memory handoff",
+  "memory audit",
+  "memory patch",
+  "load_memory",
+  "remember_memory",
+  "save_memory_patch",
+  "diff_memory"
+] as const;
 
 interface InitSuccessEnvelope {
   ok: true;
   data: {
     created: boolean;
+    dry_run: boolean;
+    brief: string;
+    files_created: string[];
+    next_steps: string[];
     index_built: boolean;
     agent_guidance: {
       enabled: boolean;
@@ -190,9 +211,12 @@ describe("memory init CLI", () => {
     expect(output.stdout()).toContain("CLAUDE.md: created");
     expect(output.stdout()).toContain("Optional bundled guidance:");
     expect(output.stdout()).toContain("Next steps:");
-    expect(output.stdout()).toContain("memory load");
-    expect(output.stdout()).toContain("memory suggest --bootstrap --patch");
-    expect(output.stdout()).toContain("memory save --file bootstrap-memory.json");
+    expect(output.stdout()).toContain("Memory indexing brief");
+    expect(output.stdout()).toContain("memory save --stdin <<'JSON'");
+    expect(output.stdout()).toContain("Verify with memory status and memory check.");
+    for (const removedVerb of REMOVED_V1_VERBS) {
+      expect(output.stdout()).not.toContain(removedVerb);
+    }
 
     const agentGuidance = await readFile(join(projectRoot, "AGENTS.md"), "utf8");
     expect(agentGuidance).toContain("product-layer memory");
@@ -306,6 +330,166 @@ describe("memory init CLI", () => {
     })).toBe(0);
     const checkEnvelope = JSON.parse(output.stdout()) as CheckSuccessEnvelope;
     expect(checkEnvelope.data.valid).toBe(true);
+  });
+
+  it("prints only the indexing brief with --brief and touches nothing", async () => {
+    const projectRoot = await createTempRoot("memory-cli-init-brief-");
+    const output = createCapturedOutput();
+
+    const exitCode = await main(["node", "memory", "init", "--brief"], {
+      ...output.writers,
+      cwd: projectRoot
+    });
+
+    expect(exitCode).toBe(0);
+    expect(output.stderr()).toBe("");
+    expect(output.stdout().startsWith("Memory indexing brief\n")).toBe(true);
+    expect(output.stdout()).toContain("memory save --stdin <<'JSON'");
+    expect(output.stdout()).not.toContain("Initialized Memory.");
+    expect(output.stdout()).not.toContain("Next steps:");
+    await expect(access(join(projectRoot, ".memory"))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+    await expect(access(join(projectRoot, "AGENTS.md"))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+  });
+
+  it("works with --brief on an already-initialized project and includes the brief in JSON", async () => {
+    const projectRoot = await createTempRoot("memory-cli-init-brief-initialized-");
+
+    expect(await main(["node", "memory", "init", "--json"], {
+      ...createCapturedOutput().writers,
+      cwd: projectRoot
+    })).toBe(0);
+
+    const output = createCapturedOutput();
+    const exitCode = await main(["node", "memory", "init", "--brief", "--json"], {
+      ...output.writers,
+      cwd: projectRoot
+    });
+
+    expect(exitCode).toBe(0);
+    expect(output.stderr()).toBe("");
+    const envelope = JSON.parse(output.stdout()) as { ok: true; data: { brief: string } };
+    expect(envelope.ok).toBe(true);
+    expect(envelope.data.brief).toContain("Memory indexing brief");
+  });
+
+  it("includes the brief and v1-free next steps in init JSON output", async () => {
+    const projectRoot = await createTempRoot("memory-cli-init-json-brief-");
+    const output = createCapturedOutput();
+
+    const exitCode = await main(["node", "memory", "init", "--json"], {
+      ...output.writers,
+      cwd: projectRoot
+    });
+
+    expect(exitCode).toBe(0);
+    const envelope = parseInitSuccessEnvelope(output.stdout());
+    expect(envelope.data.dry_run).toBe(false);
+    expect(envelope.data.brief).toContain("Memory indexing brief");
+    expect(envelope.data.brief).toContain("memory save --stdin <<'JSON'");
+
+    const nextSteps = envelope.data.next_steps.join("\n");
+    expect(nextSteps).toContain("memory save --stdin");
+    expect(nextSteps).toContain("memory status");
+    expect(nextSteps).toContain("memory check");
+    expect(nextSteps).toContain('memory query "<question>"');
+    expect(nextSteps).toContain("memory sync");
+    for (const removedVerb of REMOVED_V1_VERBS) {
+      expect(nextSteps).not.toContain(removedVerb);
+    }
+  });
+
+  it("previews init with --dry-run without writing anything", async () => {
+    const projectRoot = await createTempRoot("memory-cli-init-dry-run-");
+    const output = createCapturedOutput();
+
+    const exitCode = await main(["node", "memory", "init", "--dry-run", "--json"], {
+      ...output.writers,
+      cwd: projectRoot
+    });
+
+    expect(exitCode).toBe(0);
+    expect(output.stderr()).toBe("");
+    const envelope = parseInitSuccessEnvelope(output.stdout());
+    expect(envelope.data.dry_run).toBe(true);
+    expect(envelope.data.created).toBe(true);
+    expect(envelope.data.index_built).toBe(false);
+    expect(envelope.data.files_created).toContain(".memory/config.json");
+    expect(envelope.data.files_created).toContain(".memory/events.jsonl");
+    expect(envelope.data.files_created).toContain("AGENTS.md");
+    expect(envelope.data.files_created).toContain("CLAUDE.md");
+    await expect(access(join(projectRoot, ".memory"))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+    await expect(access(join(projectRoot, "AGENTS.md"))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+
+    const humanOutput = createCapturedOutput();
+    expect(await main(["node", "memory", "init", "--dry-run"], {
+      ...humanOutput.writers,
+      cwd: projectRoot
+    })).toBe(0);
+    expect(humanOutput.stdout()).toContain(
+      "Init dry run: Memory would be initialized (nothing written)."
+    );
+    await expect(access(join(projectRoot, ".memory"))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+  });
+
+  it("starts the viewer by default for human output and honors --no-view", async () => {
+    const projectRoot = await createTempRoot("memory-cli-init-viewer-");
+    const detached: string[] = [];
+    const detacher: ViewerDetacher = async (detachOptions) => {
+      detached.push(detachOptions.cwd);
+      return {
+        ok: true,
+        data: {
+          url: "http://127.0.0.1:7777/?token=test-token",
+          host: "127.0.0.1",
+          port: 7777,
+          log_path: "/tmp/memory-test-viewer.log"
+        },
+        warnings: []
+      };
+    };
+
+    const output = createCapturedOutput();
+    expect(await main(["node", "memory", "init"], {
+      ...output.writers,
+      cwd: projectRoot,
+      viewer: { detacher }
+    })).toBe(0);
+    expect(detached).toEqual([projectRoot]);
+    expect(output.stdout()).toContain("Memory viewer: http://127.0.0.1:7777/?token=test-token");
+
+    const noViewOutput = createCapturedOutput();
+    expect(await main(["node", "memory", "init", "--no-view"], {
+      ...noViewOutput.writers,
+      cwd: projectRoot,
+      viewer: { detacher }
+    })).toBe(0);
+    expect(detached).toEqual([projectRoot]);
+    expect(noViewOutput.stdout()).not.toContain("Memory viewer:");
+  });
+
+  it("does not start the viewer by default in JSON mode", async () => {
+    const projectRoot = await createTempRoot("memory-cli-init-json-no-view-");
+    const detacher: ViewerDetacher = async () => {
+      throw new Error("detacher should not run for default JSON init");
+    };
+
+    const output = createCapturedOutput();
+    expect(await main(["node", "memory", "init", "--json"], {
+      ...output.writers,
+      cwd: projectRoot,
+      viewer: { detacher }
+    })).toBe(0);
+    expect(parseInitSuccessEnvelope(output.stdout()).data.created).toBe(true);
   });
 });
 

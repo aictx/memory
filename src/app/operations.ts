@@ -11,6 +11,7 @@ import {
   getGitState,
   getRecentProjectFileChanges,
   getTrackedMemoryDirtyFiles,
+  listTrackedFiles,
   showMemoryFileAtCommit,
   type GitWrapperOptions,
   type ProjectFileChange
@@ -20,19 +21,21 @@ import { resolveProjectPaths, type ProjectPaths } from "../core/paths.js";
 import { err, ok, type Result } from "../core/result.js";
 import { runSubprocess } from "../core/subprocess.js";
 import { normalizeTokenBudget } from "../core/tokens.js";
-import type {
-  FeatureStage,
-  MemoryMeta,
-  ObjectId,
-  ObjectStatus,
-  ObjectType,
-  Predicate,
-  RelationConfidence,
-  RelationId,
-  RelationStatus,
-  Source,
-  SourceOrigin,
-  ValidationIssue
+import {
+  FEATURE_STAGES,
+  type FeatureStage,
+  type IsoDateTime,
+  type MemoryMeta,
+  type ObjectId,
+  type ObjectStatus,
+  type ObjectType,
+  type Predicate,
+  type RelationConfidence,
+  type RelationId,
+  type RelationStatus,
+  type Source,
+  type SourceOrigin,
+  type ValidationIssue
 } from "../core/types.js";
 import { verifyAnchors, type AnchorVerification } from "../anchors/verify.js";
 import {
@@ -71,10 +74,13 @@ import {
 } from "../registry/projects.js";
 import { openSqliteDatabase } from "../index/sqlite-driver.js";
 import { resolveIndexDatabasePath } from "../index/sqlite.js";
+import { buildIndexingBrief } from "../init/brief.js";
 import {
   initializeStorage,
+  planInitializeStorage,
   type InitStorageData
 } from "../storage/init.js";
+import { CURRENT_STORAGE_VERSION } from "../storage/objects.js";
 import {
   extractMarkedSection,
   PRODUCT_MAP_MARKERS
@@ -105,7 +111,72 @@ export interface InitProjectOptions extends GitWrapperOptions {
   clock?: Clock;
   agentGuidance?: boolean;
   force?: boolean;
+  dryRun?: boolean;
   allowTrackedMemoryDeletions?: boolean;
+}
+
+export interface InitProjectData extends InitStorageData {
+  dry_run: boolean;
+  brief: string;
+}
+
+export interface GetProjectStatusOptions extends GitWrapperOptions {
+  cwd: string;
+  clock?: Clock;
+}
+
+export interface StatusFeatureStageSummary {
+  count: number;
+  titles: string[];
+}
+
+export interface StatusOpenQuestion {
+  id: ObjectId;
+  title: string;
+}
+
+export interface StatusStaleAnchors {
+  id: ObjectId;
+  title: string;
+  orphaned_anchors: string[];
+}
+
+export interface StatusSyncState {
+  last_sync_commit: string | null;
+  last_sync_at: IsoDateTime | null;
+}
+
+export interface StatusData {
+  project: {
+    id: string;
+    name: string;
+  };
+  features_by_stage: Record<FeatureStage, StatusFeatureStageSummary>;
+  open_questions: StatusOpenQuestion[];
+  stale: StatusStaleAnchors[];
+  last_activity: IsoDateTime | null;
+  last_sync: StatusSyncState | null;
+}
+
+export interface ProjectStatusRow {
+  registry_id: string;
+  project: {
+    id: string;
+    name: string;
+  };
+  project_root: string;
+  needs_reset: boolean;
+  storage_version: number | string | null;
+  features_by_stage: Record<FeatureStage, StatusFeatureStageSummary> | null;
+  open_questions: StatusOpenQuestion[] | null;
+  stale: StatusStaleAnchors[] | null;
+  last_activity: IsoDateTime | null;
+  last_sync: StatusSyncState | null;
+}
+
+export interface AllProjectsStatusData {
+  registry_path: string;
+  projects: ProjectStatusRow[];
 }
 
 export interface RebuildIndexOptions extends GitWrapperOptions {
@@ -387,16 +458,49 @@ export type AppResult<T> =
 
 export async function initProject(
   options: InitProjectOptions
-): Promise<AppResult<InitStorageData>> {
+): Promise<AppResult<InitProjectData>> {
   const clock = options.clock ?? systemClock;
-  const initialized = await initializeStorage({
+  const brief = buildIndexingBrief();
+  const storageOptions = {
     cwd: options.cwd,
     clock,
     agentGuidance: options.agentGuidance ?? true,
     force: options.force ?? false,
     allowTrackedMemoryDeletions: options.allowTrackedMemoryDeletions ?? false,
     runner: options.runner
-  });
+  };
+
+  if (options.dryRun === true) {
+    const planned = await planInitializeStorage(storageOptions);
+
+    if (!planned.ok) {
+      return {
+        ok: false,
+        error: planned.error,
+        warnings: planned.warnings,
+        meta: await buildBestEffortMeta(options)
+      };
+    }
+
+    const meta = await buildMeta(planned.data.paths, options);
+
+    if (!meta.ok) {
+      return meta;
+    }
+
+    return {
+      ok: true,
+      data: {
+        ...planned.data.data,
+        dry_run: true,
+        brief
+      },
+      warnings: planned.warnings,
+      meta: meta.meta
+    };
+  }
+
+  const initialized = await initializeStorage(storageOptions);
 
   if (initialized.ok) {
     const meta = await buildMeta(initialized.data.paths, options);
@@ -420,7 +524,9 @@ export async function initProject(
         ok: true,
         data: {
           ...initialized.data.data,
-          index_built: true
+          index_built: true,
+          dry_run: false,
+          brief
         },
         warnings: [...initWarnings, ...rebuilt.warnings],
         meta: meta.meta
@@ -431,7 +537,9 @@ export async function initProject(
       ok: true,
       data: {
         ...initialized.data.data,
-        index_built: false
+        index_built: false,
+        dry_run: false,
+        brief
       },
       warnings: [
         ...initWarnings,
@@ -449,6 +557,312 @@ export async function initProject(
     error: initialized.error,
     warnings: initialized.warnings,
     meta
+  };
+}
+
+export async function getProjectStatus(
+  options: GetProjectStatusOptions
+): Promise<AppResult<StatusData>> {
+  const paths = await resolveProjectPaths({
+    cwd: options.cwd,
+    mode: "require-initialized",
+    runner: options.runner
+  });
+
+  if (!paths.ok) {
+    return {
+      ok: false,
+      error: paths.error,
+      warnings: paths.warnings,
+      meta: await buildBestEffortMeta(options)
+    };
+  }
+
+  const meta = await buildMeta(paths.data, options);
+
+  if (!meta.ok) {
+    return meta;
+  }
+
+  const versionGate = await checkStorageVersion(paths.data.projectRoot);
+
+  if (!versionGate.ok) {
+    return {
+      ok: false,
+      error: versionGate.error,
+      warnings: versionGate.warnings,
+      meta: meta.meta
+    };
+  }
+
+  const storage = await readCanonicalStorage(paths.data.projectRoot);
+
+  if (!storage.ok) {
+    return {
+      ok: false,
+      error: storage.error,
+      warnings: storage.warnings,
+      meta: meta.meta
+    };
+  }
+
+  const computed = await computeProjectStatus(paths.data.projectRoot, storage.data, options);
+
+  return {
+    ok: true,
+    data: computed.data,
+    warnings: [...storage.warnings, ...computed.warnings],
+    meta: meta.meta
+  };
+}
+
+export async function getAllProjectsStatus(
+  options: ProjectRegistryOperationOptions
+): Promise<AppResult<AllProjectsStatusData>> {
+  const registry = await readProjectRegistry(options);
+  const meta = await buildBestEffortMeta(options);
+  const registryPath = resolveProjectRegistryLocation(options).registryPath;
+
+  if (!registry.ok) {
+    return {
+      ok: false,
+      error: registry.error,
+      warnings: registry.warnings,
+      meta
+    };
+  }
+
+  const rows: ProjectStatusRow[] = [];
+
+  for (const entry of registry.data.registry.projects) {
+    rows.push(await projectStatusRow(entry, options));
+  }
+
+  rows.sort(compareProjectStatusRows);
+
+  return {
+    ok: true,
+    data: {
+      registry_path: registryPath,
+      projects: rows
+    },
+    warnings: registry.warnings,
+    meta
+  };
+}
+
+/**
+ * Builds one read-only status row for a registered project. A project whose
+ * storage is version-gated or unreadable is reported as needing
+ * `memory reset && memory init` instead of failing the whole listing.
+ */
+async function projectStatusRow(
+  entry: ProjectRegistryEntry,
+  options: GitWrapperOptions
+): Promise<ProjectStatusRow> {
+  const base = {
+    registry_id: entry.registry_id,
+    project: {
+      id: entry.project.id,
+      name: entry.project.name
+    },
+    project_root: resolve(entry.project_root)
+  };
+
+  try {
+    const versionGate = await checkStorageVersion(base.project_root);
+
+    if (!versionGate.ok) {
+      return needsResetStatusRow(base, storageVersionFromError(versionGate.error));
+    }
+
+    const storage = await readCanonicalStorage(base.project_root);
+
+    if (!storage.ok) {
+      return needsResetStatusRow(base, null);
+    }
+
+    const computed = await computeProjectStatus(base.project_root, storage.data, options);
+
+    return {
+      ...base,
+      project: {
+        id: storage.data.config.project.id,
+        name: storage.data.config.project.name
+      },
+      needs_reset: false,
+      storage_version: CURRENT_STORAGE_VERSION,
+      features_by_stage: computed.data.features_by_stage,
+      open_questions: computed.data.open_questions,
+      stale: computed.data.stale,
+      last_activity: computed.data.last_activity,
+      last_sync: computed.data.last_sync
+    };
+  } catch {
+    return needsResetStatusRow(base, null);
+  }
+}
+
+function needsResetStatusRow(
+  base: Pick<ProjectStatusRow, "registry_id" | "project" | "project_root">,
+  storageVersion: number | string | null
+): ProjectStatusRow {
+  return {
+    ...base,
+    needs_reset: true,
+    storage_version: storageVersion,
+    features_by_stage: null,
+    open_questions: null,
+    stale: null,
+    last_activity: null,
+    last_sync: null
+  };
+}
+
+function storageVersionFromError(error: MemoryError): number | string | null {
+  const details = error.details;
+
+  if (isRecord(details)) {
+    const found = details.found_version;
+
+    if (typeof found === "number" || typeof found === "string") {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+function compareProjectStatusRows(left: ProjectStatusRow, right: ProjectStatusRow): number {
+  if (left.last_activity !== right.last_activity) {
+    if (left.last_activity === null) {
+      return 1;
+    }
+
+    if (right.last_activity === null) {
+      return -1;
+    }
+
+    return left.last_activity < right.last_activity ? 1 : -1;
+  }
+
+  return left.project.name.localeCompare(right.project.name) ||
+    left.project_root.localeCompare(right.project_root);
+}
+
+/**
+ * Computes the status aggregates from a canonical storage snapshot.
+ * Features count toward stages only while their lifecycle status is
+ * `active`; the `dead` stage still appears in the counts so abandoned work
+ * stays visible. Stale findings cover live objects whose anchors match no
+ * tracked or added file, and are skipped silently outside Git.
+ */
+async function computeProjectStatus(
+  projectRoot: string,
+  storage: CanonicalStorageSnapshot,
+  options: GitWrapperOptions
+): Promise<{ data: StatusData; warnings: string[] }> {
+  const warnings: string[] = [];
+  const featuresByStage = emptyFeaturesByStage();
+
+  for (const object of storage.objects) {
+    if (object.sidecar.type !== "feature" || object.sidecar.status !== "active") {
+      continue;
+    }
+
+    const summary = featuresByStage[object.sidecar.stage ?? "idea"];
+
+    summary.count += 1;
+    summary.titles.push(object.sidecar.title);
+  }
+
+  for (const stage of FEATURE_STAGES) {
+    featuresByStage[stage].titles.sort((left, right) => left.localeCompare(right));
+  }
+
+  const openQuestions = storage.objects
+    .filter((object) => object.sidecar.type === "question" && object.sidecar.status === "open")
+    .map((object) => ({ id: object.sidecar.id, title: object.sidecar.title }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+
+  const liveObjects = storage.objects.filter(
+    (object) => object.sidecar.status === "active" || object.sidecar.status === "open"
+  );
+  let stale: StatusStaleAnchors[] = [];
+  const trackedFiles = await listTrackedFiles(projectRoot, options);
+
+  if (!trackedFiles.ok) {
+    warnings.push(`Stale anchor check skipped: ${trackedFiles.error.message}`);
+  } else if (trackedFiles.data !== null) {
+    const titleById = new Map(
+      liveObjects.map((object) => [object.sidecar.id, object.sidecar.title])
+    );
+
+    stale = verifyAnchors(liveObjects, trackedFiles.data)
+      .filter((finding) => finding.orphaned_anchors.length > 0)
+      .map((finding) => ({
+        id: finding.id,
+        title: titleById.get(finding.id) ?? finding.id,
+        orphaned_anchors: [...finding.orphaned_anchors]
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id));
+  }
+
+  const lastActivity = storage.objects.reduce<IsoDateTime | null>(
+    (latest, object) =>
+      latest === null || object.sidecar.updated_at > latest
+        ? object.sidecar.updated_at
+        : latest,
+    null
+  );
+
+  return {
+    data: {
+      project: {
+        id: storage.config.project.id,
+        name: storage.config.project.name
+      },
+      features_by_stage: featuresByStage,
+      open_questions: openQuestions,
+      stale,
+      last_activity: lastActivity,
+      last_sync: await readSyncState(projectRoot)
+    },
+    warnings
+  };
+}
+
+function emptyFeaturesByStage(): Record<FeatureStage, StatusFeatureStageSummary> {
+  const summaries = {} as Record<FeatureStage, StatusFeatureStageSummary>;
+
+  for (const stage of FEATURE_STAGES) {
+    summaries[stage] = { count: 0, titles: [] };
+  }
+
+  return summaries;
+}
+
+/**
+ * Reads `.memory/sync-state.json` defensively: the file ships with the sync
+ * verb, so a missing or malformed file simply means "never synced".
+ */
+async function readSyncState(projectRoot: string): Promise<StatusSyncState | null> {
+  const contents = await readUtf8FileInsideRoot(projectRoot, ".memory/sync-state.json");
+
+  if (!contents.ok) {
+    return null;
+  }
+
+  const parsed = parseJsonObject(contents.data);
+
+  if (parsed === null) {
+    return null;
+  }
+
+  return {
+    last_sync_commit:
+      typeof parsed.last_sync_commit === "string" ? parsed.last_sync_commit : null,
+    last_sync_at: typeof parsed.last_sync_at === "string" ? parsed.last_sync_at : null
   };
 }
 
@@ -1822,6 +2236,8 @@ export const applicationOperations = {
   checkProject,
   deleteViewerProject,
   diffMemory,
+  getAllProjectsStatus,
+  getProjectStatus,
   getViewerProjectBootstrap,
   getViewerBootstrap,
   getViewerProjects,

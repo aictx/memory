@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 
 import {
   diffMemory,
+  getProjectStatus,
   inspectMemory,
   queryMemory,
   saveMemory,
@@ -11,7 +12,8 @@ import {
   type InspectMemoryOptions,
   type QueryMemoryOptions,
   type SaveMemoryData,
-  type SaveMemoryOptions
+  type SaveMemoryOptions,
+  type StatusData
 } from "../app/operations.js";
 import type { Clock } from "../core/clock.js";
 import { getGitState, type GitWrapperOptions } from "../core/git.js";
@@ -50,6 +52,8 @@ export interface DataAccessInspectInput extends DataAccessBaseInput {
 
 export type DataAccessDiffInput = DataAccessBaseInput;
 
+export type DataAccessStatusInput = DataAccessBaseInput;
+
 export interface DataAccessSaveInput extends DataAccessBaseInput {
   input?: unknown;
   dryRun?: boolean;
@@ -60,6 +64,7 @@ export interface DataAccessService {
   inspect(input: DataAccessInspectInput): Promise<AppResult<InspectMemoryData>>;
   diff(input: DataAccessDiffInput): Promise<AppResult<DiffMemoryData>>;
   save(input: DataAccessSaveInput): Promise<AppResult<SaveMemoryData>>;
+  status(input: DataAccessStatusInput): Promise<AppResult<StatusData>>;
 }
 
 export function createDataAccessService(): DataAccessService {
@@ -84,6 +89,14 @@ export function createDataAccessService(): DataAccessService {
         input,
         async (paths) => saveMemory(toSaveMemoryOptions(input, paths)),
         "init"
+      ),
+    status: async (input) =>
+      withResolvedProject(input, async (paths) =>
+        getProjectStatus({
+          cwd: paths.projectRoot,
+          ...gitWrapperOptions(input),
+          ...clockOption(input)
+        })
       )
   };
 }

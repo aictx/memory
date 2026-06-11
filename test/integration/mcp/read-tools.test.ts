@@ -177,7 +177,8 @@ describe("memory MCP read tools", () => {
       expect(toolNames).toEqual([
         "inspect_memory",
         "query_memory",
-        "save_memory"
+        "save_memory",
+        "status_memory"
       ]);
       expect(toolNames).not.toEqual(
         expect.arrayContaining([
@@ -888,6 +889,12 @@ function expectToolAnnotations(tools: unknown[]): void {
     readOnlyHint: false,
     destructiveHint: true,
     idempotentHint: false,
+    openWorldHint: false
+  });
+  expectToolAnnotation(tools, "status_memory", {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
     openWorldHint: false
   });
 }

@@ -9,7 +9,8 @@ export type DataAccessOperationName =
   | "query"
   | "inspect"
   | "diff"
-  | "save";
+  | "save"
+  | "status";
 
 export type HostAdapterProfileStatus = "active" | "inactive";
 
@@ -48,6 +49,10 @@ const HOST_ADAPTER_PROFILES = {
       {
         toolName: "save_memory",
         operation: "save"
+      },
+      {
+        toolName: "status_memory",
+        operation: "status"
       }
     ]
   },

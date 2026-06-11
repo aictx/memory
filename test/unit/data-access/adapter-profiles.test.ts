@@ -19,7 +19,8 @@ describe("data-access adapter profiles", () => {
     expect(mappingByToolName(profile)).toEqual({
       query_memory: "query",
       inspect_memory: "inspect",
-      save_memory: "save"
+      save_memory: "save",
+      status_memory: "status"
     });
   });
 
@@ -48,7 +49,8 @@ describe("data-access adapter profiles", () => {
     expect(defaultToolNames).toEqual([
       "query_memory",
       "inspect_memory",
-      "save_memory"
+      "save_memory",
+      "status_memory"
     ]);
     expect(defaultToolNames).not.toContain("search");
     expect(defaultToolNames).not.toContain("fetch");

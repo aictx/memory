@@ -18,6 +18,7 @@ import { registerQueryCommand } from "./commands/query.js";
 import { registerRebuildCommand } from "./commands/rebuild.js";
 import { registerResetCommand } from "./commands/reset.js";
 import { registerSaveCommand } from "./commands/save.js";
+import { registerStatusCommand } from "./commands/status.js";
 import { registerUpgradeCommand } from "./commands/upgrade.js";
 import {
   registerViewCommand,
@@ -79,7 +80,16 @@ export function createCliProgram(options: CliMainOptions = {}): Command {
   registerInitCommand(program, {
     cwd: options.cwd ?? process.cwd(),
     stdout: writeOut,
-    stderr: writeErr
+    stderr: writeErr,
+    ...(options.viewer?.detacher === undefined ? {} : { detacher: options.viewer.detacher })
+  });
+  registerStatusCommand(program, {
+    cwd: options.cwd ?? process.cwd(),
+    stdout: writeOut,
+    stderr: writeErr,
+    ...(options.registry?.memoryHome === undefined
+      ? {}
+      : { memoryHome: options.registry.memoryHome })
   });
   registerCheckCommand(program, {
     cwd: options.cwd ?? process.cwd(),
@@ -252,6 +262,7 @@ function commandPath(command: Command): string {
 
 const AUTO_REGISTER_COMMANDS = new Set([
   "init",
+  "status",
   "check",
   "rebuild",
   "query",

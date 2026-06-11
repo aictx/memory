@@ -93,7 +93,8 @@ describe("memory MCP save_memory tool", () => {
       expect(toolNames).toEqual([
         "inspect_memory",
         "query_memory",
-        "save_memory"
+        "save_memory",
+        "status_memory"
       ]);
       expect(toolNames).not.toEqual(
         expect.arrayContaining([

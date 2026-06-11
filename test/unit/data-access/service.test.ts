@@ -26,7 +26,8 @@ describe("data-access service", () => {
       "diff",
       "inspect",
       "query",
-      "save"
+      "save",
+      "status"
     ]);
   });
 

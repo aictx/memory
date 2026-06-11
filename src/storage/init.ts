@@ -172,6 +172,132 @@ export async function initializeStorage(
   );
 }
 
+/**
+ * Read-only preview of `initializeStorage`: reports what init would create
+ * or change without writing anything. Mirrors the real init's error
+ * surface (dirty tracked Memory files, invalid existing storage) so a dry
+ * run fails exactly where a real init would.
+ */
+export async function planInitializeStorage(
+  options: InitStorageOptions
+): Promise<Result<InitStorageSuccess>> {
+  const paths = await resolveProjectPaths({
+    cwd: options.cwd,
+    mode: "init",
+    runner: options.runner
+  });
+
+  if (!paths.ok) {
+    return paths;
+  }
+
+  const clock = options.clock ?? systemClock;
+  const guidanceEnabled = options.agentGuidance !== false;
+
+  if (options.force !== true && (await isFile(join(paths.data.memoryRoot, "config.json")))) {
+    const validation = await validateProjectForInit(paths.data, options);
+
+    if (!validation.ok) {
+      return validation;
+    }
+
+    if (!validation.data.valid) {
+      return err(
+        memoryError("MemoryAlreadyInitializedInvalid", "Memory is already initialized but invalid.", {
+          issues: validation.data.errors.map((issue) => ({
+            code: issue.code,
+            message: issue.message,
+            path: issue.path,
+            field: issue.field
+          }))
+        })
+      );
+    }
+
+    const guidanceResult = await installAgentGuidance(paths.data.projectRoot, guidanceEnabled, options, {
+      write: false
+    });
+
+    if (!guidanceResult.ok) {
+      return guidanceResult;
+    }
+
+    return ok(
+      {
+        paths: paths.data,
+        data: {
+          created: false,
+          files_created: guidanceResult.data.filesCreated,
+          gitignore_updated: false,
+          git_available: paths.data.git.available,
+          index_built: false,
+          agent_guidance: guidanceResult.data.agentGuidance,
+          next_steps: nextSteps(guidanceResult.data.agentGuidance)
+        }
+      },
+      [ALREADY_INITIALIZED_WARNING, ...guidanceResult.warnings]
+    );
+  }
+
+  if (options.force !== true) {
+    const dirtyResult = await rejectTrackedDirtyMemoryInit(paths.data, options);
+
+    if (!dirtyResult.ok) {
+      return dirtyResult;
+    }
+  }
+
+  const preview = buildInitialStoragePreview({ paths: paths.data, clock });
+  const filesCreated: string[] = [
+    ".memory/config.json",
+    ...Object.values(SCHEMA_FILES).map((schemaFile) => `.memory/schema/${schemaFile}`)
+  ];
+
+  for (const object of preview.objects) {
+    filesCreated.push(object.bodyPath, object.path);
+  }
+
+  filesCreated.push(".memory/events.jsonl");
+
+  const gitignorePlan = paths.data.git.available
+    ? await planGitignoreUpdate(paths.data.projectRoot)
+    : ok({ updated: false, fileCreated: false, contents: null });
+
+  if (!gitignorePlan.ok) {
+    return gitignorePlan;
+  }
+
+  if (gitignorePlan.data.fileCreated) {
+    filesCreated.push(".gitignore");
+  }
+
+  const guidanceResult = await installAgentGuidance(paths.data.projectRoot, guidanceEnabled, options, {
+    write: false,
+    storage: preview
+  });
+
+  if (!guidanceResult.ok) {
+    return guidanceResult;
+  }
+  filesCreated.push(...guidanceResult.data.filesCreated);
+
+  return ok(
+    {
+      paths: paths.data,
+      data: {
+        created: true,
+        files_created: filesCreated,
+        gitignore_updated: gitignorePlan.data.updated,
+        git_available: paths.data.git.available,
+        index_built: false,
+        agent_guidance: guidanceResult.data.agentGuidance,
+        next_steps: nextSteps(guidanceResult.data.agentGuidance)
+      }
+    },
+    guidanceResult.warnings
+  );
+}
+
 async function initializeStorageWithLock(
   paths: ProjectPaths,
   clock: Clock,
@@ -695,6 +821,28 @@ function buildInitialObject(options: {
 async function updateGitignore(
   projectRoot: string
 ): Promise<Result<{ updated: boolean; fileCreated: boolean }>> {
+  const plan = await planGitignoreUpdate(projectRoot);
+
+  if (!plan.ok) {
+    return plan;
+  }
+
+  if (!plan.data.updated || plan.data.contents === null) {
+    return ok({ updated: false, fileCreated: false });
+  }
+
+  const written = await writeTextAtomic(projectRoot, ".gitignore", plan.data.contents);
+
+  if (!written.ok) {
+    return written;
+  }
+
+  return ok({ updated: true, fileCreated: plan.data.fileCreated });
+}
+
+async function planGitignoreUpdate(
+  projectRoot: string
+): Promise<Result<{ updated: boolean; fileCreated: boolean; contents: string | null }>> {
   const gitignorePath = join(projectRoot, ".gitignore");
   const existing = await readFile(gitignorePath, "utf8").catch((error: unknown) => {
     if (errorCode(error) === "ENOENT") {
@@ -711,25 +859,26 @@ async function updateGitignore(
   );
 
   if (missingEntries.length === 0) {
-    return ok({ updated: false, fileCreated: false });
+    return ok({ updated: false, fileCreated: false, contents: null });
   }
 
   const base = existing === null ? "" : existing.replace(/\r\n?/g, "\n").replace(/\n*$/, "\n");
   const separator = base === "" ? "" : "\n";
   const contents = `${base}${separator}${missingEntries.join("\n")}\n`;
-  const written = await writeTextAtomic(projectRoot, ".gitignore", contents);
 
-  if (!written.ok) {
-    return written;
-  }
+  return ok({ updated: true, fileCreated: existing === null, contents });
+}
 
-  return ok({ updated: true, fileCreated: existing === null });
+interface InstallAgentGuidanceMode {
+  write: boolean;
+  storage?: CanonicalStorageSnapshot;
 }
 
 async function installAgentGuidance(
   projectRoot: string,
   enabled: boolean,
-  options: GitWrapperOptions = {}
+  options: GitWrapperOptions = {},
+  mode: InstallAgentGuidanceMode = { write: true }
 ): Promise<Result<{ agentGuidance: AgentGuidanceData; filesCreated: string[] }>> {
   if (!enabled) {
     return ok({
@@ -742,14 +891,14 @@ async function installAgentGuidance(
     });
   }
 
-  const map = await buildInstallProductMapBody(projectRoot, options);
+  const map = await buildInstallProductMapBody(projectRoot, options, mode.storage);
   const mapBlock = buildMarkedSectionBlock(PRODUCT_MAP_MARKERS, map.body);
   const targets: AgentGuidanceTargetResult[] = [];
   const filesCreated: string[] = [];
   const warnings: string[] = [...map.warnings];
 
   for (const path of AGENT_GUIDANCE_TARGETS) {
-    const result = await installAgentGuidanceTarget(projectRoot, path, mapBlock);
+    const result = await installAgentGuidanceTarget(projectRoot, path, mapBlock, mode.write);
 
     if (!result.ok) {
       return result;
@@ -782,8 +931,15 @@ async function installAgentGuidance(
 
 async function buildInstallProductMapBody(
   projectRoot: string,
-  options: GitWrapperOptions
+  options: GitWrapperOptions,
+  storageOverride?: CanonicalStorageSnapshot
 ): Promise<{ body: string; warnings: string[] }> {
+  if (storageOverride !== undefined) {
+    const previewMap = await buildProductMapBody(projectRoot, storageOverride, options);
+
+    return { body: previewMap.body, warnings: previewMap.warnings };
+  }
+
   const storage = await readCanonicalStorage(projectRoot);
 
   if (!storage.ok) {
@@ -803,7 +959,8 @@ async function buildInstallProductMapBody(
 async function installAgentGuidanceTarget(
   projectRoot: string,
   path: string,
-  mapBlock: string
+  mapBlock: string,
+  write: boolean
 ): Promise<Result<{ status: AgentGuidanceTargetStatus; fileCreated: boolean }>> {
   const filePath = join(projectRoot, path);
   const existing = await readFile(filePath, "utf8").catch((error: unknown) => {
@@ -815,6 +972,10 @@ async function installAgentGuidanceTarget(
   });
 
   if (existing === null) {
+    if (!write) {
+      return ok({ status: "created", fileCreated: true });
+    }
+
     const written = await writeTextAtomic(
       projectRoot,
       path,
@@ -855,6 +1016,10 @@ async function installAgentGuidanceTarget(
 
   if (finalContents === normalized) {
     return ok({ status: "unchanged", fileCreated: false }, warnings);
+  }
+
+  if (!write) {
+    return ok({ status: "updated", fileCreated: false }, warnings);
   }
 
   const written = await writeTextAtomic(projectRoot, path, finalContents);
@@ -908,16 +1073,17 @@ function containsUnmarkedMemoryGuidance(contents: string): boolean {
 function nextSteps(agentGuidance: AgentGuidanceData): string[] {
   return [
     agentGuidanceNextStep(agentGuidance),
-    "`memory init` creates empty storage and linked starter placeholders only. To seed useful first-run memory, run `memory setup`; use `memory setup --dry-run` to preview the conservative bootstrap patch without writing, or `memory setup --no-view` when scripts should skip viewer startup. For manual patch inspection, run `memory suggest --bootstrap --patch > bootstrap-memory.json`, `memory patch review bootstrap-memory.json`, `memory save --file bootstrap-memory.json`, and `memory check`.",
-    "`memory init` does not start MCP; agents should use `memory load` and `memory remember --stdin` by default. Configure agent clients that support MCP to launch `memory-mcp` only when you want MCP equivalents such as `load_memory`, `inspect_memory`, `remember_memory`, and `save_memory_patch`. A globally launched MCP server can serve this project when tool calls include this project root as `project_root`. If `memory` is not on `PATH`, use the project package-manager form such as `pnpm exec memory`, `npm exec memory`, or `./node_modules/.bin/memory`, but treat package-manager and local-binary fallbacks as version-sensitive and update stale local installs before trusting schema errors.",
-    "Saved memory is active immediately after Memory validates and writes it. Inspect memory asynchronously with `inspect_memory`, `memory view`, `memory diff`, Git tools, or MCP `diff_memory` when available.",
+    "Follow the indexing brief (`memory init --brief` reprints it): explore the repo, then draft 3-10 feature nodes with a stage (idea|building|shipped|paused|dead) and anchors, plus key decisions, gotchas, and open questions.",
+    "Interview the user for what the repo cannot tell you: product intent, the real stage of each feature, decisions and why, what is abandoned versus merely paused.",
+    "Save the initial product graph in one `memory save --stdin` call, then verify with `memory status` and `memory check`. The product map in `AGENTS.md`/`CLAUDE.md` refreshes automatically on save.",
+    'Ongoing loop: `memory query "<question>"` when you need context, `memory save --stdin` after product-meaningful changes, `memory sync` at session end.',
     "Optional bundled guidance is available under `integrations/` for Codex, Claude Code, Cursor, Cline, and generic Markdown instructions."
   ];
 }
 
 function agentGuidanceNextStep(agentGuidance: AgentGuidanceData): string {
   if (!agentGuidance.enabled) {
-    return "Agent guidance was skipped; configure `AGENTS.md` and `CLAUDE.md` manually if you want agents to load and save Memory.";
+    return "Agent guidance was skipped; configure `AGENTS.md` and `CLAUDE.md` manually if you want agents to query and save Memory.";
   }
 
   const activeTargets = agentGuidance.targets
@@ -925,7 +1091,7 @@ function agentGuidanceNextStep(agentGuidance: AgentGuidanceData): string {
     .map((target) => `\`${target.path}\``);
 
   if (activeTargets.length > 0) {
-    return `Agents are now instructed through ${formatList(activeTargets)} to load and save Memory.`;
+    return `Agents are now instructed through ${formatList(activeTargets)} to query and save Memory.`;
   }
 
   return "Agent guidance files need manual review because Memory could not update any target automatically.";

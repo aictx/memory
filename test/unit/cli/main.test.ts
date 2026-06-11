@@ -34,6 +34,7 @@ describe("CLI main", () => {
       "rebuild",
       "reset",
       "save",
+      "status",
       "upgrade",
       "view"
     ]);

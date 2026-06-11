@@ -78,6 +78,18 @@ interface CheckData {
   warnings: unknown[];
 }
 
+interface StatusData {
+  project: {
+    id: string;
+    name: string;
+  };
+  features_by_stage: Record<string, { count: number; titles: string[] }>;
+  open_questions: Array<{ id: string; title: string }>;
+  stale: Array<{ id: string; title: string; orphaned_anchors: string[] }>;
+  last_activity: string | null;
+  last_sync: unknown;
+}
+
 interface RebuildData {
   index_rebuilt: boolean;
   objects_indexed: number;
@@ -144,6 +156,24 @@ describe("memory full CLI workflow", () => {
       ).stdout
     );
     expect(includedIds(queried)).toContain("decision.workflow-retry-queue");
+
+    const statusEnvelope = parseSuccessEnvelope<StatusData>(
+      (await expectSuccessfulCli(["node", "memory", "status", "--json"], repo)).stdout
+    );
+    expect(statusEnvelope.data.project.id).toBe(projectId);
+    expect(statusEnvelope.data.features_by_stage.building).toEqual({
+      count: 1,
+      titles: ["Workflow status board"]
+    });
+    expect(statusEnvelope.data.stale.map((entry) => entry.id)).toEqual([
+      "decision.workflow-retry-queue"
+    ]);
+    expect(statusEnvelope.data.last_sync).toBeNull();
+
+    const statusHuman = await expectSuccessfulCli(["node", "memory", "status"], repo);
+    expect(statusHuman.stdout).toContain("Features: building 1 · shipped 0 · idea 0 · paused 0 · dead 0");
+    expect(statusHuman.stdout).toContain("  building: Workflow status board");
+    expect(statusHuman.stdout).toContain("Last sync: never");
 
     const outsideDirtyContent = "outside dirty change must stay out of memory diff\n";
     await writeFile(join(repo, "src.ts"), outsideDirtyContent, "utf8");
@@ -270,6 +300,16 @@ function createGitWorkflowPatch(projectId: string) {
             confidence: "high"
           }
         ]
+      },
+      {
+        id: "feature.workflow-status-board",
+        kind: "feature",
+        title: "Workflow status board",
+        body:
+          "# Workflow status board\n\nSummarizes workflow features by stage so the e2e run can verify memory status output.\n",
+        tags: ["workflow", "status"],
+        stage: "building",
+        anchors: ["README.md"]
       }
     ]
   };

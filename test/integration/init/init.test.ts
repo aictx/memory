@@ -156,15 +156,28 @@ describe("initProject", () => {
     expect(result.data.gitignore_updated).toBe(false);
     expect(result.data.index_built).toBe(true);
     const nextSteps = result.data.next_steps.join("\n");
-    expect(nextSteps).toContain("memory load");
-    expect(nextSteps).toContain("memory suggest --bootstrap --patch");
-    expect(nextSteps).toContain("memory save --file bootstrap-memory.json");
-    expect(nextSteps).toContain("save_memory_patch");
-    expect(nextSteps).toContain(
-      "Saved memory is active immediately after Memory validates and writes it. Inspect memory asynchronously with `inspect_memory`, `memory view`, `memory diff`, Git tools, or MCP `diff_memory` when available."
-    );
-    expect(nextSteps).not.toContain("`memory check`, and `memory diff`");
+    expect(nextSteps).toContain("memory save --stdin");
+    expect(nextSteps).toContain("`memory status`");
+    expect(nextSteps).toContain("`memory check`");
+    expect(nextSteps).toContain('memory query "<question>"');
+    expect(nextSteps).toContain("memory sync");
+    expect(nextSteps).toContain("indexing brief");
     expect(nextSteps).toContain("Codex, Claude Code, Cursor, Cline");
+    for (const removedVerb of [
+      "memory load",
+      "memory remember",
+      "memory setup",
+      "memory suggest",
+      "memory wiki",
+      "load_memory",
+      "remember_memory",
+      "save_memory_patch",
+      "diff_memory"
+    ]) {
+      expect(nextSteps).not.toContain(removedVerb);
+    }
+    expect(result.data.dry_run).toBe(false);
+    expect(result.data.brief).toContain("Memory indexing brief");
 
     const validation = await validateProject(projectRoot);
     expect(validation).toEqual({
