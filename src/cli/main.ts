@@ -19,6 +19,7 @@ import { registerRebuildCommand } from "./commands/rebuild.js";
 import { registerResetCommand } from "./commands/reset.js";
 import { registerSaveCommand } from "./commands/save.js";
 import { registerStatusCommand } from "./commands/status.js";
+import { registerSyncCommand } from "./commands/sync.js";
 import { registerUpgradeCommand } from "./commands/upgrade.js";
 import {
   registerViewCommand,
@@ -167,6 +168,11 @@ export function createCliProgram(options: CliMainOptions = {}): Command {
     stdout: writeOut,
     stderr: writeErr
   });
+  registerSyncCommand(program, {
+    cwd: options.cwd ?? process.cwd(),
+    stdout: writeOut,
+    stderr: writeErr
+  });
   installProjectRegistryHook(program, {
     cwd: options.cwd ?? process.cwd(),
     stderr: writeErr,
@@ -269,6 +275,7 @@ const AUTO_REGISTER_COMMANDS = new Set([
   "inspect",
   "diff",
   "save",
+  "sync",
   "upgrade"
 ]);
 

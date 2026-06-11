@@ -70,6 +70,20 @@ export function anchorMatchesAnyFile(
   return trackedFiles.some((file) => matcher(file) === true);
 }
 
+/** Returns the subset of `files` that one anchor matches, preserving order. */
+export function filterFilesMatchingAnchor(
+  anchor: string,
+  files: readonly string[]
+): string[] {
+  const matcher = buildAnchorMatcher(anchor);
+
+  if (matcher === null) {
+    return [];
+  }
+
+  return files.filter((file) => matcher(file) === true);
+}
+
 function buildAnchorMatcher(anchor: string): ((file: string) => boolean) | null {
   const normalized = normalizeAnchor(anchor);
 

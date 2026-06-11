@@ -98,6 +98,23 @@ interface RebuildData {
   event_appended: boolean;
 }
 
+interface SyncData {
+  base_commit: string | null;
+  head_commit: string;
+  full_verification: boolean;
+  changed_files_count: number;
+  fresh: string[];
+  changed: Array<{ id: string; anchors: string[]; files: string[] }>;
+  orphaned: Array<{ id: string; anchors: string[] }>;
+  unanchored: string[];
+  save_skeleton: {
+    task: string;
+    nodes: Array<{ id: string }>;
+    stale: Array<{ id: string; reason: string }>;
+  };
+  marker_advanced: boolean;
+}
+
 afterEach(async () => {
   await Promise.all(
     tempRoots.splice(0).map((path) => rm(path, { recursive: true, force: true }))
@@ -174,6 +191,27 @@ describe("memory full CLI workflow", () => {
     expect(statusHuman.stdout).toContain("Features: building 1 · shipped 0 · idea 0 · paused 0 · dead 0");
     expect(statusHuman.stdout).toContain("  building: Workflow status board");
     expect(statusHuman.stdout).toContain("Last sync: never");
+
+    const syncEnvelope = parseSuccessEnvelope<SyncData>(
+      (await expectSuccessfulCli(["node", "memory", "sync", "--json"], repo)).stdout
+    );
+    expect(syncEnvelope.data.full_verification).toBe(true);
+    expect(syncEnvelope.data.fresh).toContain("feature.workflow-status-board");
+    expect(syncEnvelope.data.orphaned).toEqual([
+      { id: "decision.workflow-retry-queue", anchors: ["src/cli/main.ts"] }
+    ]);
+    expect(syncEnvelope.data.unanchored).toContain("gotcha.workflow-local-only");
+    expect(syncEnvelope.data.save_skeleton.stale).toEqual([
+      { id: "decision.workflow-retry-queue", reason: "" }
+    ]);
+    expect(syncEnvelope.data.marker_advanced).toBe(true);
+
+    const statusAfterSync = parseSuccessEnvelope<StatusData>(
+      (await expectSuccessfulCli(["node", "memory", "status", "--json"], repo)).stdout
+    );
+    expect(statusAfterSync.data.last_sync).toMatchObject({
+      last_sync_commit: syncEnvelope.data.head_commit
+    });
 
     const outsideDirtyContent = "outside dirty change must stay out of memory diff\n";
     await writeFile(join(repo, "src.ts"), outsideDirtyContent, "utf8");
@@ -332,7 +370,10 @@ function createNonGitWorkflowPatch() {
 }
 
 function gitOnlyCommands(): string[][] {
-  return [["node", "memory", "diff", "--json"]];
+  return [
+    ["node", "memory", "diff", "--json"],
+    ["node", "memory", "sync", "--json"]
+  ];
 }
 
 async function expectSuccessfulCli(

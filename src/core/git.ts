@@ -63,6 +63,15 @@ export interface ProjectChangedFiles {
   changedFiles: string[];
 }
 
+export interface CommittedFileChange {
+  /** First letter of the `--name-status` code: A, M, D, R, C, or T. */
+  status: string;
+  /** Current (new) repo-relative path. */
+  path: string;
+  /** Previous path for renames and copies, otherwise null. */
+  oldPath: string | null;
+}
+
 export interface TrackedMemoryDirtyFiles {
   files: string[];
 }
@@ -312,6 +321,118 @@ export async function getChangedProjectFiles(
   return ok({
     changedFiles: uniqueSorted(changedFiles)
   });
+}
+
+/**
+ * Lists committed file changes between `base` and HEAD via
+ * `git diff --name-status -M`, with rename detection so old→new path pairs
+ * are preserved. Entries are returned raw; callers decide which paths to
+ * ignore (for example `.memory/**`).
+ */
+export async function getChangedFilesBetween(
+  projectRoot: string,
+  base: string,
+  options: GitWrapperOptions = {}
+): Promise<Result<CommittedFileChange[]>> {
+  const revision = validateGitRevision(base);
+
+  if (!revision.ok) {
+    return revision;
+  }
+
+  const result = await runGit(
+    ["diff", "--name-status", "-M", revision.data, "HEAD"],
+    projectRoot,
+    options
+  );
+
+  if (!result.ok) {
+    return result;
+  }
+
+  if (result.data.exitCode !== 0) {
+    return gitCommandFailed("Git committed-change listing failed.", result.data);
+  }
+
+  return ok(parseNameStatusLines(result.data.stdout));
+}
+
+/**
+ * Reports whether `ancestor` is an ancestor of `descendant` using
+ * `git merge-base --is-ancestor`. Any non-zero exit (including unknown
+ * revisions) is reported as "not an ancestor" so callers can fall back to
+ * `getMergeBase` and then to full verification.
+ */
+export async function isAncestorCommit(
+  projectRoot: string,
+  ancestor: string,
+  descendant: string,
+  options: GitWrapperOptions = {}
+): Promise<Result<boolean>> {
+  const ancestorRevision = validateGitRevision(ancestor);
+
+  if (!ancestorRevision.ok) {
+    return ancestorRevision;
+  }
+
+  const descendantRevision = validateGitRevision(descendant);
+
+  if (!descendantRevision.ok) {
+    return descendantRevision;
+  }
+
+  const result = await runGit(
+    ["merge-base", "--is-ancestor", ancestorRevision.data, descendantRevision.data],
+    projectRoot,
+    options
+  );
+
+  if (!result.ok) {
+    return result;
+  }
+
+  return ok(result.data.exitCode === 0);
+}
+
+/**
+ * Resolves the merge base of two revisions. Returns null when Git cannot
+ * compute one (unknown revision or unrelated histories) instead of failing,
+ * so callers can degrade to full verification.
+ */
+export async function getMergeBase(
+  projectRoot: string,
+  left: string,
+  right: string,
+  options: GitWrapperOptions = {}
+): Promise<Result<string | null>> {
+  const leftRevision = validateGitRevision(left);
+
+  if (!leftRevision.ok) {
+    return leftRevision;
+  }
+
+  const rightRevision = validateGitRevision(right);
+
+  if (!rightRevision.ok) {
+    return rightRevision;
+  }
+
+  const result = await runGit(
+    ["merge-base", leftRevision.data, rightRevision.data],
+    projectRoot,
+    options
+  );
+
+  if (!result.ok) {
+    return result;
+  }
+
+  if (result.data.exitCode !== 0) {
+    return ok(null);
+  }
+
+  const base = result.data.stdout.trim();
+  return ok(base === "" ? null : base);
 }
 
 /**
@@ -726,12 +847,52 @@ function isIgnoredDirtyPath(filePath: string): boolean {
   );
 }
 
-function isIgnoredProjectChangePath(filePath: string): boolean {
+export function isIgnoredProjectChangePath(filePath: string): boolean {
   return (
     IGNORED_PROJECT_CHANGE_FILES.includes(
       filePath as (typeof IGNORED_PROJECT_CHANGE_FILES)[number]
     ) || IGNORED_PROJECT_CHANGE_PREFIXES.some((ignoredPath) => filePath.startsWith(ignoredPath))
   );
+}
+
+function parseNameStatusLines(stdout: string): CommittedFileChange[] {
+  const changes: CommittedFileChange[] = [];
+
+  for (const line of stdout.split("\n")) {
+    if (line === "") {
+      continue;
+    }
+
+    const fields = line.split("\t");
+    const status = fields[0]?.charAt(0) ?? "";
+
+    if (status === "") {
+      continue;
+    }
+
+    if ((status === "R" || status === "C") && fields.length >= 3) {
+      const oldPath = unquoteGitPath(fields[1] ?? "");
+      const newPath = unquoteGitPath(fields[2] ?? "");
+
+      if (newPath !== "") {
+        changes.push({
+          status,
+          path: newPath,
+          oldPath: oldPath === "" ? null : oldPath
+        });
+      }
+
+      continue;
+    }
+
+    const path = unquoteGitPath(fields[1] ?? "");
+
+    if (path !== "") {
+      changes.push({ status, path, oldPath: null });
+    }
+  }
+
+  return changes;
 }
 
 function parseDiffChangedFiles(diff: string): string[] {

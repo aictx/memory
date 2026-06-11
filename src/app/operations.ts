@@ -98,6 +98,17 @@ import {
 } from "../storage/write.js";
 import { planMemoryPatch } from "../storage/patch.js";
 import {
+  buildSyncSaveSkeleton,
+  computeSyncVerdicts,
+  readSyncMarker,
+  resolveSyncBaseline,
+  writeSyncMarker,
+  type SyncChangedNode,
+  type SyncCoverageGap,
+  type SyncOrphanedNode,
+  type SyncSaveSkeleton
+} from "../sync/engine.js";
+import {
   detectSecretsInPatch,
   secretDetectionError
 } from "../validation/secrets.js";
@@ -202,6 +213,28 @@ export interface InspectMemoryOptions extends GitWrapperOptions {
 
 export interface DiffMemoryOptions extends GitWrapperOptions {
   cwd: string;
+}
+
+export interface SyncMemoryOptions extends GitWrapperOptions {
+  cwd: string;
+  dryRun?: boolean;
+  clock?: Clock;
+}
+
+export interface SyncMemoryData {
+  base_commit: string | null;
+  head_commit: string;
+  full_verification: boolean;
+  changed_files_count: number;
+  fresh: ObjectId[];
+  changed: SyncChangedNode[];
+  orphaned: SyncOrphanedNode[];
+  unanchored: ObjectId[];
+  coverage_gaps: SyncCoverageGap[];
+  save_skeleton: SyncSaveSkeleton;
+  marker_advanced: boolean;
+  /** Titles for the ids reported in changed/orphaned/unanchored. */
+  titles: Record<ObjectId, string>;
 }
 
 export interface ResetMemoryOptions extends GitWrapperOptions {
@@ -1597,6 +1630,152 @@ export async function diffMemory(
   };
 }
 
+export type {
+  SyncChangedNode,
+  SyncCoverageGap,
+  SyncOrphanedNode,
+  SyncSaveSkeleton
+} from "../sync/engine.js";
+
+/**
+ * Runs the mechanical, diff-driven staleness pass. Sync never writes graph
+ * objects: it classifies live nodes against the changes since the last sync
+ * marker (full verification when no usable marker exists), reports coverage
+ * gaps, advances the commit-based marker to HEAD, and refreshes the product
+ * map. Working-tree changes are intentionally re-reported on the next sync
+ * because the marker only tracks commits. Dry runs report without advancing
+ * the marker or touching the map.
+ */
+export async function syncMemory(
+  options: SyncMemoryOptions
+): Promise<AppResult<SyncMemoryData>> {
+  const clock = options.clock ?? systemClock;
+  const paths = await resolveProjectPaths({
+    cwd: options.cwd,
+    mode: "require-initialized",
+    runner: options.runner
+  });
+
+  if (!paths.ok) {
+    return {
+      ok: false,
+      error: paths.error,
+      warnings: paths.warnings,
+      meta: await buildBestEffortMeta(options)
+    };
+  }
+
+  const meta = await buildMeta(paths.data, options);
+
+  if (!meta.ok) {
+    return meta;
+  }
+
+  if (!meta.meta.git.available || meta.meta.git.commit === null) {
+    return {
+      ok: false,
+      error: memoryError("MemoryGitRequired", "Git is required for this operation."),
+      warnings: [],
+      meta: meta.meta
+    };
+  }
+
+  const headCommit = meta.meta.git.commit;
+  const versionGate = await checkStorageVersion(paths.data.projectRoot);
+
+  if (!versionGate.ok) {
+    return {
+      ok: false,
+      error: versionGate.error,
+      warnings: versionGate.warnings,
+      meta: meta.meta
+    };
+  }
+
+  const storage = await readCanonicalStorage(paths.data.projectRoot);
+
+  if (!storage.ok) {
+    return {
+      ok: false,
+      error: storage.error,
+      warnings: storage.warnings,
+      meta: meta.meta
+    };
+  }
+
+  const warnings = [...storage.warnings];
+  const markerCommit = await readSyncMarker(paths.data.projectRoot);
+  const baseline = await resolveSyncBaseline({
+    projectRoot: paths.data.projectRoot,
+    markerCommit,
+    ...(options.runner === undefined ? {} : { runner: options.runner })
+  });
+
+  if (!baseline.ok) {
+    return {
+      ok: false,
+      error: baseline.error,
+      warnings: [...warnings, ...baseline.warnings],
+      meta: meta.meta
+    };
+  }
+
+  const trackedFiles = await listTrackedFiles(paths.data.projectRoot, options);
+
+  if (!trackedFiles.ok) {
+    return {
+      ok: false,
+      error: trackedFiles.error,
+      warnings: [...warnings, ...trackedFiles.warnings],
+      meta: meta.meta
+    };
+  }
+
+  const verdicts = computeSyncVerdicts({
+    objects: storage.data.objects,
+    currentFiles: trackedFiles.data ?? [],
+    changedFiles: baseline.data.changedFiles,
+    deletedFiles: baseline.data.deletedFiles
+  });
+  let markerAdvanced = false;
+
+  if (options.dryRun !== true) {
+    const marker = await writeSyncMarker(paths.data.projectRoot, headCommit, clock);
+
+    if (!marker.ok) {
+      return {
+        ok: false,
+        error: marker.error,
+        warnings: [...warnings, ...marker.warnings],
+        meta: meta.meta
+      };
+    }
+
+    markerAdvanced = true;
+    warnings.push(...(await refreshProductMapAfterWrite(paths.data, options)));
+  }
+
+  return {
+    ok: true,
+    data: {
+      base_commit: baseline.data.baseCommit,
+      head_commit: headCommit,
+      full_verification: baseline.data.fullVerification,
+      changed_files_count: baseline.data.changedFiles.length,
+      fresh: verdicts.fresh,
+      changed: verdicts.changed,
+      orphaned: verdicts.orphaned,
+      unanchored: verdicts.unanchored,
+      coverage_gaps: verdicts.coverage_gaps,
+      save_skeleton: buildSyncSaveSkeleton(verdicts.changed, verdicts.orphaned),
+      marker_advanced: markerAdvanced,
+      titles: verdicts.titles
+    },
+    warnings,
+    meta: meta.meta
+  };
+}
+
 export async function resetMemory(options: ResetMemoryOptions): Promise<AppResult<ResetMemoryData>> {
   const paths = await resolveProjectPaths({
     cwd: options.cwd,
@@ -2252,6 +2431,7 @@ export const applicationOperations = {
   resetAllMemory,
   resetMemory,
   saveMemory,
+  syncMemory,
   unregisterProjectRoot
 };
 
