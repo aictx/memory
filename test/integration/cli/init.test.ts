@@ -195,12 +195,13 @@ describe("memory init CLI", () => {
     expect(output.stdout()).toContain("memory save --file bootstrap-memory.json");
 
     const agentGuidance = await readFile(join(projectRoot, "AGENTS.md"), "utf8");
-    expect(agentGuidance).toContain("memory suggest --after-task");
-    expect(agentGuidance).toContain("save/no-save decision");
-    expect(agentGuidance).toContain("Right-size memory");
-    expect(agentGuidance).toContain("source records");
-    expect(agentGuidance).toContain("synthesis records");
-    expect(agentGuidance).toContain("Save nothing when there is no durable future value");
+    expect(agentGuidance).toContain("product-layer memory");
+    expect(agentGuidance).toContain('memory query "<question>"');
+    expect(agentGuidance).toContain("memory save --stdin");
+    expect(agentGuidance).toContain("memory sync");
+    expect(agentGuidance).toContain("Do not save refactors, formatting details, or task diaries.");
+    expect(agentGuidance).toContain("<!-- memory:map:start -->");
+    expect(agentGuidance).toContain("## Product map");
   });
 
   it("skips repo agent guidance when requested", async () => {

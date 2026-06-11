@@ -4,7 +4,7 @@
 
 This plugin packages the `memory` skill for Claude Code.
 
-It keeps Memory usage CLI-first: load relevant memory with `memory load` before substantial work, save durable knowledge with `memory remember --stdin`, and use MCP equivalents only when the current Claude Code session already exposes Memory MCP tools.
+It keeps Memory usage CLI-first: query project memory on demand with `memory query`, save product-meaningful changes with `memory save --stdin`, and use MCP equivalents only when the current Claude Code session already exposes Memory MCP tools.
 
 ## Contents
 

@@ -56,13 +56,41 @@ describe("agent guidance content", () => {
     for (const path of generatedGuidanceTargets) {
       const content = await readProjectFile(path);
 
-      expect(content).toContain('memory load "<task summary>"');
-      expect(content).toContain("memory remember --stdin");
-      expect(content).toContain("memory diff");
-      expect(content).toContain("remember_memory({ task, memories, updates, stale, supersede, relations })");
-      expect(content).toContain("Save nothing when the task produced no durable future value.");
+      expect(content).toContain('memory query "<question>"');
+      expect(content).toContain("memory save --stdin");
+      expect(content).toContain("memory sync");
+      expect(content).toContain("{task, nodes, stale, supersede, delete}");
+      expect(content).toContain('"kind": "feature"');
+      expect(content).toContain('"stage": "building"');
+      expect(content).toContain('"anchors"');
+      expect(content).toContain('"kind": "decision"');
+      expect(content).toContain("Do not save refactors, formatting details, task diaries");
+      expect(content).toContain("Save nothing when the task produced no");
       expect(content).toContain("Do not save secrets, tokens, private keys");
       expect(content).toMatch(/editing\s+`\.memory\/` (?:files directly|manually)/i);
+      expect(content).toContain("`query_memory`");
+      expect(content).toContain("`save_memory`");
+      expect(content).toContain("`inspect_memory`");
+    }
+  });
+
+  it("keeps generated guidance free of removed v1 verbs and concepts", async () => {
+    for (const path of generatedGuidanceTargets) {
+      const content = await readProjectFile(path);
+
+      expect(content).not.toContain("memory load");
+      expect(content).not.toContain("memory remember");
+      expect(content).not.toContain("load_memory");
+      expect(content).not.toContain("remember_memory");
+      expect(content).not.toContain("save_memory_patch");
+      expect(content).not.toContain("memory wiki");
+      expect(content).not.toContain("memory setup");
+      expect(content).not.toContain("memory lens");
+      expect(content).not.toContain("memory handoff");
+      expect(content).not.toContain("memory suggest");
+      expect(content).not.toContain("memory audit");
+      expect(content).not.toMatch(/\bfacets?\b/iu);
+      expect(content).not.toContain("applies_to");
     }
   });
 

@@ -9,7 +9,7 @@ const templateUrl = new URL("integrations/templates/agent-guidance.md", repoRoot
 const generatedNotice = "<!-- Generated from integrations/templates/agent-guidance.md. Do not edit directly. -->";
 const publicName = "memory";
 const displayName = "Memory";
-const skillDescription = "Use this skill when working in a project that uses Memory by Aictx as local project memory. It guides the agent to load relevant memory before non-trivial coding work, save durable memory after meaningful changes, and keep memory inspectable through Memory and Git when available.";
+const skillDescription = "Use this skill when working in a project that uses Memory by Aictx as product-layer project memory. It guides the agent to query memory on demand mid-task, save product-meaningful changes after meaningful work, and sync memory at session end.";
 const pluginDescription = "Use Memory by Aictx as local project memory in AI coding agents.";
 const skillPrefix = `---\nname: ${publicName}\ndescription: ${skillDescription}\n---\n\n${generatedNotice}\n\n`;
 const cursorPrefix = `---\ndescription: Use Memory as project memory when working in this repository.\nalwaysApply: true\n---\n\n${generatedNotice}\n\n`;
@@ -78,15 +78,15 @@ const codexPluginManifest = {
   skills: "./skills/",
   interface: {
     displayName,
-    shortDescription: "Load and save local project memory with Memory.",
+    shortDescription: "Query and save product-layer project memory with Memory.",
     longDescription:
-      "Packages the Memory by Aictx workflow as a Codex skill. Agents stay CLI-first, load task-relevant project memory before substantial work, and save only durable knowledge after meaningful changes.",
+      "Packages the Memory by Aictx workflow as a Codex skill. Agents stay CLI-first, query project memory on demand mid-task, save product-meaningful changes, and sync memory at session end.",
     developerName: authorName,
     category: "Productivity",
     websiteURL: packageJson.homepage,
     defaultPrompt: [
       "Set up Memory for this repo.",
-      "Load Memory before this task.",
+      "Query Memory for this task.",
       "Decide whether this task changed Memory."
     ]
   }
@@ -147,7 +147,7 @@ function buildCodexPluginReadme() {
 
 This plugin packages the \`${publicName}\` skill for Codex.
 
-It keeps Memory usage CLI-first: load relevant memory with \`memory load\` before substantial work, save durable knowledge with \`memory remember --stdin\`, and use MCP equivalents only when the current Codex session already exposes Memory MCP tools.
+It keeps Memory usage CLI-first: query project memory on demand with \`memory query\`, save product-meaningful changes with \`memory save --stdin\`, and use MCP equivalents only when the current Codex session already exposes Memory MCP tools.
 
 ## Contents
 
@@ -175,7 +175,7 @@ function buildClaudePluginReadme() {
 
 This plugin packages the \`${publicName}\` skill for Claude Code.
 
-It keeps Memory usage CLI-first: load relevant memory with \`memory load\` before substantial work, save durable knowledge with \`memory remember --stdin\`, and use MCP equivalents only when the current Claude Code session already exposes Memory MCP tools.
+It keeps Memory usage CLI-first: query project memory on demand with \`memory query\`, save product-meaningful changes with \`memory save --stdin\`, and use MCP equivalents only when the current Claude Code session already exposes Memory MCP tools.
 
 ## Contents
 

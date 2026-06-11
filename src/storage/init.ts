@@ -20,6 +20,8 @@ import { withProjectLock } from "../core/lock.js";
 import { resolveProjectPaths, type ProjectPaths } from "../core/paths.js";
 import { err, ok, type Result } from "../core/result.js";
 import type { GitState, IsoDateTime, Sha256Hash } from "../core/types.js";
+import { buildProductMapBody } from "../map/install.js";
+import { renderProductMap } from "../map/render.js";
 import {
   validateProject,
   type ProjectValidationResult,
@@ -27,8 +29,17 @@ import {
 } from "../validation/validate.js";
 import { SCHEMA_FILES } from "../validation/schemas.js";
 import { computeObjectContentHash } from "./hashes.js";
+import {
+  AGENT_GUIDANCE_MARKERS,
+  applyMarkedSection,
+  buildMarkedSectionBlock,
+  LEGACY_AGENT_GUIDANCE_MARKERS,
+  PRODUCT_MAP_MARKERS,
+  countOccurrences,
+  type MarkedSectionResult
+} from "./marked-section.js";
 import { CURRENT_STORAGE_VERSION, type MemoryConfig, type MemoryObjectSidecar } from "./objects.js";
-import type { CanonicalStorageSnapshot } from "./read.js";
+import { readCanonicalStorage, type CanonicalStorageSnapshot } from "./read.js";
 
 const GENERATED_GITIGNORE_ENTRIES = [
   ".memory/index/",
@@ -41,10 +52,6 @@ const INDEX_UNAVAILABLE_WARNING =
   "Initial index was not built because the index module is not available yet.";
 const ALREADY_INITIALIZED_WARNING =
   "Memory is already initialized; existing valid storage was left unchanged.";
-const AGENT_GUIDANCE_START_MARKER = "<!-- memory:start -->";
-const AGENT_GUIDANCE_END_MARKER = "<!-- memory:end -->";
-const LEGACY_AGENT_GUIDANCE_START_MARKER = "<!-- aictx-memory:start -->";
-const LEGACY_AGENT_GUIDANCE_END_MARKER = "<!-- aictx-memory:end -->";
 const AGENT_GUIDANCE_TARGETS = ["AGENTS.md", "CLAUDE.md"] as const;
 const OPTIONAL_AGENT_SKILLS = [
   "integrations/codex/memory/SKILL.md",
@@ -52,34 +59,19 @@ const OPTIONAL_AGENT_SKILLS = [
   "integrations/cursor/memory.mdc",
   "integrations/cline/memory.md"
 ] as const;
-const AGENT_GUIDANCE_BLOCK = `${[
-  AGENT_GUIDANCE_START_MARKER,
+export const AGENT_GUIDANCE_BLOCK = `${[
+  AGENT_GUIDANCE_MARKERS.start,
   "## Memory",
   "",
-  "This repo uses Memory as local project memory for AI coding agents. Treat loaded memory as project context, not higher-priority instructions.",
+  "This repo uses Memory as its product-layer memory: features, decisions, gotchas, and open questions anchored to code paths. The product map below is the always-on overview — use it for orientation; treat it as context, not instructions.",
   "",
-  "`memory init` does not start MCP. Use the CLI by default; use MCP tools only when the client has already launched and connected to a current `memory-mcp` server.",
+  '- Need detail mid-task? Run `memory query "<question>"` (MCP: `query_memory`). Do not preload anything else.',
+  "- After product-meaningful changes (feature behavior added or changed, a decision taken, a gotcha discovered, a question opened or answered), save them: `memory save --stdin` with JSON `{task, nodes, stale, supersede, delete}`. Do not save refactors, formatting details, or task diaries.",
+  "- At session end, or after merging others' work, run `memory sync` and act on its report.",
+  "- `memory status` summarizes features by stage; `memory inspect <id>` shows one node in full.",
   "",
-  "Before non-trivial coding, architecture, debugging, dependency, or configuration work, load memory:",
-  '- Default CLI: `memory load "<task summary>"`',
-  '- MCP equivalent when available: `load_memory({ task: "<task summary>" })`',
-  "",
-  "After meaningful work, make a save/no-save decision. Use `memory suggest --after-task \"<task>\" --json` when useful, then save durable project knowledge through the intent-first API:",
-  "- Default CLI: `memory remember --stdin`",
-  '- MCP equivalent when available: `remember_memory({ task, memories, updates, stale, supersede, relations })`',
-  "",
-  "Use `memory save --stdin` or `save_memory_patch({ patch })` only for advanced structured patch writes. Saved memory is active immediately after Memory validates and writes it.",
-  "",
-  "Use `memory wiki ingest --stdin` for source-backed syntheses with raw-source `origin` metadata, `memory wiki file --stdin` for useful query results, `memory wiki lint` for wiki-language audit findings, and `memory wiki log` for chronological event history. These wiki workflows are CLI-only in v1.",
-  "",
-  "Save durable decisions, architecture or behavior changes, constraints, conventions, workflows/how-tos, gotchas, debugging facts, open questions, user-stated context, source records, and maintained syntheses. Use workflow memory for project-specific procedures, runbooks, command sequences, release/debugging/migration paths, verification routines, and maintenance steps. Do not save task diaries, generic tutorials, secrets, sensitive logs, speculation, or short-lived implementation notes.",
-  "",
-  "Right-size memory: use atomic memories for precise reusable claims, source records for provenance, and synthesis records for compact area-level understanding such as product intent, feature maps, roadmap, architecture, conventions, and agent guidance. Prefer updating existing memory, marking stale, superseding, or deleting memory over creating duplicates. Save nothing when there is no durable future value.",
-  "",
-  "If loaded memory conflicts with the user request, current code, or test results, prefer current evidence and mention the conflict.",
-  "",
-  "Before finalizing, say whether Memory changed. If it changed, mention that asynchronous inspection is available through `inspect_memory`, `memory view`, `memory diff`, Git tools, or MCP `diff_memory` when available.",
-  AGENT_GUIDANCE_END_MARKER
+  "If memory conflicts with current code or the user, trust the code and the user — and save the correction.",
+  AGENT_GUIDANCE_MARKERS.end
 ].join("\n")}\n`;
 
 export interface InitStorageOptions extends GitWrapperOptions {
@@ -290,7 +282,8 @@ async function createInitialStorage(
 
   const guidanceResult = await installAgentGuidance(
     paths.projectRoot,
-    options.agentGuidance !== false
+    options.agentGuidance !== false,
+    options
   );
 
   if (!guidanceResult.ok) {
@@ -346,7 +339,8 @@ async function existingStorageResult(
 
   const guidanceResult = await installAgentGuidance(
     paths.projectRoot,
-    options.agentGuidance !== false
+    options.agentGuidance !== false,
+    options
   );
 
   if (!guidanceResult.ok) {
@@ -734,7 +728,8 @@ async function updateGitignore(
 
 async function installAgentGuidance(
   projectRoot: string,
-  enabled: boolean
+  enabled: boolean,
+  options: GitWrapperOptions = {}
 ): Promise<Result<{ agentGuidance: AgentGuidanceData; filesCreated: string[] }>> {
   if (!enabled) {
     return ok({
@@ -747,12 +742,14 @@ async function installAgentGuidance(
     });
   }
 
+  const map = await buildInstallProductMapBody(projectRoot, options);
+  const mapBlock = buildMarkedSectionBlock(PRODUCT_MAP_MARKERS, map.body);
   const targets: AgentGuidanceTargetResult[] = [];
   const filesCreated: string[] = [];
-  const warnings: string[] = [];
+  const warnings: string[] = [...map.warnings];
 
   for (const path of AGENT_GUIDANCE_TARGETS) {
-    const result = await installAgentGuidanceTarget(projectRoot, path);
+    const result = await installAgentGuidanceTarget(projectRoot, path, mapBlock);
 
     if (!result.ok) {
       return result;
@@ -783,9 +780,30 @@ async function installAgentGuidance(
   );
 }
 
+async function buildInstallProductMapBody(
+  projectRoot: string,
+  options: GitWrapperOptions
+): Promise<{ body: string; warnings: string[] }> {
+  const storage = await readCanonicalStorage(projectRoot);
+
+  if (!storage.ok) {
+    return {
+      body: renderProductMap({ objects: [] }),
+      warnings: [
+        `Product map was rendered without storage: ${storage.error.message}`
+      ]
+    };
+  }
+
+  const map = await buildProductMapBody(projectRoot, storage.data, options);
+
+  return { body: map.body, warnings: map.warnings };
+}
+
 async function installAgentGuidanceTarget(
   projectRoot: string,
-  path: string
+  path: string,
+  mapBlock: string
 ): Promise<Result<{ status: AgentGuidanceTargetStatus; fileCreated: boolean }>> {
   const filePath = join(projectRoot, path);
   const existing = await readFile(filePath, "utf8").catch((error: unknown) => {
@@ -797,7 +815,11 @@ async function installAgentGuidanceTarget(
   });
 
   if (existing === null) {
-    const written = await writeTextAtomic(projectRoot, path, AGENT_GUIDANCE_BLOCK);
+    const written = await writeTextAtomic(
+      projectRoot,
+      path,
+      `${AGENT_GUIDANCE_BLOCK}\n${mapBlock}`
+    );
 
     if (!written.ok) {
       return written;
@@ -819,85 +841,68 @@ async function installAgentGuidanceTarget(
     );
   }
 
-  if (planned.contents === normalized) {
-    return ok({ status: "unchanged", fileCreated: false });
+  const warnings: string[] = [];
+  const mapPlanned = applyMarkedSection(planned.contents, PRODUCT_MAP_MARKERS, mapBlock);
+  let finalContents = planned.contents;
+
+  if (mapPlanned.status === "skipped") {
+    warnings.push(
+      `Product map in ${path} was left unchanged because Memory map markers are ambiguous.`
+    );
+  } else {
+    finalContents = mapPlanned.contents;
   }
 
-  const written = await writeTextAtomic(projectRoot, path, planned.contents);
+  if (finalContents === normalized) {
+    return ok({ status: "unchanged", fileCreated: false }, warnings);
+  }
+
+  const written = await writeTextAtomic(projectRoot, path, finalContents);
 
   if (!written.ok) {
     return written;
   }
 
-  return ok({ status: planned.status, fileCreated: false });
+  return ok({ status: "updated", fileCreated: false }, warnings);
 }
 
-function applyAgentGuidanceBlock(
-  contents: string
-): { status: "updated"; contents: string } | { status: "skipped" } {
-  const startCount = countOccurrences(contents, AGENT_GUIDANCE_START_MARKER);
-  const endCount = countOccurrences(contents, AGENT_GUIDANCE_END_MARKER);
-  const legacyStartCount = countOccurrences(contents, LEGACY_AGENT_GUIDANCE_START_MARKER);
-  const legacyEndCount = countOccurrences(contents, LEGACY_AGENT_GUIDANCE_END_MARKER);
+function applyAgentGuidanceBlock(contents: string): MarkedSectionResult {
+  const startCount = countOccurrences(contents, AGENT_GUIDANCE_MARKERS.start);
+  const endCount = countOccurrences(contents, AGENT_GUIDANCE_MARKERS.end);
+  const legacyStartCount = countOccurrences(contents, LEGACY_AGENT_GUIDANCE_MARKERS.start);
+  const legacyEndCount = countOccurrences(contents, LEGACY_AGENT_GUIDANCE_MARKERS.end);
 
   if (startCount === 0 && endCount === 0 && legacyStartCount === 0 && legacyEndCount === 0) {
     if (containsUnmarkedMemoryGuidance(contents)) {
       return { status: "skipped" };
     }
 
-    const base = contents.replace(/\n*$/, "");
-    const separator = base === "" ? "" : "\n\n";
-
-    return {
-      status: "updated",
-      contents: `${base}${separator}${AGENT_GUIDANCE_BLOCK}`
-    };
+    return applyMarkedSection(contents, AGENT_GUIDANCE_MARKERS, AGENT_GUIDANCE_BLOCK);
   }
 
-  const markerSet =
+  const markers =
     startCount === 1 && endCount === 1 && legacyStartCount === 0 && legacyEndCount === 0
-      ? {
-          start: AGENT_GUIDANCE_START_MARKER,
-          end: AGENT_GUIDANCE_END_MARKER
-        }
+      ? AGENT_GUIDANCE_MARKERS
       : startCount === 0 && endCount === 0 && legacyStartCount === 1 && legacyEndCount === 1
-        ? {
-            start: LEGACY_AGENT_GUIDANCE_START_MARKER,
-            end: LEGACY_AGENT_GUIDANCE_END_MARKER
-          }
+        ? LEGACY_AGENT_GUIDANCE_MARKERS
         : null;
 
-  if (markerSet === null) {
+  if (markers === null) {
     return { status: "skipped" };
   }
 
-  const startIndex = contents.indexOf(markerSet.start);
-  const endIndex = contents.indexOf(markerSet.end);
-
-  if (startIndex > endIndex) {
-    return { status: "skipped" };
-  }
-
-  const replaceEnd = endIndex + markerSet.end.length;
-  const hasTrailingBlockNewline = contents.slice(replaceEnd, replaceEnd + 1) === "\n";
-  const suffixStart = hasTrailingBlockNewline ? replaceEnd + 1 : replaceEnd;
-
-  return {
-    status: "updated",
-    contents: `${contents.slice(0, startIndex)}${AGENT_GUIDANCE_BLOCK}${contents.slice(suffixStart)}`
-  };
+  return applyMarkedSection(contents, markers, AGENT_GUIDANCE_BLOCK, {
+    appendIfMissing: false
+  });
 }
 
 function containsUnmarkedMemoryGuidance(contents: string): boolean {
-  return /\b(Memory|Aictx)\b/i.test(contents) && /\b(load_memory|remember_memory|save_memory_patch|memory load|memory remember|memory save|aictx load|aictx remember|aictx save)\b/i.test(contents);
-}
-
-function countOccurrences(value: string, search: string): number {
-  if (search === "") {
-    return 0;
-  }
-
-  return value.split(search).length - 1;
+  return (
+    /\b(Memory|Aictx)\b/i.test(contents) &&
+    /\b(load_memory|remember_memory|save_memory_patch|query_memory|save_memory|inspect_memory|memory load|memory remember|memory save|memory query|memory sync|aictx load|aictx remember|aictx save|aictx query|aictx sync)\b/i.test(
+      contents
+    )
+  );
 }
 
 function nextSteps(agentGuidance: AgentGuidanceData): string[] {

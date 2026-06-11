@@ -314,6 +314,67 @@ export async function getChangedProjectFiles(
   });
 }
 
+/**
+ * Lists repo-relative file paths known to the working tree: tracked files
+ * from `git ls-files` unioned with untracked-but-present files from
+ * `git status --porcelain --untracked-files=all` additions, so anchors
+ * pointing at brand-new uncommitted files do not read as orphaned.
+ *
+ * Returns null when the project is not a Git worktree so anchor
+ * verification can be skipped silently.
+ */
+export async function listTrackedFiles(
+  projectRoot: string,
+  options: GitWrapperOptions = {}
+): Promise<Result<string[] | null>> {
+  const root = await findGitRoot(projectRoot, options);
+
+  if (!root.ok) {
+    return root;
+  }
+
+  if (!root.data.available) {
+    return ok(null);
+  }
+
+  const tracked = await runGit(["ls-files"], projectRoot, options);
+
+  if (!tracked.ok) {
+    return tracked;
+  }
+
+  if (tracked.data.exitCode !== 0) {
+    return gitCommandFailed("Git tracked-file listing failed.", tracked.data);
+  }
+
+  const status = await runGit(
+    ["status", "--porcelain=v1", "--untracked-files=all", "--", "."],
+    projectRoot,
+    options
+  );
+
+  if (!status.ok) {
+    return status;
+  }
+
+  if (status.data.exitCode !== 0) {
+    return gitCommandFailed("Git untracked-file listing failed.", status.data);
+  }
+
+  const trackedFiles = tracked.data.stdout
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => unquoteGitPath(line));
+  const untrackedFiles = status.data.stdout
+    .split("\n")
+    .filter((line) => line.startsWith("??"))
+    .map(parseStatusChangedPath)
+    .filter((file): file is string => file !== null)
+    .filter((file) => !file.endsWith("/"));
+
+  return ok(uniqueSorted([...trackedFiles, ...untrackedFiles]));
+}
+
 async function getUntrackedMemoryFiles(
   projectRoot: string,
   options: GitWrapperOptions = {}

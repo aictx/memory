@@ -127,6 +127,11 @@ describe("memory full CLI workflow", () => {
     expect(saveEnvelope.data.index_updated).toBe(true);
     expect(saveEnvelope.meta.git.dirty).toBe(true);
 
+    const agentsAfterSave = await readFile(join(repo, "AGENTS.md"), "utf8");
+    expect(agentsAfterSave).toContain("<!-- memory:map:start -->");
+    expect(agentsAfterSave).toContain("## Product map");
+    expect(agentsAfterSave).toContain("workflow-retry-queue — Workflow retry queue");
+
     const queried = parseSuccessEnvelope<QueryData>(
       (
         await expectSuccessfulCli([

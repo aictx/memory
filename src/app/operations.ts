@@ -34,9 +34,15 @@ import type {
   SourceOrigin,
   ValidationIssue
 } from "../core/types.js";
+import { verifyAnchors, type AnchorVerification } from "../anchors/verify.js";
 import {
   updateIndexAfterCanonicalWrite
 } from "../index/incremental.js";
+import {
+  buildProductMapBody,
+  refreshProductMap,
+  PRODUCT_MAP_TARGETS
+} from "../map/install.js";
 import {
   rebuildIndex as rebuildGeneratedIndex,
   type RebuildIndexData
@@ -69,6 +75,10 @@ import {
   initializeStorage,
   type InitStorageData
 } from "../storage/init.js";
+import {
+  extractMarkedSection,
+  PRODUCT_MAP_MARKERS
+} from "../storage/marked-section.js";
 import type { StoredMemoryObject } from "../storage/objects.js";
 import {
   checkStorageVersion,
@@ -561,7 +571,11 @@ export async function checkProject(
   const errors = [...validation.errors, ...gitConflictIssues.data];
   const warnings =
     errors.length === 0
-      ? [...validation.warnings, ...(await generatedIndexWarnings(paths.data))]
+      ? [
+          ...validation.warnings,
+          ...(await generatedIndexWarnings(paths.data)),
+          ...(await productGraphCheckWarnings(paths.data, options))
+        ]
       : validation.warnings;
 
   return {
@@ -1634,6 +1648,8 @@ export async function saveMemory(
     };
   }
 
+  const mapWarnings = await refreshProductMapAfterWrite(paths.data, options);
+
   return {
     ok: true,
     data: {
@@ -1641,9 +1657,33 @@ export async function saveMemory(
       patch: patch.data,
       ...saved.data
     },
-    warnings: [...paths.warnings, ...storage.warnings, ...saved.warnings],
+    warnings: [...paths.warnings, ...storage.warnings, ...saved.warnings, ...mapWarnings],
     meta: saved.meta
   };
+}
+
+/**
+ * Refreshes the generated product map sections after a successful write,
+ * using fresh post-write storage. Runs outside the project lock and never
+ * fails the save: every failure or skipped target degrades to a warning.
+ */
+async function refreshProductMapAfterWrite(
+  paths: ProjectPaths,
+  options: GitWrapperOptions
+): Promise<string[]> {
+  const storage = await readCanonicalStorage(paths.projectRoot);
+
+  if (!storage.ok) {
+    return [`Product map was not refreshed: ${storage.error.message}`];
+  }
+
+  const refreshed = await refreshProductMap(
+    paths.projectRoot,
+    storage.data,
+    options.runner === undefined ? {} : { runner: options.runner }
+  );
+
+  return refreshed.warnings;
 }
 
 function summarizeRegisteredProject(entry: ProjectRegistryEntry): RegisteredProjectSummary {
@@ -2425,6 +2465,113 @@ function generatedIndexWarning(message: string): ValidationIssue {
     path: ".memory/index/memory.sqlite",
     field: null
   };
+}
+
+/**
+ * Warning-level product graph findings for `memory check`: anchors that
+ * match no tracked or added file, and AGENTS.md/CLAUDE.md product map
+ * sections that drifted from the rendered map (or lost their markers).
+ * Anchor warnings are skipped when Git is unavailable. Warnings never fail
+ * the check.
+ */
+async function productGraphCheckWarnings(
+  paths: ProjectPaths,
+  options: GitWrapperOptions
+): Promise<ValidationIssue[]> {
+  const storage = await readCanonicalStorage(paths.projectRoot);
+
+  if (!storage.ok) {
+    return [];
+  }
+
+  const map = await buildProductMapBody(paths.projectRoot, storage.data, options);
+  const issues = orphanedAnchorWarnings(storage.data.objects, map.anchorFindings);
+
+  for (const target of PRODUCT_MAP_TARGETS) {
+    const issue = await productMapFreshnessWarning(paths.projectRoot, target, map.body);
+
+    if (issue !== null) {
+      issues.push(issue);
+    }
+  }
+
+  return issues;
+}
+
+function orphanedAnchorWarnings(
+  objects: readonly StoredMemoryObject[],
+  anchorFindings: readonly AnchorVerification[] | null
+): ValidationIssue[] {
+  if (anchorFindings === null) {
+    return [];
+  }
+
+  const liveObjects = new Map(
+    objects
+      .filter(
+        (object) => object.sidecar.status === "active" || object.sidecar.status === "open"
+      )
+      .map((object) => [object.sidecar.id, object])
+  );
+  const issues: ValidationIssue[] = [];
+
+  for (const finding of anchorFindings) {
+    const object = liveObjects.get(finding.id);
+
+    if (object === undefined) {
+      continue;
+    }
+
+    for (const anchor of finding.orphaned_anchors) {
+      issues.push({
+        code: "AnchorOrphaned",
+        message: `Anchor \`${anchor}\` on ${finding.id} matches no tracked or added file.`,
+        path: object.path,
+        field: "/anchors"
+      });
+    }
+  }
+
+  return issues;
+}
+
+async function productMapFreshnessWarning(
+  projectRoot: string,
+  target: string,
+  renderedBody: string
+): Promise<ValidationIssue | null> {
+  const contents = await readUtf8FileInsideRoot(projectRoot, target);
+
+  if (!contents.ok) {
+    return {
+      code: "ProductMapMissing",
+      message: `${target} has no generated product map section. Run \`memory init\` to install it, then any \`memory save\` keeps it fresh.`,
+      path: target,
+      field: null
+    };
+  }
+
+  const embedded = extractMarkedSection(contents.data, PRODUCT_MAP_MARKERS);
+
+  if (embedded === null) {
+    return {
+      code: "ProductMapMissing",
+      message: `${target} has no generated product map section. Run \`memory init\` to install it, then any \`memory save\` keeps it fresh.`,
+      path: target,
+      field: null
+    };
+  }
+
+  if (embedded.trim() !== renderedBody.trim()) {
+    return {
+      code: "ProductMapStale",
+      message: `Product map section in ${target} is out of date. Run any \`memory save\` to refresh the generated map.`,
+      path: target,
+      field: null
+    };
+  }
+
+  return null;
 }
 
 function appError<T>(error: MemoryError, warnings: string[], meta: MemoryMeta): AppResult<T> {

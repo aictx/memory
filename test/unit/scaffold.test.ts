@@ -40,10 +40,10 @@ describe("package scaffold", () => {
     const cline = await readProjectFile("integrations/cline/memory.md");
     const generic = await readProjectFile("integrations/generic/memory-agent-instructions.md");
 
-    expect(codex).toBe(`---\nname: memory\ndescription: Use this skill when working in a project that uses Memory by Aictx as local project memory. It guides the agent to load relevant memory before non-trivial coding work, save durable memory after meaningful changes, and keep memory inspectable through Memory and Git when available.\n---\n\n${generatedNotice}\n\n${template}\n`);
+    expect(codex).toBe(`---\nname: memory\ndescription: Use this skill when working in a project that uses Memory by Aictx as product-layer project memory. It guides the agent to query memory on demand mid-task, save product-meaningful changes after meaningful work, and sync memory at session end.\n---\n\n${generatedNotice}\n\n${template}\n`);
     expect(codexStandaloneSkill).toBe(codex);
     expect(codexPluginSkill).toBe(codex);
-    expect(claudeSkill).toBe(`---\nname: memory\ndescription: Use this skill when working in a project that uses Memory by Aictx as local project memory. It guides the agent to load relevant memory before non-trivial coding work, save durable memory after meaningful changes, and keep memory inspectable through Memory and Git when available.\n---\n\n${generatedNotice}\n\n${template}\n`);
+    expect(claudeSkill).toBe(`---\nname: memory\ndescription: Use this skill when working in a project that uses Memory by Aictx as product-layer project memory. It guides the agent to query memory on demand mid-task, save product-meaningful changes after meaningful work, and sync memory at session end.\n---\n\n${generatedNotice}\n\n${template}\n`);
     expect(claudePluginSkill).toBe(claudeSkill);
     expect(claude).toBe(`${generatedNotice}\n\n${template}\n`);
     expect(cursor).toBe(`---\ndescription: Use Memory as project memory when working in this repository.\nalwaysApply: true\n---\n\n${generatedNotice}\n\n${template}\n`);

@@ -73,27 +73,31 @@ describe("initProject", () => {
     const agentsGuidance = await readFile(join(repo, "AGENTS.md"), "utf8");
     const claudeGuidance = await readFile(join(repo, "CLAUDE.md"), "utf8");
     for (const guidance of [agentsGuidance, claudeGuidance]) {
+      expect(guidance).toContain("<!-- memory:start -->");
       expect(guidance).toContain(
-        "After meaningful work, make a save/no-save decision."
+        "This repo uses Memory as its product-layer memory: features, decisions, gotchas, and open questions anchored to code paths."
       );
-      expect(guidance).toContain('memory suggest --after-task "<task>" --json');
-      expect(guidance).toContain("memory remember --stdin");
-      expect(guidance).toContain("remember_memory({ task, memories, updates, stale, supersede, relations })");
-      expect(guidance).toContain("save_memory_patch({ patch })");
-      expect(guidance).toContain("Save durable decisions");
-      expect(guidance).toContain("Right-size memory");
-      expect(guidance).toContain("atomic memories");
-      expect(guidance).toContain("synthesis records");
-      expect(guidance).toContain("source records");
-      expect(guidance).toContain("updating existing memory, marking stale, superseding, or deleting");
-      expect(guidance).toContain("Save nothing when there is no durable future value");
-      expect(guidance).toContain("Do not save task diaries");
-      expect(guidance).toContain("Before finalizing, say whether Memory changed");
-      expect(guidance).toContain("Saved memory is active immediately");
-      expect(guidance).toContain("asynchronous inspection is available");
+      expect(guidance).toContain('Run `memory query "<question>"` (MCP: `query_memory`)');
+      expect(guidance).toContain("Do not preload anything else.");
       expect(guidance).toContain(
-        "`inspect_memory`, `memory view`, `memory diff`, Git tools, or MCP `diff_memory`"
+        "`memory save --stdin` with JSON `{task, nodes, stale, supersede, delete}`"
       );
+      expect(guidance).toContain("Do not save refactors, formatting details, or task diaries.");
+      expect(guidance).toContain(
+        "At session end, or after merging others' work, run `memory sync` and act on its report."
+      );
+      expect(guidance).toContain(
+        "`memory status` summarizes features by stage; `memory inspect <id>` shows one node in full."
+      );
+      expect(guidance).toContain(
+        "If memory conflicts with current code or the user, trust the code and the user — and save the correction."
+      );
+      expect(guidance).toContain("<!-- memory:map:start -->");
+      expect(guidance).toContain("## Product map");
+      expect(guidance).toContain("No features recorded yet.");
+      expect(guidance).toContain("<!-- memory:map:end -->");
+      expect(guidance).not.toContain("memory load");
+      expect(guidance).not.toContain("memory remember");
       expect(guidance).not.toMatch(/install .*skill/i);
     }
     expect(result.data.agent_guidance).toEqual({
@@ -401,10 +405,12 @@ describe("initProject", () => {
 
     expect(agents).toContain("# Existing instructions");
     expect(agents).toContain("<!-- memory:start -->");
-    expect(agents).toContain("make a save/no-save decision");
+    expect(agents).toContain("product-layer memory");
+    expect(agents).toContain("<!-- memory:map:start -->");
     expect(claude).not.toContain("old guidance");
     expect(claude).toContain("Keep this line.");
     expect(countOccurrences(claude, "<!-- memory:start -->")).toBe(1);
+    expect(countOccurrences(claude, "<!-- memory:map:start -->")).toBe(1);
   });
 
   it("replaces legacy aictx-memory marked guidance with memory guidance", async () => {

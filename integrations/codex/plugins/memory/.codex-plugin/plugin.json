@@ -18,14 +18,14 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Memory",
-    "shortDescription": "Load and save local project memory with Memory.",
-    "longDescription": "Packages the Memory by Aictx workflow as a Codex skill. Agents stay CLI-first, load task-relevant project memory before substantial work, and save only durable knowledge after meaningful changes.",
+    "shortDescription": "Query and save product-layer project memory with Memory.",
+    "longDescription": "Packages the Memory by Aictx workflow as a Codex skill. Agents stay CLI-first, query project memory on demand mid-task, save product-meaningful changes, and sync memory at session end.",
     "developerName": "Aictx",
     "category": "Productivity",
     "websiteURL": "https://memory.aictx.dev",
     "defaultPrompt": [
       "Set up Memory for this repo.",
-      "Load Memory before this task.",
+      "Query Memory for this task.",
       "Decide whether this task changed Memory."
     ]
   }

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 const generatedNotice = "<!-- Generated from integrations/templates/agent-guidance.md. Do not edit directly. -->";
-const skillPrefix = `---\nname: memory\ndescription: Use this skill when working in a project that uses Memory by Aictx as local project memory. It guides the agent to load relevant memory before non-trivial coding work, save durable memory after meaningful changes, and keep memory inspectable through Memory and Git when available.\n---\n\n${generatedNotice}\n\n`;
+const skillPrefix = `---\nname: memory\ndescription: Use this skill when working in a project that uses Memory by Aictx as product-layer project memory. It guides the agent to query memory on demand mid-task, save product-meaningful changes after meaningful work, and sync memory at session end.\n---\n\n${generatedNotice}\n\n`;
 const cursorPrefix = `---\ndescription: Use Memory as project memory when working in this repository.\nalwaysApply: true\n---\n\n${generatedNotice}\n\n`;
 
 const skillGuidancePaths = [
@@ -106,7 +106,7 @@ describe("generated agent guidance files", () => {
       }
     });
     expect(codex.description).toMatch(/Memory by Aictx as local project memory/i);
-    expect(codex.interface.shortDescription).toMatch(/local project memory/i);
+    expect(codex.interface.shortDescription).toMatch(/product-layer project memory/i);
     expect(codex.interface.defaultPrompt).toHaveLength(3);
     expect(codex.mcpServers).toBeUndefined();
 

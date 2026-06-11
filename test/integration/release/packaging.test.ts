@@ -563,22 +563,18 @@ async function expectInstalledMemoryDisciplineDocs(installRoot: string): Promise
 }
 
 function expectGeneratedGuidanceContent(content: string): void {
-  expect(content).toContain("memory remember --stdin");
-  expect(content).toContain('memory suggest --after-task "<task>" --json');
-  expect(content).toContain("recommended_actions");
-  expect(content).toContain("remember_template");
+  expect(content).toContain('memory query "<question>"');
+  expect(content).toContain("memory save --stdin");
+  expect(content).toContain("memory sync");
+  expect(content).toContain("{task, nodes, stale, supersede, delete}");
   expect(content).toContain("`gotcha`");
-  expect(content).toContain("`workflow`");
+  expect(content).toContain('"stage": "building"');
+  expect(content).not.toContain("memory load");
+  expect(content).not.toContain("memory remember");
 
   for (const forbiddenName of forbiddenMcpToolNames) {
     expect(content).not.toContain(forbiddenName);
   }
-
-  expect(
-    /whether Memory changed/i.test(content) ||
-      /inspect(?:ion)?[\s\S]{0,40}asynchron/i.test(content) ||
-      /async inspection/i.test(content)
-  ).toBe(true);
 }
 
 async function readInstalledPackageFile(
