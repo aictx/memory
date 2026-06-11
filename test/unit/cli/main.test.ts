@@ -30,10 +30,10 @@ describe("CLI main", () => {
       "init",
       "inspect",
       "projects",
+      "query",
       "rebuild",
       "reset",
       "save",
-      "search",
       "upgrade",
       "view"
     ]);

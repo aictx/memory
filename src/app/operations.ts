@@ -3,7 +3,7 @@ import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { systemClock, type Clock } from "../core/clock.js";
-import { memoryError, type MemoryError, type JsonValue } from "../core/errors.js";
+import { memoryError, type MemoryError } from "../core/errors.js";
 import { readUtf8FileInsideRoot } from "../core/fs.js";
 import {
   getMemoryDiff,
@@ -19,6 +19,7 @@ import { withProjectLock } from "../core/lock.js";
 import { resolveProjectPaths, type ProjectPaths } from "../core/paths.js";
 import { err, ok, type Result } from "../core/result.js";
 import { runSubprocess } from "../core/subprocess.js";
+import { normalizeTokenBudget } from "../core/tokens.js";
 import type {
   FeatureStage,
   MemoryMeta,
@@ -41,12 +42,9 @@ import {
   type RebuildIndexData
 } from "../index/rebuild.js";
 import { CURRENT_INDEX_SCHEMA_VERSION } from "../index/migrations.js";
-import {
-  searchIndex,
-  type SearchIndexOptions,
-  type SearchMemoryData,
-  type SearchMemoryInput
-} from "../index/search.js";
+import { searchIndex, type SearchMemoryData } from "../index/search.js";
+import { renderQueryResult, type QueryMemoryData } from "../query/render.js";
+import { selectQuerySubgraph, QUERY_SEED_LIMIT } from "../query/select.js";
 import {
   buildSaveMemoryPatch,
   type SaveMemoryPatch
@@ -109,8 +107,10 @@ export interface CheckProjectOptions extends GitWrapperOptions {
   cwd: string;
 }
 
-export interface SearchMemoryOptions extends GitWrapperOptions, SearchMemoryInput {
+export interface QueryMemoryOptions extends GitWrapperOptions {
   cwd: string;
+  question: string;
+  tokenBudget?: number;
   clock?: Clock;
 }
 
@@ -576,9 +576,9 @@ export async function checkProject(
   };
 }
 
-export async function searchMemory(
-  options: SearchMemoryOptions
-): Promise<AppResult<SearchMemoryData>> {
+export async function queryMemory(
+  options: QueryMemoryOptions
+): Promise<AppResult<QueryMemoryData>> {
   const clock = options.clock ?? systemClock;
   const paths = await resolveProjectPaths({
     cwd: options.cwd,
@@ -612,84 +612,108 @@ export async function searchMemory(
     };
   }
 
-  const searched = await searchIndex(searchIndexOptions(paths.data.memoryRoot, options));
+  const storage = await readCanonicalStorage(paths.data.projectRoot);
 
-  if (searched.ok) {
-    return {
-      ok: true,
-      data: searched.data,
-      warnings: searched.warnings,
-      meta: meta.meta
-    };
-  }
-
-  if (searched.error.code !== "MemoryIndexUnavailable") {
+  if (!storage.ok) {
     return {
       ok: false,
-      error: searched.error,
-      warnings: searched.warnings,
+      error: storage.error,
+      warnings: storage.warnings,
       meta: meta.meta
     };
   }
 
-  const autoIndex = await readAutoIndexSetting(paths.data);
+  const budget = normalizeTokenBudget({
+    requestedBudget: options.tokenBudget ?? storage.data.config.memory.defaultTokenBudget
+  });
 
-  if (!autoIndex.ok) {
+  if (!budget.ok) {
     return {
       ok: false,
-      error: autoIndex.error,
-      warnings: [...searched.warnings, ...autoIndex.warnings],
+      error: budget.error,
+      warnings: [...storage.warnings, ...budget.warnings],
       meta: meta.meta
     };
   }
 
-  if (!autoIndex.data) {
-    return {
-      ok: false,
-      error: searched.error,
-      warnings: [...searched.warnings, ...autoIndex.warnings],
-      meta: meta.meta
-    };
-  }
-
-  const rebuilt = await rebuildIndexForResolvedProject({
+  const searched = await querySearchIndexWithAutoRebuild({
     paths: paths.data,
     meta: meta.meta,
+    question: options.question,
+    autoIndex: storage.data.config.memory.autoIndex,
     clock,
     runner: options.runner
   });
 
-  if (!rebuilt.ok) {
+  if (!searched.ok) {
     return {
       ok: false,
-      error: rebuilt.error,
-      warnings: [...searched.warnings, ...autoIndex.warnings, ...rebuilt.warnings],
+      error: searched.error,
+      warnings: [...storage.warnings, ...searched.warnings],
       meta: meta.meta
     };
   }
 
-  const retried = await searchIndex(searchIndexOptions(paths.data.memoryRoot, options));
-
-  if (!retried.ok) {
-    return {
-      ok: false,
-      error: retried.error,
-      warnings: [
-        ...searched.warnings,
-        ...autoIndex.warnings,
-        ...rebuilt.warnings,
-        ...retried.warnings
-      ],
-      meta: meta.meta
-    };
-  }
+  const subgraph = selectQuerySubgraph({
+    objects: storage.data.objects,
+    relations: storage.data.relations,
+    matches: searched.data.matches
+  });
+  const rendered = renderQueryResult({
+    question: options.question,
+    subgraph,
+    tokenBudget: budget.data.tokenTarget ?? storage.data.config.memory.defaultTokenBudget
+  });
 
   return {
     ok: true,
-    data: retried.data,
-    warnings: [...autoIndex.warnings, ...rebuilt.warnings, ...retried.warnings],
+    data: rendered,
+    warnings: [...storage.warnings, ...searched.warnings],
     meta: meta.meta
   };
+}
+
+async function querySearchIndexWithAutoRebuild(options: {
+  paths: ProjectPaths;
+  meta: MemoryMeta;
+  question: string;
+  autoIndex: boolean;
+  clock: Clock;
+  runner?: GitWrapperOptions["runner"];
+}): Promise<Result<SearchMemoryData>> {
+  const searchOptions = {
+    memoryRoot: options.paths.memoryRoot,
+    query: options.question,
+    limit: QUERY_SEED_LIMIT
+  };
+  const searched = await searchIndex(searchOptions);
+
+  if (searched.ok || searched.error.code !== "MemoryIndexUnavailable" || !options.autoIndex) {
+    return searched;
+  }
+
+  const rebuilt = await rebuildIndexForResolvedProject({
+    paths: options.paths,
+    meta: options.meta,
+    clock: options.clock,
+    runner: options.runner
+  });
+
+  if (!rebuilt.ok) {
+    return err(rebuilt.error, [...searched.warnings, ...rebuilt.warnings]);
+  }
+
+  const retried = await searchIndex(searchOptions);
+
+  if (!retried.ok) {
+    return err(retried.error, [
+      ...searched.warnings,
+      ...rebuilt.warnings,
+      ...retried.warnings
+    ]);
+  }
+
+  return ok(retried.data, [...rebuilt.warnings, ...retried.warnings]);
 }
 
 export async function inspectMemory(
@@ -1765,13 +1789,13 @@ export const applicationOperations = {
   inspectMemory,
   listRegisteredProjects,
   pruneRegisteredProjects,
+  queryMemory,
   rebuildIndex,
   registerCurrentProject,
   removeRegisteredProject,
   resetAllMemory,
   resetMemory,
   saveMemory,
-  searchMemory,
   unregisterProjectRoot
 };
 
@@ -2181,14 +2205,6 @@ async function rebuildIndexForResolvedProject(options: {
   );
 }
 
-function searchIndexOptions(memoryRoot: string, input: SearchMemoryInput): SearchIndexOptions {
-  return {
-    memoryRoot,
-    query: input.query,
-    ...(input.limit === undefined ? {} : { limit: input.limit })
-  };
-}
-
 async function detectChangedIds(
   projectRoot: string,
   changedFiles: readonly string[],
@@ -2411,25 +2427,6 @@ function generatedIndexWarning(message: string): ValidationIssue {
   };
 }
 
-async function readAutoIndexSetting(paths: ProjectPaths): Promise<Result<boolean>> {
-  const storage = await readCanonicalStorage(paths.projectRoot);
-
-  if (!storage.ok) {
-    return err(
-      memoryError(
-        "MemoryIndexUnavailable",
-        "SQLite index is unavailable and canonical config could not be read for auto-indexing.",
-        {
-          cause: errorToJson(storage.error)
-        }
-      ),
-      storage.warnings
-    );
-  }
-
-  return ok(storage.data.config.memory.autoIndex, storage.warnings);
-}
-
 function appError<T>(error: MemoryError, warnings: string[], meta: MemoryMeta): AppResult<T> {
   return {
     ok: false,
@@ -2612,19 +2609,6 @@ function fallbackMeta(paths: ProjectPaths): MemoryMeta {
       dirty: paths.git.available ? false : null
     }
   };
-}
-
-function errorToJson(error: { code: string; message: string; details?: JsonValue }): JsonValue {
-  return error.details === undefined
-    ? {
-        code: error.code,
-        message: error.message
-      }
-    : {
-        code: error.code,
-        message: error.message,
-        details: error.details
-      };
 }
 
 function messageFromUnknown(error: unknown): string {

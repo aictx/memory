@@ -6,7 +6,7 @@ export const HOST_ADAPTER_PROFILE_IDS = [
 export type HostAdapterProfileId = (typeof HOST_ADAPTER_PROFILE_IDS)[number];
 
 export type DataAccessOperationName =
-  | "search"
+  | "query"
   | "inspect"
   | "diff"
   | "save";
@@ -38,8 +38,8 @@ const HOST_ADAPTER_PROFILES = {
     description: "Default local MCP profile with Memory-specific tool names.",
     tools: [
       {
-        toolName: "search_memory",
-        operation: "search"
+        toolName: "query_memory",
+        operation: "query"
       },
       {
         toolName: "inspect_memory",
@@ -59,7 +59,7 @@ const HOST_ADAPTER_PROFILES = {
     tools: [
       {
         toolName: "search",
-        operation: "search"
+        operation: "query"
       },
       {
         toolName: "fetch",

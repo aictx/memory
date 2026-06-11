@@ -3,15 +3,15 @@ import { resolve } from "node:path";
 import {
   diffMemory,
   inspectMemory,
+  queryMemory,
   saveMemory,
-  searchMemory,
   type AppResult,
   type DiffMemoryData,
   type InspectMemoryData,
   type InspectMemoryOptions,
+  type QueryMemoryOptions,
   type SaveMemoryData,
-  type SaveMemoryOptions,
-  type SearchMemoryOptions
+  type SaveMemoryOptions
 } from "../app/operations.js";
 import type { Clock } from "../core/clock.js";
 import { getGitState, type GitWrapperOptions } from "../core/git.js";
@@ -22,7 +22,7 @@ import {
 } from "../core/paths.js";
 import type { Result } from "../core/result.js";
 import type { MemoryMeta, ObjectId } from "../core/types.js";
-import type { SearchMemoryData, SearchMemoryInput } from "../index/search.js";
+import type { QueryMemoryData } from "../query/render.js";
 
 export type DataAccessProjectTarget =
   | {
@@ -39,7 +39,10 @@ export interface DataAccessBaseInput extends GitWrapperOptions {
   clock?: Clock;
 }
 
-export interface DataAccessSearchInput extends DataAccessBaseInput, SearchMemoryInput {}
+export interface DataAccessQueryInput extends DataAccessBaseInput {
+  question: string;
+  budget?: number;
+}
 
 export interface DataAccessInspectInput extends DataAccessBaseInput {
   id: ObjectId;
@@ -53,7 +56,7 @@ export interface DataAccessSaveInput extends DataAccessBaseInput {
 }
 
 export interface DataAccessService {
-  search(input: DataAccessSearchInput): Promise<AppResult<SearchMemoryData>>;
+  query(input: DataAccessQueryInput): Promise<AppResult<QueryMemoryData>>;
   inspect(input: DataAccessInspectInput): Promise<AppResult<InspectMemoryData>>;
   diff(input: DataAccessDiffInput): Promise<AppResult<DiffMemoryData>>;
   save(input: DataAccessSaveInput): Promise<AppResult<SaveMemoryData>>;
@@ -61,9 +64,9 @@ export interface DataAccessService {
 
 export function createDataAccessService(): DataAccessService {
   return {
-    search: async (input) =>
+    query: async (input) =>
       withResolvedProject(input, async (paths) =>
-        searchMemory(toSearchMemoryOptions(input, paths))
+        queryMemory(toQueryMemoryOptions(input, paths))
       ),
     inspect: async (input) =>
       withResolvedProject(input, async (paths) =>
@@ -117,16 +120,16 @@ async function resolveDataAccessProject(
   });
 }
 
-function toSearchMemoryOptions(
-  input: DataAccessSearchInput,
+function toQueryMemoryOptions(
+  input: DataAccessQueryInput,
   paths: ProjectPaths
-): SearchMemoryOptions {
+): QueryMemoryOptions {
   return {
     cwd: paths.projectRoot,
-    query: input.query,
+    question: input.question,
     ...gitWrapperOptions(input),
     ...clockOption(input),
-    ...(input.limit === undefined ? {} : { limit: input.limit })
+    ...(input.budget === undefined ? {} : { tokenBudget: input.budget })
   };
 }
 

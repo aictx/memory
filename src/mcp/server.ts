@@ -11,8 +11,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { version } from "../generated/version.js";
 import type { MemoryMcpContext } from "./context.js";
 import { inspectMemoryTool } from "./tools/inspect-memory.js";
+import { queryMemoryTool } from "./tools/query-memory.js";
 import { saveMemoryTool } from "./tools/save-memory.js";
-import { searchMemoryTool } from "./tools/search-memory.js";
 
 export interface MemoryMcpServer {
   context: MemoryMcpContext;
@@ -151,14 +151,14 @@ function writeStartupFailure(error: unknown, options: StartupFailureOptions): vo
 
 function registerTools(mcp: MemoryMcpServer): void {
   mcp.server.registerTool(
-    searchMemoryTool.name,
+    queryMemoryTool.name,
     {
-      title: searchMemoryTool.title,
-      description: searchMemoryTool.description,
-      inputSchema: searchMemoryTool.inputSchema,
-      annotations: searchMemoryTool.annotations
+      title: queryMemoryTool.title,
+      description: queryMemoryTool.description,
+      inputSchema: queryMemoryTool.inputSchema,
+      annotations: queryMemoryTool.annotations
     },
-    (args) => searchMemoryTool.call(mcp.context, args)
+    (args) => queryMemoryTool.call(mcp.context, args)
   );
   mcp.server.registerTool(
     inspectMemoryTool.name,

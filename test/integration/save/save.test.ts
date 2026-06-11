@@ -8,9 +8,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   initProject,
   inspectMemory,
+  queryMemory,
   saveMemory,
-  saveMemoryPatch,
-  searchMemory
+  saveMemoryPatch
 } from "../../../src/app/operations.js";
 import { runSubprocess } from "../../../src/core/subprocess.js";
 import { computeObjectContentHash } from "../../../src/storage/hashes.js";
@@ -554,17 +554,14 @@ describe("saveMemoryPatch", () => {
     expect(validation.valid).toBe(true);
     expect(validation.errors).toEqual([]);
 
-    const searched = await searchMemory({
+    const queried = await queryMemory({
       cwd: projectRoot,
-      query: "Queue worker retry",
-      limit: 5
+      question: "Queue worker retry"
     });
 
-    expect(searched.ok).toBe(true);
-    if (searched.ok) {
-      expect(searched.data.matches.map((match) => match.id)).toContain(
-        "gotcha.retry-follow-up"
-      );
+    expect(queried.ok).toBe(true);
+    if (queried.ok) {
+      expect(queried.data.included_ids).toContain("gotcha.retry-follow-up");
     }
   });
 

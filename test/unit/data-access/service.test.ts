@@ -25,8 +25,8 @@ describe("data-access service", () => {
     expect(Object.keys(dataAccessService).sort()).toEqual([
       "diff",
       "inspect",
-      "save",
-      "search"
+      "query",
+      "save"
     ]);
   });
 
@@ -57,47 +57,37 @@ describe("data-access service", () => {
     expect(alphaSaved.ok).toBe(true);
     expect(betaSaved.ok).toBe(true);
 
-    const alphaSearch = await dataAccessService.search({
+    const alphaQuery = await dataAccessService.query({
       target: {
         kind: "project-root",
         projectRoot: alphaRoot
       },
-      query: "deployment fact",
-      limit: 10
+      question: "deployment fact"
     });
-    const betaSearch = await dataAccessService.search({
+    const betaQuery = await dataAccessService.query({
       target: {
         kind: "project-root",
         projectRoot: betaRoot
       },
-      query: "deployment fact",
-      limit: 10
+      question: "deployment fact"
     });
 
-    expect(alphaSearch.ok).toBe(true);
-    expect(betaSearch.ok).toBe(true);
+    expect(alphaQuery.ok).toBe(true);
+    expect(betaQuery.ok).toBe(true);
 
-    if (!alphaSearch.ok || !betaSearch.ok) {
+    if (!alphaQuery.ok || !betaQuery.ok) {
       return;
     }
 
-    expect(alphaSearch.meta.project_root).toBe(alphaRoot);
-    expect(alphaSearch.meta.memory_root).toBe(join(alphaRoot, ".memory"));
-    expect(betaSearch.meta.project_root).toBe(betaRoot);
-    expect(betaSearch.meta.memory_root).toBe(join(betaRoot, ".memory"));
+    expect(alphaQuery.meta.project_root).toBe(alphaRoot);
+    expect(alphaQuery.meta.memory_root).toBe(join(alphaRoot, ".memory"));
+    expect(betaQuery.meta.project_root).toBe(betaRoot);
+    expect(betaQuery.meta.memory_root).toBe(join(betaRoot, ".memory"));
 
-    expect(alphaSearch.data.matches.map((match) => match.title)).toContain(
-      "Alpha-only deployment fact"
-    );
-    expect(alphaSearch.data.matches.map((match) => match.title)).not.toContain(
-      "Beta-only deployment fact"
-    );
-    expect(betaSearch.data.matches.map((match) => match.title)).toContain(
-      "Beta-only deployment fact"
-    );
-    expect(betaSearch.data.matches.map((match) => match.title)).not.toContain(
-      "Alpha-only deployment fact"
-    );
+    expect(alphaQuery.data.included_ids).toContain("gotcha.alpha-deployment-fact");
+    expect(alphaQuery.data.included_ids).not.toContain("gotcha.beta-deployment-fact");
+    expect(betaQuery.data.included_ids).toContain("gotcha.beta-deployment-fact");
+    expect(betaQuery.data.included_ids).not.toContain("gotcha.alpha-deployment-fact");
   });
 
   it("resolves nested cwd targets to the initialized project boundary", async () => {

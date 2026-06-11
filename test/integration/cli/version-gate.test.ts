@@ -39,7 +39,7 @@ afterEach(async () => {
 describe("storage version gate", () => {
   it.each([
     ["inspect", ["node", "memory", "inspect", "project.legacy-v4", "--json"]],
-    ["search", ["node", "memory", "search", "legacy", "--json"]],
+    ["query", ["node", "memory", "query", "legacy", "--json"]],
     ["check", ["node", "memory", "check", "--json"]],
     ["rebuild", ["node", "memory", "rebuild", "--json"]]
   ] as const)(

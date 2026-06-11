@@ -66,16 +66,13 @@ interface SaveData {
   index_updated: boolean;
 }
 
-interface SearchData {
-  matches: Array<{
-    id: string;
-    type: string;
-    status: string;
-    title: string;
-    snippet: string;
-    body_path: string;
-    score: number;
-  }>;
+interface QueryData {
+  question: string;
+  markdown: string;
+  included_ids: string[];
+  connected_ids: string[];
+  estimated_tokens: number;
+  truncated: boolean;
 }
 
 interface InspectData {
@@ -122,8 +119,8 @@ interface TextContent {
 
 const REQUIRED_MCP_TOOLS = [
   "inspect_memory",
-  "save_memory",
-  "search_memory"
+  "query_memory",
+  "save_memory"
 ] as const;
 
 const FORBIDDEN_MCP_TOOLS = [
@@ -221,27 +218,24 @@ describe("memory full MCP workflow", () => {
       });
       expect((await git(repo, ["rev-parse", "HEAD"])).trim()).toBe(headBeforeSave);
 
-      const mcpSearch = parseToolEnvelope<SuccessEnvelope<SearchData>>(
+      const mcpQuery = parseToolEnvelope<SuccessEnvelope<QueryData>>(
         await started.client.callTool({
-          name: "search_memory",
+          name: "query_memory",
           arguments: {
-            query: "MCP routine workflow",
-            limit: 10
+            question: "MCP routine workflow"
           }
         })
       );
-      const cliSearch = parseCliEnvelope<SearchData>(
+      const cliQuery = parseCliEnvelope<QueryData>(
         await expectSuccessfulMemoryCli(repo, [
-          "search",
+          "query",
           "MCP routine workflow",
-          "--limit",
-          "10",
           "--json"
         ])
       );
 
-      expect(mcpSearch).toEqual(cliSearch);
-      expect(searchIds(mcpSearch)).toContain("decision.mcp-routine-workflow");
+      expect(mcpQuery).toEqual(cliQuery);
+      expect(includedIds(mcpQuery)).toContain("decision.mcp-routine-workflow");
 
       const mcpInspect = parseToolEnvelope<SuccessEnvelope<InspectData>>(
         await started.client.callTool({
@@ -447,7 +441,7 @@ function createWorkflowSaveArguments() {
         id: "decision.mcp-routine-workflow",
         title: "MCP routine workflow",
         body:
-          "MCP routine workflow agents use search_memory, inspect_memory, and save_memory for normal project memory work. Relevant file src/mcp/server.ts.",
+          "MCP routine workflow agents use query_memory, inspect_memory, and save_memory for normal project memory work. Relevant file src/mcp/server.ts.",
         tags: ["mcp", "workflow", "routine"]
       },
       {
@@ -491,8 +485,8 @@ function parseToolEnvelope<T>(result: unknown): T {
   return result.structuredContent as T;
 }
 
-function searchIds(envelope: SuccessEnvelope<SearchData>): string[] {
-  return envelope.data.matches.map((match) => match.id);
+function includedIds(envelope: SuccessEnvelope<QueryData>): string[] {
+  return envelope.data.included_ids;
 }
 
 function isTextContent(value: unknown): value is TextContent {

@@ -14,10 +14,10 @@ import {
 import { registerInitCommand } from "./commands/init.js";
 import { registerInspectCommand } from "./commands/inspect.js";
 import { registerProjectsCommand } from "./commands/projects.js";
+import { registerQueryCommand } from "./commands/query.js";
 import { registerRebuildCommand } from "./commands/rebuild.js";
 import { registerResetCommand } from "./commands/reset.js";
 import { registerSaveCommand } from "./commands/save.js";
-import { registerSearchCommand } from "./commands/search.js";
 import { registerUpgradeCommand } from "./commands/upgrade.js";
 import {
   registerViewCommand,
@@ -91,7 +91,7 @@ export function createCliProgram(options: CliMainOptions = {}): Command {
     stdout: writeOut,
     stderr: writeErr
   });
-  registerSearchCommand(program, {
+  registerQueryCommand(program, {
     cwd: options.cwd ?? process.cwd(),
     stdout: writeOut,
     stderr: writeErr
@@ -254,7 +254,7 @@ const AUTO_REGISTER_COMMANDS = new Set([
   "init",
   "check",
   "rebuild",
-  "search",
+  "query",
   "inspect",
   "diff",
   "save",

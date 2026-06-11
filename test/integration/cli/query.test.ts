@@ -21,18 +21,15 @@ interface CliRunResult {
   stderr: string;
 }
 
-interface SearchEnvelope {
+interface QueryEnvelope {
   ok: true;
   data: {
-    matches: Array<{
-      id: string;
-      type: string;
-      status: string;
-      title: string;
-      snippet: string;
-      body_path: string;
-      score: number;
-    }>;
+    question: string;
+    markdown: string;
+    included_ids: string[];
+    connected_ids: string[];
+    estimated_tokens: number;
+    truncated: boolean;
   };
 }
 
@@ -55,50 +52,38 @@ afterEach(async () => {
   );
 });
 
-describe("memory search CLI", () => {
-  it("returns SQLite FTS search results in JSON mode", async () => {
-    const projectRoot = await createInitializedProject("memory-cli-search-json-");
-    await writeSearchFixtures(projectRoot);
+describe("memory query CLI", () => {
+  it("returns the token-budgeted query envelope in JSON mode", async () => {
+    const projectRoot = await createInitializedProject("memory-cli-query-json-");
+    await writeQueryFixtures(projectRoot);
     await rebuildProject(projectRoot);
 
     const output = await runCli(
-      [
-        "node",
-        "memory",
-        "search",
-        "Stripe webhook idempotency",
-        "--limit",
-        "10",
-        "--json"
-      ],
+      ["node", "memory", "query", "Stripe webhook idempotency", "--json"],
       projectRoot
     );
 
     expect(output.exitCode).toBe(0);
     expect(output.stderr).toBe("");
-    const envelope = JSON.parse(output.stdout) as SearchEnvelope;
-    const ids = envelope.data.matches.map((match) => match.id);
-    const webhook = envelope.data.matches.find(
-      (match) => match.id === "decision.webhook-idempotency"
-    );
+    const envelope = JSON.parse(output.stdout) as QueryEnvelope;
 
     expect(envelope.ok).toBe(true);
-    expect(ids).toContain("decision.webhook-idempotency");
-    expect(ids).toContain("feature.webhook-context");
-    expect(ids).toContain("decision.old-webhook-queue");
-    expect(webhook).toMatchObject({
-      id: "decision.webhook-idempotency",
-      type: "decision",
-      status: "active",
-      title: "Webhook idempotency",
-      body_path: ".memory/memory/decisions/webhook-idempotency.md"
-    });
-    expect(webhook?.snippet).toContain("Stripe may deliver duplicate webhook events");
-    expect(typeof webhook?.score).toBe("number");
+    expect(envelope.data.question).toBe("Stripe webhook idempotency");
+    expect(envelope.data.included_ids).toContain("decision.webhook-idempotency");
+    expect(envelope.data.markdown).toContain("## Matches");
+    expect(envelope.data.markdown).toContain(
+      "### decision.webhook-idempotency — Webhook idempotency  [active]"
+    );
+    expect(envelope.data.markdown).toContain(
+      "Stripe may deliver duplicate webhook events"
+    );
+    expect(Array.isArray(envelope.data.connected_ids)).toBe(true);
+    expect(envelope.data.estimated_tokens).toBeGreaterThan(0);
+    expect(envelope.data.truncated).toBe(false);
   });
 
-  it("matches anchor path fragments without hint flags", async () => {
-    const projectRoot = await createInitializedProject("memory-cli-search-anchors-");
+  it("matches anchor path fragments in the question", async () => {
+    const projectRoot = await createInitializedProject("memory-cli-query-anchors-");
     await writeMemoryObject(projectRoot, {
       id: "decision.anchored-ranking",
       type: "decision",
@@ -113,49 +98,77 @@ describe("memory search CLI", () => {
     });
     await rebuildProject(projectRoot);
 
-    const searchOutput = await runCli(
-      ["node", "memory", "search", "rank.ts", "--limit", "10", "--json"],
+    const output = await runCli(
+      ["node", "memory", "query", "rank.ts", "--json"],
       projectRoot
     );
 
-    expect(searchOutput.exitCode).toBe(0);
+    expect(output.exitCode).toBe(0);
 
-    const searchEnvelope = JSON.parse(searchOutput.stdout) as SearchEnvelope;
+    const envelope = JSON.parse(output.stdout) as QueryEnvelope;
 
-    expect(searchEnvelope.data.matches[0]).toMatchObject({
-      id: "decision.anchored-ranking",
-      status: "active"
-    });
-  });
-
-  it("rejects removed retrieval hint flags", async () => {
-    const projectRoot = await createInitializedProject("memory-cli-search-no-hints-");
-
-    const searchOutput = await runCli(
-      ["node", "memory", "search", "opaque", "--file", "src/context/rank.ts"],
-      projectRoot
+    expect(envelope.data.included_ids).toContain("decision.anchored-ranking");
+    expect(envelope.data.markdown).toContain(
+      "### decision.anchored-ranking — Anchored ranking  [active]"
     );
-
-    expect(searchOutput.exitCode).toBe(2);
-    expect(searchOutput.stderr).toContain("--file");
   });
 
-  it("prints compact human search results", async () => {
-    const projectRoot = await createInitializedProject("memory-cli-search-human-");
-    await writeSearchFixtures(projectRoot);
+  it("accepts the --budget flag", async () => {
+    const projectRoot = await createInitializedProject("memory-cli-query-budget-");
+    await writeQueryFixtures(projectRoot);
     await rebuildProject(projectRoot);
 
     const output = await runCli(
-      ["node", "memory", "search", "Stripe webhook idempotency"],
+      [
+        "node",
+        "memory",
+        "query",
+        "Stripe webhook idempotency",
+        "--budget",
+        "600",
+        "--json"
+      ],
       projectRoot
     );
 
     expect(output.exitCode).toBe(0);
     expect(output.stderr).toBe("");
-    expect(output.stdout).toContain("decision.webhook-idempotency");
-    expect(output.stdout).toContain("Title: Webhook idempotency");
-    expect(output.stdout).toContain("Path: .memory/memory/decisions/webhook-idempotency.md");
-    expect(output.stdout).toContain("Snippet:");
+    const envelope = JSON.parse(output.stdout) as QueryEnvelope;
+
+    expect(envelope.ok).toBe(true);
+    expect(envelope.data.estimated_tokens).toBeLessThanOrEqual(600);
+    expect(envelope.data.included_ids.length).toBeGreaterThan(0);
+  });
+
+  it("rejects removed search-era flags", async () => {
+    const projectRoot = await createInitializedProject("memory-cli-query-no-limit-");
+
+    const output = await runCli(
+      ["node", "memory", "query", "opaque", "--limit", "10"],
+      projectRoot
+    );
+
+    expect(output.exitCode).toBe(2);
+    expect(output.stderr).toContain("--limit");
+  });
+
+  it("prints the markdown subgraph as human output", async () => {
+    const projectRoot = await createInitializedProject("memory-cli-query-human-");
+    await writeQueryFixtures(projectRoot);
+    await rebuildProject(projectRoot);
+
+    const output = await runCli(
+      ["node", "memory", "query", "Stripe webhook idempotency"],
+      projectRoot
+    );
+
+    expect(output.exitCode).toBe(0);
+    expect(output.stderr).toBe("");
+    expect(output.stdout).toContain("## Matches");
+    expect(output.stdout).toContain(
+      "### decision.webhook-idempotency — Webhook idempotency  [active]"
+    );
+    expect(output.stdout).toContain("Stripe may deliver duplicate webhook events");
     expect(() => JSON.parse(output.stdout) as unknown).toThrow();
   });
 });
@@ -220,7 +233,7 @@ async function createTempRoot(prefix: string): Promise<string> {
   return resolvedRoot;
 }
 
-async function writeSearchFixtures(projectRoot: string): Promise<void> {
+async function writeQueryFixtures(projectRoot: string): Promise<void> {
   await writeMemoryObject(projectRoot, {
     id: "decision.webhook-idempotency",
     type: "decision",

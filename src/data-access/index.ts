@@ -17,8 +17,8 @@ export {
   type DataAccessDiffInput,
   type DataAccessInspectInput,
   type DataAccessProjectTarget,
+  type DataAccessQueryInput,
   type DataAccessSaveInput,
-  type DataAccessSearchInput,
   type DataAccessService
 } from "./service.js";
 
@@ -29,3 +29,5 @@ export type {
   MemoryRelationSummary,
   SaveMemoryData
 } from "../app/operations.js";
+
+export type { QueryMemoryData } from "../query/render.js";

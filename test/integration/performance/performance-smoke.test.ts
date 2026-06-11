@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   initProject,
+  queryMemory,
   rebuildIndex,
-  saveMemoryPatch,
-  searchMemory
+  saveMemoryPatch
 } from "../../../src/app/operations.js";
 import type {
   MemoryEvent,
@@ -97,19 +97,19 @@ describe("performance smoke tests", () => {
       );
       expect(rebuilt.data.events_indexed).toBeGreaterThanOrEqual(GENERATED_EVENT_COUNT);
 
-      const searched = await withLocalTimeout("search memory", OPERATION_TIMEOUT_MS, () =>
-        searchMemory({
+      const queried = await withLocalTimeout("query memory", OPERATION_TIMEOUT_MS, () =>
+        queryMemory({
           cwd: projectRoot,
-          query: PERFORMANCE_QUERY,
-          limit: 10
+          question: PERFORMANCE_QUERY,
+          tokenBudget: 8000
         })
       );
 
-      expect(searched.ok).toBe(true);
-      if (!searched.ok) {
-        throw new Error(searched.error.message);
+      expect(queried.ok).toBe(true);
+      if (!queried.ok) {
+        throw new Error(queried.error.message);
       }
-      expect(searched.data.matches.map((match) => match.id)).toContain(targetObjectId);
+      expect(queried.data.included_ids).toContain(targetObjectId);
 
       const saved = await withLocalTimeout("save small patch", OPERATION_TIMEOUT_MS, () =>
         saveMemoryPatch({
@@ -142,22 +142,22 @@ describe("performance smoke tests", () => {
       expect(saved.data.events_appended).toBe(1);
       expect(saved.data.index_updated).toBe(true);
 
-      const searchedAfterSave = await withLocalTimeout(
-        "search saved memory",
+      const queriedAfterSave = await withLocalTimeout(
+        "query saved memory",
         OPERATION_TIMEOUT_MS,
         () =>
-          searchMemory({
+          queryMemory({
             cwd: projectRoot,
-            query: "gotcha.performance-smoke-saved-note",
-            limit: 10
+            question: "gotcha.performance-smoke-saved-note",
+            tokenBudget: 8000
           })
       );
 
-      expect(searchedAfterSave.ok).toBe(true);
-      if (!searchedAfterSave.ok) {
-        throw new Error(searchedAfterSave.error.message);
+      expect(queriedAfterSave.ok).toBe(true);
+      if (!queriedAfterSave.ok) {
+        throw new Error(queriedAfterSave.error.message);
       }
-      expect(searchedAfterSave.data.matches.map((match) => match.id)).toContain(
+      expect(queriedAfterSave.data.included_ids).toContain(
         "gotcha.performance-smoke-saved-note"
       );
     },

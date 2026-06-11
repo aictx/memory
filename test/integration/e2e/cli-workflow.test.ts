@@ -63,16 +63,13 @@ interface SaveData {
   index_updated: boolean;
 }
 
-interface SearchData {
-  matches: Array<{
-    id: string;
-    type: string;
-    status: string;
-    title: string;
-    snippet: string;
-    body_path: string;
-    score: number;
-  }>;
+interface QueryData {
+  question: string;
+  markdown: string;
+  included_ids: string[];
+  connected_ids: string[];
+  estimated_tokens: number;
+  truncated: boolean;
 }
 
 interface CheckData {
@@ -130,18 +127,18 @@ describe("memory full CLI workflow", () => {
     expect(saveEnvelope.data.index_updated).toBe(true);
     expect(saveEnvelope.meta.git.dirty).toBe(true);
 
-    const searched = parseSuccessEnvelope<SearchData>(
+    const queried = parseSuccessEnvelope<QueryData>(
       (
         await expectSuccessfulCli([
           "node",
           "memory",
-          "search",
+          "query",
           "workflow retry queue",
           "--json"
         ], repo)
       ).stdout
     );
-    expect(searchIds(searched)).toContain("decision.workflow-retry-queue");
+    expect(includedIds(queried)).toContain("decision.workflow-retry-queue");
 
     const outsideDirtyContent = "outside dirty change must stay out of memory diff\n";
     await writeFile(join(repo, "src.ts"), outsideDirtyContent, "utf8");
@@ -182,18 +179,18 @@ describe("memory full CLI workflow", () => {
     expect(save.data.index_updated).toBe(true);
     expect(save.meta.git.available).toBe(false);
 
-    const searched = parseSuccessEnvelope<SearchData>(
+    const queried = parseSuccessEnvelope<QueryData>(
       (
         await expectSuccessfulCli([
           "node",
           "memory",
-          "search",
+          "query",
           "non git workflow search",
           "--json"
         ], projectRoot)
       ).stdout
     );
-    expect(searchIds(searched)).toContain("decision.nongit-cli-workflow");
+    expect(includedIds(queried)).toContain("decision.nongit-cli-workflow");
 
     const checked = parseSuccessEnvelope<CheckData>(
       (await expectSuccessfulCli(["node", "memory", "check", "--json"], projectRoot)).stdout
@@ -219,18 +216,18 @@ describe("memory full CLI workflow", () => {
       expect(envelope.meta.git.available).toBe(false);
     }
 
-    const searchAfterFailures = parseSuccessEnvelope<SearchData>(
+    const queryAfterFailures = parseSuccessEnvelope<QueryData>(
       (
         await expectSuccessfulCli([
           "node",
           "memory",
-          "search",
+          "query",
           "non git workflow search",
           "--json"
         ], projectRoot)
       ).stdout
     );
-    expect(searchIds(searchAfterFailures)).toContain("decision.nongit-cli-workflow");
+    expect(includedIds(queryAfterFailures)).toContain("decision.nongit-cli-workflow");
   });
 });
 
@@ -333,8 +330,8 @@ function parseErrorEnvelope(stdout: string): ErrorEnvelope {
   return JSON.parse(stdout) as ErrorEnvelope;
 }
 
-function searchIds(envelope: SuccessEnvelope<SearchData>): string[] {
-  return envelope.data.matches.map((match) => match.id);
+function includedIds(envelope: SuccessEnvelope<QueryData>): string[] {
+  return envelope.data.included_ids;
 }
 
 function createCapturedOutput(): {

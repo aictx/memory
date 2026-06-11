@@ -6,7 +6,7 @@ import { Readable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { main, type CliOutputWriter } from "../../../src/cli/main.js";
-import { searchMemory } from "../../../src/app/operations.js";
+import { queryMemory } from "../../../src/app/operations.js";
 import { runSubprocess } from "../../../src/core/subprocess.js";
 import { dataAccessService } from "../../../src/data-access/index.js";
 import { readCanonicalStorage } from "../../../src/storage/read.js";
@@ -106,14 +106,14 @@ describe("memory save CLI", () => {
       ]);
     }
 
-    const searched = await searchMemory({
+    const queried = await queryMemory({
       cwd: projectRoot,
-      query: "billing retries worker",
+      question: "billing retries worker",
       clock: createFixedTestClock()
     });
-    expect(searched.ok).toBe(true);
-    if (searched.ok) {
-      expect(searched.data.matches.map((match) => match.id)).toContain(
+    expect(queried.ok).toBe(true);
+    if (queried.ok) {
+      expect(queried.data.included_ids).toContain(
         "decision.billing-retries-run-in-the-worker"
       );
     }

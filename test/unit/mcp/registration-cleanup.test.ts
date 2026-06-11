@@ -7,21 +7,21 @@ const root = process.cwd();
 
 const mcpSourcePaths = [
   "src/mcp/server.ts",
-  "src/mcp/tools/search-memory.ts",
+  "src/mcp/tools/query-memory.ts",
   "src/mcp/tools/inspect-memory.ts",
   "src/mcp/tools/save-memory.ts"
 ] as const;
 
 const toolSourcePaths = [
-  "src/mcp/tools/search-memory.ts",
+  "src/mcp/tools/query-memory.ts",
   "src/mcp/tools/inspect-memory.ts",
   "src/mcp/tools/save-memory.ts"
 ] as const;
 
 const exactMcpToolNames = [
   "inspect_memory",
-  "save_memory",
-  "search_memory"
+  "query_memory",
+  "save_memory"
 ] as const;
 
 async function readProjectFile(path: string): Promise<string> {

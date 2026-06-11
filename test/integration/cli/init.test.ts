@@ -147,7 +147,7 @@ describe("memory init CLI", () => {
     );
 
     output = createCapturedOutput();
-    expect(await main(["node", "memory", "search", "legacy migration", "--json"], {
+    expect(await main(["node", "memory", "query", "legacy migration", "--json"], {
       ...output.writers,
       cwd: projectRoot,
       registry: { enabled: false }

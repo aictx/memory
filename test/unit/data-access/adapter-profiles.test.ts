@@ -17,13 +17,13 @@ describe("data-access adapter profiles", () => {
       status: "active"
     });
     expect(mappingByToolName(profile)).toEqual({
-      search_memory: "search",
+      query_memory: "query",
       inspect_memory: "inspect",
       save_memory: "save"
     });
   });
 
-  it("maps the future generic profile to search and inspect only", () => {
+  it("maps the future generic profile to query and inspect only", () => {
     const profile = selectHostAdapterProfile("future-generic");
 
     expect(profile).toMatchObject({
@@ -31,7 +31,7 @@ describe("data-access adapter profiles", () => {
       status: "inactive"
     });
     expect(mappingByToolName(profile)).toEqual({
-      search: "search",
+      search: "query",
       fetch: "inspect"
     });
   });
@@ -46,7 +46,7 @@ describe("data-access adapter profiles", () => {
 
     expect(defaultProfiles.map((profile) => profile.id)).toEqual(["local-mcp"]);
     expect(defaultToolNames).toEqual([
-      "search_memory",
+      "query_memory",
       "inspect_memory",
       "save_memory"
     ]);

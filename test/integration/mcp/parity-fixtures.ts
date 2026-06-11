@@ -219,7 +219,7 @@ export async function writeParityReadFixtures(projectRoot: string): Promise<void
     title: "Parity shared read",
     bodyPath: "memory/decisions/parity-shared-read.md",
     body:
-      "# Parity shared read\n\nShared adapter parity keeps CLI JSON and MCP structured content equivalent for search_memory and inspect_memory.\n",
+      "# Parity shared read\n\nShared adapter parity keeps CLI JSON and MCP structured content equivalent for query_memory and inspect_memory.\n",
     tags: ["parity", "shared", "mcp"],
     anchors: ["src/data-access/service.ts"],
     evidence: [{ kind: "file", id: "src/data-access/service.ts" }],

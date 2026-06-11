@@ -125,8 +125,8 @@ describe("memory MCP server bootstrap", () => {
 
       expect(toolNames).toEqual([
         "inspect_memory",
-        "save_memory",
-        "search_memory"
+        "query_memory",
+        "save_memory"
       ]);
       expect(toolNames).not.toEqual(
         expect.arrayContaining([
@@ -235,41 +235,31 @@ describe("memory MCP server bootstrap", () => {
         }
       });
 
-      const alphaSearch = parseToolEnvelope<SearchEnvelope>(
+      const alphaQuery = parseToolEnvelope<QueryEnvelope>(
         await started.client.callTool({
-          name: "search_memory",
+          name: "query_memory",
           arguments: {
             project_root: alphaRoot,
-            query: "deployment fact",
-            limit: 10
+            question: "deployment fact"
           }
         })
       );
-      const betaSearch = parseToolEnvelope<SearchEnvelope>(
+      const betaQuery = parseToolEnvelope<QueryEnvelope>(
         await started.client.callTool({
-          name: "search_memory",
+          name: "query_memory",
           arguments: {
             project_root: betaRoot,
-            query: "deployment fact",
-            limit: 10
+            question: "deployment fact"
           }
         })
       );
 
-      expect(alphaSearch.ok).toBe(true);
-      expect(betaSearch.ok).toBe(true);
-      expect(alphaSearch.data.matches.map((match) => match.title)).toContain(
-        "Alpha-only deployment fact"
-      );
-      expect(alphaSearch.data.matches.map((match) => match.title)).not.toContain(
-        "Beta-only deployment fact"
-      );
-      expect(betaSearch.data.matches.map((match) => match.title)).toContain(
-        "Beta-only deployment fact"
-      );
-      expect(betaSearch.data.matches.map((match) => match.title)).not.toContain(
-        "Alpha-only deployment fact"
-      );
+      expect(alphaQuery.ok).toBe(true);
+      expect(betaQuery.ok).toBe(true);
+      expect(alphaQuery.data.markdown).toContain("Alpha-only deployment fact");
+      expect(alphaQuery.data.markdown).not.toContain("Beta-only deployment fact");
+      expect(betaQuery.data.markdown).toContain("Beta-only deployment fact");
+      expect(betaQuery.data.markdown).not.toContain("Alpha-only deployment fact");
     } finally {
       await started.close();
     }
@@ -278,12 +268,11 @@ describe("memory MCP server bootstrap", () => {
   });
 });
 
-interface SearchEnvelope {
+interface QueryEnvelope {
   ok: true;
   data: {
-    matches: Array<{
-      title: string;
-    }>;
+    markdown: string;
+    included_ids: string[];
   };
 }
 

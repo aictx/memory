@@ -88,7 +88,7 @@ describe("memory projects CLI", () => {
     await runCli(["node", "memory", "projects", "remove", registryIdAfterCheck ?? "", "--json"], projectRoot, memoryHome);
     await expectRegisteredProjectCount(projectRoot, memoryHome, 0);
 
-    const search = await runCli(["node", "memory", "search", "project context", "--json"], projectRoot, memoryHome, true);
+    const search = await runCli(["node", "memory", "query", "project context", "--json"], projectRoot, memoryHome, true);
     expect(search.exitCode).toBe(0);
     await expectRegisteredProjectCount(projectRoot, memoryHome, 1);
   });

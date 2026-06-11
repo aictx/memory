@@ -60,18 +60,15 @@ interface CliRunResult {
   stderr: string;
 }
 
-interface SearchEnvelope {
+interface QueryEnvelope {
   ok: true;
   data: {
-    matches: Array<{
-      id: string;
-      type: string;
-      status: string;
-      title: string;
-      snippet: string;
-      body_path: string;
-      score: number;
-    }>;
+    question: string;
+    markdown: string;
+    included_ids: string[];
+    connected_ids: string[];
+    estimated_tokens: number;
+    truncated: boolean;
   };
 }
 
@@ -179,8 +176,8 @@ describe("memory MCP read tools", () => {
 
       expect(toolNames).toEqual([
         "inspect_memory",
-        "save_memory",
-        "search_memory"
+        "query_memory",
+        "save_memory"
       ]);
       expect(toolNames).not.toEqual(
         expect.arrayContaining([
@@ -234,16 +231,16 @@ describe("memory MCP read tools", () => {
     try {
       const invalidCalls = await Promise.all([
         started.client.callTool({
-          name: "search_memory",
+          name: "query_memory",
           arguments: {
-            query: "Schema validation",
+            question: "Schema validation",
             unexpected: true
           }
         }),
         started.client.callTool({
-          name: "search_memory",
+          name: "query_memory",
           arguments: {
-            query: "Schema validation",
+            question: "Schema validation",
             hints: {
               files: ["src/index/search.ts"]
             }
@@ -269,40 +266,30 @@ describe("memory MCP read tools", () => {
     await expect(readdir(projectRoot)).resolves.toEqual([]);
   });
 
-  it("returns search_memory data matching CLI search JSON", async () => {
-    const projectRoot = await createInitializedProject("memory-mcp-search-");
+  it("returns query_memory data matching CLI query JSON", async () => {
+    const projectRoot = await createInitializedProject("memory-mcp-query-");
     await writeLoadSearchFixtures(projectRoot);
     await rebuildProject(projectRoot);
     const started = await startMcpClient(projectRoot);
 
     try {
       const cli = await runCli(
-        [
-          "node",
-          "memory",
-          "search",
-          "Stripe webhook idempotency",
-          "--limit",
-          "10",
-          "--json"
-        ],
+        ["node", "memory", "query", "Stripe webhook idempotency", "--json"],
         projectRoot
       );
       const mcp = await started.client.callTool({
-        name: "search_memory",
+        name: "query_memory",
         arguments: {
-          query: "Stripe webhook idempotency",
-          limit: 10
+          question: "Stripe webhook idempotency"
         }
       });
-      const cliEnvelope = parseCliEnvelope<SearchEnvelope>(cli);
-      const mcpEnvelope = parseToolEnvelope<SearchEnvelope>(mcp);
+      const cliEnvelope = parseCliEnvelope<QueryEnvelope>(cli);
+      const mcpEnvelope = parseToolEnvelope<QueryEnvelope>(mcp);
 
       expect(mcpEnvelope).toEqual(cliEnvelope);
-      expect(mcpEnvelope.data.matches.map((match) => match.id)).toContain(
-        "decision.webhook-idempotency"
-      );
-      expect(mcpEnvelope.data.matches.map((match) => match.id)).toContain("feature.webhook-context");
+      expect(mcpEnvelope.data.question).toBe("Stripe webhook idempotency");
+      expect(mcpEnvelope.data.included_ids).toContain("decision.webhook-idempotency");
+      expect(mcpEnvelope.data.markdown).toContain("## Matches");
     } finally {
       await started.close();
     }
@@ -310,8 +297,8 @@ describe("memory MCP read tools", () => {
     expect(started.stderr()).toBe("");
   });
 
-  it("matches anchor path fragments through CLI and MCP search", async () => {
-    const projectRoot = await createInitializedProject("memory-mcp-search-anchors-");
+  it("matches anchor path fragments through CLI and MCP query", async () => {
+    const projectRoot = await createInitializedProject("memory-mcp-query-anchors-");
     await writeMemoryObject(projectRoot, {
       id: "decision.anchored-ranking",
       type: "decision",
@@ -329,24 +316,23 @@ describe("memory MCP read tools", () => {
 
     try {
       const cli = await runCli(
-        ["node", "memory", "search", "rank.ts", "--limit", "10", "--json"],
+        ["node", "memory", "query", "rank.ts", "--json"],
         projectRoot
       );
       const mcp = await started.client.callTool({
-        name: "search_memory",
+        name: "query_memory",
         arguments: {
-          query: "rank.ts",
-          limit: 10
+          question: "rank.ts"
         }
       });
-      const cliEnvelope = parseCliEnvelope<SearchEnvelope>(cli);
-      const mcpEnvelope = parseToolEnvelope<SearchEnvelope>(mcp);
+      const cliEnvelope = parseCliEnvelope<QueryEnvelope>(cli);
+      const mcpEnvelope = parseToolEnvelope<QueryEnvelope>(mcp);
 
       expect(mcpEnvelope).toEqual(cliEnvelope);
-      expect(mcpEnvelope.data.matches[0]).toMatchObject({
-        id: "decision.anchored-ranking",
-        status: "active"
-      });
+      expect(mcpEnvelope.data.included_ids).toContain("decision.anchored-ranking");
+      expect(mcpEnvelope.data.markdown).toContain(
+        "### decision.anchored-ranking — Anchored ranking  [active]"
+      );
     } finally {
       await started.close();
     }
@@ -470,35 +456,24 @@ describe("memory MCP read tools", () => {
     const started = await startParityMcpClient(serverRoot);
 
     try {
-      const cliSearch = parseParityCliEnvelope<SearchEnvelope>(
+      const cliQuery = parseParityCliEnvelope<QueryEnvelope>(
         await runParityCli(
-          [
-            "node",
-            "memory",
-            "search",
-            "shared adapter parity",
-            "--limit",
-            "10",
-            "--json"
-          ],
+          ["node", "memory", "query", "shared adapter parity", "--json"],
           gitProject
         )
       );
-      const mcpSearch = parseParityToolEnvelope<SearchEnvelope>(
+      const mcpQuery = parseParityToolEnvelope<QueryEnvelope>(
         await started.client.callTool({
-          name: "search_memory",
+          name: "query_memory",
           arguments: {
             project_root: gitProject,
-            query: "shared adapter parity",
-            limit: 10
+            question: "shared adapter parity"
           }
         })
       );
 
-      expect(mcpSearch).toEqual(cliSearch);
-      expect(mcpSearch.data.matches.map((match) => match.id)).toContain(
-        "decision.parity-shared-read"
-      );
+      expect(mcpQuery).toEqual(cliQuery);
+      expect(mcpQuery.data.included_ids).toContain("decision.parity-shared-read");
 
       const cliInspect = parseParityCliEnvelope<InspectEnvelope>(
         await runParityCli(
@@ -897,7 +872,7 @@ function parseToolEnvelope<T>(result: unknown): T {
 }
 
 function expectToolAnnotations(tools: unknown[]): void {
-  expectToolAnnotation(tools, "search_memory", {
+  expectToolAnnotation(tools, "query_memory", {
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,

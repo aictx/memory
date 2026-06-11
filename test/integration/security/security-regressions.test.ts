@@ -28,8 +28,8 @@ const tempRoots: string[] = [];
 
 const REQUIRED_MCP_TOOLS = [
   "inspect_memory",
-  "save_memory",
-  "search_memory"
+  "query_memory",
+  "save_memory"
 ] as const;
 
 const FORBIDDEN_MCP_TOOLS = [
