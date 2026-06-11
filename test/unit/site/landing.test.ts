@@ -74,23 +74,23 @@ describe("site landing page", () => {
     const layout = await readFile(resolve(repoRoot, "site/src/layouts/BaseLayout.astro"), "utf8");
     const desktopViewerIndex = layout.indexOf('href={demoViewerUrl} rel="noreferrer">Demo Viewer</a>');
     const desktopDocsIndex = layout.indexOf('href="https://docs.aictx.dev" rel="noreferrer">Docs</a>');
-    const desktopUseCasesIndex = layout.indexOf('href="/use-cases/">Use Cases</a>');
     const mobileMenuStart = layout.indexOf('class="mobile-menu-panel"');
     const mobileMenuEnd = layout.indexOf('class="github-pill"');
     const mobileMenu = layout.slice(mobileMenuStart, mobileMenuEnd);
     const mobileViewerIndex = mobileMenu.indexOf('href={demoViewerUrl} rel="noreferrer">Demo Viewer</a>');
     const mobileDocsIndex = mobileMenu.indexOf('href="https://docs.aictx.dev" rel="noreferrer">Docs</a>');
-    const mobileUseCasesIndex = mobileMenu.indexOf('href="/use-cases/">Use Cases</a>');
 
     expect(layout).toContain("Open navigation menu");
-    expect(layout).toContain("Memory by Aictx - Persistent Memory for AI Coding Agents");
-    expect(layout).toContain("Memory by Aictx gives AI coding agents a local wiki for repo context");
+    expect(layout).toContain("Memory by Aictx - The Product Graph for AI Coding Agents");
+    expect(layout).toContain("Memory keeps the product graph of a codebase");
+    expect(layout).not.toContain("local wiki");
+    expect(layout).not.toContain("/use-cases/");
     expect(siteName).toBe("Memory by Aictx");
     expect(layout).toContain('<link rel="canonical" href={canonicalUrl} />');
     expect(layout).toContain('<meta property="og:site_name" content={siteName} />');
     expect(layout).toContain('<meta property="og:url" content={canonicalUrl} />');
     expect(layout).toContain('<meta property="og:image" content={socialImage} />');
-    expect(layout).toContain('<meta property="og:image:alt" content="Memory by Aictx project memory overview" />');
+    expect(layout).toContain('<meta property="og:image:alt" content="Memory by Aictx product graph overview" />');
     expect(layout).toContain('<meta name="twitter:card" content="summary_large_image" />');
     expect(layout).toContain('<meta name="twitter:image" content={socialImage} />');
     expect(layout).toContain("const websiteJsonLd = buildStructuredData(siteUrl);");
@@ -105,14 +105,10 @@ describe("site landing page", () => {
     expect(layout).not.toContain('href="/#demo">Demo Viewer</a>');
     expect(desktopViewerIndex).toBeGreaterThan(-1);
     expect(desktopDocsIndex).toBeGreaterThan(-1);
-    expect(desktopUseCasesIndex).toBeGreaterThan(-1);
     expect(desktopViewerIndex).toBeLessThan(desktopDocsIndex);
-    expect(desktopDocsIndex).toBeLessThan(desktopUseCasesIndex);
     expect(mobileViewerIndex).toBeGreaterThan(-1);
     expect(mobileDocsIndex).toBeGreaterThan(-1);
-    expect(mobileUseCasesIndex).toBeGreaterThan(-1);
     expect(mobileViewerIndex).toBeLessThan(mobileDocsIndex);
-    expect(mobileDocsIndex).toBeLessThan(mobileUseCasesIndex);
     expect(layout).not.toContain('href="/#workflow">How it works</a>');
     expect(layout).not.toContain(">Demo</a>");
     expect(layout).not.toContain("Discussions");
@@ -120,7 +116,7 @@ describe("site landing page", () => {
     expect(layout).toContain('<strong data-star-count="compact"></strong>');
     expect(layout).toContain("Footer navigation");
     expect(layout).toContain("<strong>Memory by Aictx</strong>");
-    expect(layout).toContain("A local wiki for AI agents, kept reviewable in your repo.");
+    expect(layout).toContain("The product graph of your codebase, kept local and reviewable in Git.");
     expect(layout).toContain('<a href="mailto:michele@remics.tech">Contact us</a>');
     await expect(stat(resolve(repoRoot, "site/public/favicon.ico"))).resolves.toMatchObject({
       size: expect.any(Number)
@@ -173,11 +169,10 @@ describe("site landing page", () => {
     const sitemapEndpoint = await readFile(resolve(repoRoot, "site/src/pages/sitemap.xml.ts"), "utf8");
     const llmsEndpoint = await readFile(resolve(repoRoot, "site/src/pages/llms.txt.ts"), "utf8");
     const docsRobots = await readFile(resolve(repoRoot, "docs/public/robots.txt"), "utf8");
-    const sitemap = buildSitemapXml([...staticSitePaths, "/blog/example-post/"]);
+    const sitemap = buildSitemapXml(staticSitePaths);
 
     expect(robotsEndpoint).toContain("robotsTxt");
-    expect(sitemapEndpoint).toContain('getCollection("blog")');
-    expect(sitemapEndpoint).toContain("buildSitemapXml(paths)");
+    expect(sitemapEndpoint).toContain("buildSitemapXml(staticSitePaths)");
     expect(llmsEndpoint).toContain("llmsTxt");
     expect(robotsTxt).toContain("User-agent: *");
     expect(robotsTxt).toContain("Allow: /");
@@ -188,19 +183,20 @@ describe("site landing page", () => {
     expect(llmsTxt).toContain("Homebrew: brew install aictx/tap/memory");
     expect(llmsTxt).toContain("CLI: memory");
     expect(llmsTxt).toContain("MCP server: memory-mcp");
-    expect(llmsTxt).toContain("Memory by Aictx gives AI coding agents a local wiki for repo context.");
     expect(llmsTxt).toContain(
-      "It stores durable project memory as reviewable local files agents can load before work and update after meaningful changes."
+      "Memory by Aictx keeps the product graph of a codebase: features with their lifecycle stage, decisions with their reasons, gotchas, and open questions — anchored to the code paths they describe."
     );
-    expect(llmsTxt).toContain("local wiki for AI agents");
-    expect(llmsTxt).toContain("auto-maintained project memory");
+    expect(llmsTxt).toContain("product graph for AI coding agents");
+    expect(llmsTxt).toContain("Getting started: https://docs.aictx.dev/getting-started/");
+    expect(llmsTxt).not.toContain("local wiki");
+    expect(llmsTxt).not.toContain("memory load");
+    expect(llmsTxt).not.toContain("agent-recipes");
     expect(llmsTxt).not.toContain("not affiliated");
     expect(llmsTxt).not.toContain("sponsored by");
     expect(llmsTxt).not.toContain("endorsed by");
     expect(sitemap).toContain("<loc>https://memory.aictx.dev/</loc>");
-    expect(sitemap).toContain("<loc>https://memory.aictx.dev/blog/</loc>");
-    expect(sitemap).toContain("<loc>https://memory.aictx.dev/use-cases/</loc>");
-    expect(sitemap).toContain("<loc>https://memory.aictx.dev/blog/example-post/</loc>");
+    expect(sitemap).not.toContain("/blog/");
+    expect(sitemap).not.toContain("/use-cases/");
   });
 
   it("keeps public identity copy calm and factual", async () => {
@@ -216,7 +212,7 @@ describe("site landing page", () => {
 
     expect(publicCopy).toContain("memory by aictx");
     expect(publicCopy).toContain("@aictx/memory");
-    expect(publicCopy).toContain("auto-maintained");
+    expect(publicCopy).toContain("product graph");
     expect(publicCopy).not.toContain("not affiliated");
     expect(publicCopy).not.toContain("sponsored by");
     expect(publicCopy).not.toContain("endorsed by");

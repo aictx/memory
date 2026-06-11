@@ -12,8 +12,8 @@ interface Props {
 }
 
 const {
-  title = "Memory by Aictx - Persistent Memory for AI Coding Agents",
-  description = "Memory by Aictx gives AI coding agents a local wiki for repo context, so every session stops starting from scratch.",
+  title = "Memory by Aictx - The Product Graph for AI Coding Agents",
+  description = "Memory keeps the product graph of a codebase: features, decisions, status — anchored to the code. Agents query it on demand and keep it current as the product changes.",
   ogType = "website",
   robots,
   structuredData
@@ -45,12 +45,12 @@ const structuredDataItems = [
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonicalUrl} />
     <meta property="og:image" content={socialImage} />
-    <meta property="og:image:alt" content="Memory by Aictx project memory overview" />
+    <meta property="og:image:alt" content="Memory by Aictx product graph overview" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={socialImage} />
-    <meta name="twitter:image:alt" content="Memory by Aictx project memory overview" />
+    <meta name="twitter:image:alt" content="Memory by Aictx product graph overview" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     {
@@ -70,7 +70,6 @@ const structuredDataItems = [
       <nav aria-label="Primary navigation">
         <a href={demoViewerUrl} rel="noreferrer">Demo Viewer</a>
         <a href="https://docs.aictx.dev" rel="noreferrer">Docs</a>
-        <a href="/use-cases/">Use Cases</a>
       </nav>
 
       <details class="mobile-menu">
@@ -82,7 +81,6 @@ const structuredDataItems = [
         <div class="mobile-menu-panel">
           <a href={demoViewerUrl} rel="noreferrer">Demo Viewer</a>
           <a href="https://docs.aictx.dev" rel="noreferrer">Docs</a>
-          <a href="/use-cases/">Use Cases</a>
           <a href="https://github.com/aictx/memory" rel="noreferrer">GitHub</a>
         </div>
       </details>
@@ -99,12 +97,11 @@ const structuredDataItems = [
     <footer class="site-footer">
       <div>
         <strong>Memory by Aictx</strong>
-        <p>A local wiki for AI agents, kept reviewable in your repo.</p>
+        <p>The product graph of your codebase, kept local and reviewable in Git.</p>
       </div>
       <nav class="footer-links" aria-label="Footer navigation">
         <a href="https://docs.aictx.dev" rel="noreferrer">Docs</a>
         <a href={demoViewerUrl} rel="noreferrer">Demo Viewer</a>
-        <a href="/use-cases/">Use Cases</a>
         <a href="https://github.com/aictx/memory" rel="noreferrer">GitHub</a>
         <a href="mailto:michele@remics.tech">Contact us</a>
       </nav>

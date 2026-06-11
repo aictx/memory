@@ -19,5 +19,5 @@ Aictx — Local-first product graph for AI coding agents: features, decisions, g
 
 **Recent decisions:** agent-authored-anchors — Anchors are agent-authored, CLI-verified · committed-sync-marker — Sync marker is committed state · map-only-push-context — The map is the only push-context · no-token-savings-claims — Never claim token savings · pivot-to-product-graph — Pivot to the product graph (2026-06-11)
 
-**Open questions:** graphify-interop — Import graphify output as anchor seeds? · readme-assets-stale — README and site images show the old product · rename-from-memory — Does the name 'Memory' undersell the product graph? · site-secondary-pages — Site secondary pages still carry old positioning
+**Open questions:** graphify-interop — Import graphify output as anchor seeds? · readme-assets-stale — README and site images show the old product · rename-from-memory — Does the name 'Memory' undersell the product graph?
 <!-- memory:map:end -->

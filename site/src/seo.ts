@@ -2,7 +2,7 @@ export const mainSiteUrl = "https://memory.aictx.dev";
 export const docsSiteUrl = "https://docs.aictx.dev";
 export const siteName = "Memory by Aictx";
 export const socialImagePath = "/assets/readme-value-header.png";
-export const staticSitePaths = ["/", "/blog/", "/use-cases/"] as const;
+export const staticSitePaths = ["/"] as const;
 
 export const robotsTxt = `User-agent: *
 Content-Signal: search=yes, ai-input=yes, ai-train=yes
@@ -13,36 +13,35 @@ Sitemap: ${mainSiteUrl}/sitemap.xml
 
 export const llmsTxt = `# Memory by Aictx
 
-Memory by Aictx gives AI coding agents a local wiki for repo context.
-It stores durable project memory as reviewable local files agents can load before work and update after meaningful changes.
+Memory by Aictx keeps the product graph of a codebase: features with their lifecycle stage, decisions with their reasons, gotchas, and open questions — anchored to the code paths they describe.
+AI coding agents build the graph once at init, query it on demand mid-task, and keep it current with diff-driven sync as the product changes.
+Everything stays local: plain files under .memory/ with a SQLite full-text index. No embeddings, no cloud account, no model API.
 It is distributed through the open source npm package @aictx/memory and the Homebrew formula aictx/tap/memory, then runs through the memory CLI and optional memory-mcp server.
-Use it as persistent memory and long-term project context for AI coding assistants including Codex, Claude Code, Cursor, Cline, OpenCode, and MCP-capable agents.
 
 Canonical public surfaces:
 - Website: ${mainSiteUrl}
 - Documentation: ${docsSiteUrl}
+- Getting started: ${docsSiteUrl}/getting-started/
+- Mental model: ${docsSiteUrl}/mental-model/
+- Agent integration: ${docsSiteUrl}/agent-integration/
+- MCP guide: ${docsSiteUrl}/mcp/
 - Repository: https://github.com/aictx/memory
 - Package: https://www.npmjs.com/package/@aictx/memory
 - Homebrew: brew install aictx/tap/memory
 - CLI: memory
 - MCP server: memory-mcp
-- Persistent memory guide: ${mainSiteUrl}/persistent-memory-ai-coding-agents/
-- MCP memory server guide: ${mainSiteUrl}/mcp-memory-server/
-- Claude Code memory guide: ${mainSiteUrl}/claude-code-memory/
-- Codex memory guide: ${mainSiteUrl}/codex-memory/
-- Cursor memory guide: ${mainSiteUrl}/cursor-memory/
 
 Positioning:
-- local wiki for AI agents
-- local-first project memory for AI coding agents
-- local, reviewable, auto-maintained project memory for AI coding agents
-- persistent memory for AI coding assistants
-- MCP memory server for project context
-- reviewable files under .memory/
-- agent-maintained memory updates after meaningful work
-- task-focused memory loading before work
-- durable save discipline after meaningful work
-- visual local viewer for memory objects, schema, relations, provenance, and graph context
+- product graph for AI coding agents
+- features, decisions, gotchas, and open questions anchored to code paths
+- feature lifecycle stage the repo cannot express: shipped, building, paused, dead
+- memory init builds the graph once from an indexing brief
+- memory query answers product questions with a token-budgeted subgraph
+- memory save records product-meaningful changes and refreshes the product map
+- memory sync verifies code anchors and reports exactly what went stale
+- generated product map kept in AGENTS.md and CLAUDE.md marker sections
+- local viewer for projects, nodes, and the relation graph
+- local-first, git-native, reviewable plain files under .memory/
 `;
 
 export function socialImageUrl(siteUrl: URL): string {
@@ -83,11 +82,11 @@ export function buildStructuredData(siteUrl: URL): object {
         name: siteName,
         alternateName: ["Memory", "@aictx/memory"],
         keywords:
-          "local wiki for AI agents, persistent memory for AI coding agents, auto-maintained project memory, project memory, MCP memory server, Codex memory, Claude Code memory, Cursor memory, local-first developer tools",
+          "product graph for AI coding agents, AI agent project memory, persistent memory for AI coding agents, feature lifecycle tracking, decision log, MCP memory server, local-first developer tools",
         applicationCategory: "DeveloperApplication",
         operatingSystem: "macOS, Linux, Windows",
         description:
-          "Memory by Aictx gives AI coding agents a local, reviewable wiki for repo context.",
+          "Memory by Aictx keeps the product graph of a codebase — features, decisions, and status, anchored to the code and queryable by AI coding agents.",
         url: new URL("/", siteUrl).toString(),
         codeRepository: "https://github.com/aictx/memory",
         downloadUrl: [
