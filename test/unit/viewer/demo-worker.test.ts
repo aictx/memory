@@ -33,13 +33,13 @@ describe("viewer demo Worker", () => {
     });
   });
 
-  it("serves seeded Todo App bootstrap data with objects, facets, and relations", async () => {
+  it("serves seeded Todo App product-graph bootstrap data with objects and relations", async () => {
     const response = await worker.fetch(request("/api/projects/demo/bootstrap?token=demo"), env);
     const body = await response.json() as {
       ok: true;
       data: {
         project: { id: string; name: string };
-        objects: Array<{ id: string; type: string; facets: { category: string } | null }>;
+        objects: Array<{ id: string; type: string; stage: string | null; anchors: string[] }>;
         relations: Array<{ from: string; to: string }>;
       };
     };
@@ -50,11 +50,12 @@ describe("viewer demo Worker", () => {
       id: "project.todo-app",
       name: "Todo App"
     });
-    expect(body.data.objects.map((object) => object.id)).toContain("concept.quick-add");
+    expect(body.data.objects.map((object) => object.id)).toContain("feature.quick-add");
     expect(body.data.objects.map((object) => object.id)).not.toContain("project.memory");
-    expect(body.data.objects.find((object) => object.id === "workflow.post-task-verification")).toMatchObject({
-      type: "workflow",
-      facets: { category: "testing" }
+    expect(body.data.objects.find((object) => object.id === "feature.filtered-views")).toMatchObject({
+      type: "feature",
+      stage: "building",
+      anchors: ["src/components/TaskFilters.tsx", "src/storage/tasks.ts"]
     });
     expect(body.data.relations.length).toBeGreaterThan(0);
   });

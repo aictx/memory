@@ -9,7 +9,6 @@ describe("core errors", () => {
       "MemoryNotInitialized",
       "MemoryAlreadyInitializedInvalid",
       "MemoryUnsupportedStorageVersion",
-      "MemoryInvalidConfig",
       "MemoryInvalidJson",
       "MemoryInvalidJsonl",
       "MemorySchemaValidationFailed",
@@ -25,7 +24,6 @@ describe("core errors", () => {
       "MemoryInvalidRelation",
       "MemorySecretDetected",
       "MemoryIndexUnavailable",
-      "MemoryExportTargetInvalid",
       "MemoryLockBusy",
       "MemoryGitOperationFailed",
       "MemoryInternalError"

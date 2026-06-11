@@ -276,20 +276,16 @@ const requiredPackedPaths = [
   "dist/viewer/favicon.ico",
   "dist/viewer/index.html",
   "docs/src/content/docs/agent-integration.md",
-  "docs/src/content/docs/agent-recipes.md",
   "docs/src/content/docs/capabilities.md",
   "docs/src/content/docs/cli.md",
-  "docs/src/content/docs/demand-driven-memory.md",
   "docs/src/content/docs/getting-started.md",
   "docs/src/content/docs/index.md",
-  "docs/src/content/docs/memory-recipes.md",
   "docs/src/content/docs/mcp.md",
+  "docs/src/content/docs/mental-model.md",
   "docs/src/content/docs/plugin-publishing.md",
   "docs/src/content/docs/reference.md",
-  "docs/src/content/docs/specializing-memory.md",
   "docs/src/content/docs/troubleshooting.md",
   "docs/src/content/docs/viewer.md",
-  "docs/src/content/docs/wiki-workflow.md",
   "integrations/templates/agent-guidance.md",
   "integrations/codex/memory/SKILL.md",
   "integrations/codex/skills/memory/SKILL.md",
@@ -344,14 +340,12 @@ const bundledPublicDocsPaths = [
   "docs/src/content/docs/cli.md",
   "docs/src/content/docs/getting-started.md",
   "docs/src/content/docs/index.md",
-  "docs/src/content/docs/memory-recipes.md",
   "docs/src/content/docs/mcp.md",
-  "docs/src/content/docs/agent-recipes.md",
+  "docs/src/content/docs/mental-model.md",
+  "docs/src/content/docs/plugin-publishing.md",
   "docs/src/content/docs/reference.md",
-  "docs/src/content/docs/specializing-memory.md",
   "docs/src/content/docs/troubleshooting.md",
-  "docs/src/content/docs/viewer.md",
-  "docs/src/content/docs/wiki-workflow.md"
+  "docs/src/content/docs/viewer.md"
 ] as const;
 
 const generatedGuidancePaths = [
@@ -407,8 +401,8 @@ async function ensureBuiltPackageOutput(packageVersion: string): Promise<void> {
 async function expectBuiltPublicDocs(): Promise<void> {
   await expectSuccessfulCommand("pnpm", ["build:docs"], repoRoot);
   await expect(
-    readFile(join(repoRoot, "docs", "dist", "agent-recipes", "index.html"), "utf8")
-  ).resolves.toContain("AI coding agent memory recipes");
+    readFile(join(repoRoot, "docs", "dist", "mental-model", "index.html"), "utf8")
+  ).resolves.toContain("Mental model");
 
   for (const filename of ["llms-small.txt", "llms-full.txt"] as const) {
     const content = await readFile(join(repoRoot, "docs", "dist", filename), "utf8");
@@ -552,8 +546,11 @@ async function expectInstalledMemoryDisciplineDocs(installRoot: string): Promise
     "docs/src/content/docs/agent-integration.md"
   );
 
-  expect(agentIntegration).toContain("memory remember --stdin");
-  expect(agentIntegration).toContain("Save nothing when the task produced no durable future value.");
+  expect(agentIntegration).toContain('memory query "<question>"');
+  expect(agentIntegration).toContain("memory save --stdin");
+  expect(agentIntegration).toContain("memory sync");
+  expect(agentIntegration).not.toContain("memory remember");
+  expect(agentIntegration).toContain("Save nothing when the task produced no");
 
   for (const relativePath of generatedGuidancePaths) {
     const content = await readInstalledPackageFile(installRoot, relativePath);

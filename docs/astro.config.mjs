@@ -8,7 +8,7 @@ export default defineConfig({
     starlight({
       title: "Memory",
       description:
-        "Local-first persistent project memory for AI coding agents and assistants.",
+        "The product graph of a codebase — local, queryable project memory for AI coding agents.",
       customCss: ["./src/styles/memory.css"],
       head: [
         {
@@ -34,15 +34,7 @@ export default defineConfig({
       sidebar: [
         {
           label: "Start Here",
-          items: [
-            "getting-started",
-            "capabilities",
-            "mental-model",
-            "specializing-memory",
-            "memory-recipes",
-            "demand-driven-memory",
-            "wiki-workflow"
-          ]
+          items: ["getting-started", "mental-model", "capabilities"]
         },
         {
           label: "Use Memory",
@@ -50,9 +42,8 @@ export default defineConfig({
             "cli",
             "mcp",
             "agent-integration",
-            "agent-recipes",
-            "plugin-publishing",
             "viewer",
+            "plugin-publishing",
             "troubleshooting"
           ]
         },

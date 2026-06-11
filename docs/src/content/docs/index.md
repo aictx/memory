@@ -1,131 +1,88 @@
 ---
 title: Memory documentation
-description: Public documentation for local, reviewable, auto-maintained project memory for AI coding agents and assistants.
+description: Public documentation for Memory by Aictx — the product graph of a codebase, kept local and queryable for AI coding agents.
 ---
 
-Memory provides local, reviewable, auto-maintained project memory for AI coding
-agents. It is distributed through the open source npm package
-`@aictx/memory` and the Aictx Homebrew tap, then runs through the `memory` CLI
-and optional `memory-mcp` server.
+Your agent knows your code. It doesn't know your product.
 
-Memory gives coding agents a project memory they can return to.
+Memory keeps the product graph of a codebase: features with their lifecycle
+stage, decisions with their reasons, gotchas, and open questions — anchored to
+the code paths they describe. Agents query the graph on demand mid-task and
+keep it current as the product changes.
 
-Use it when a new coding session should not need the same briefing again:
-product intent, architecture choices, repo conventions, setup steps, known
-traps, and useful source-backed summaries. Memory stores that context as local,
-reviewable files under `.memory/`, then builds a focused memory pack for the
-task in front of the agent.
+It exists for a specific pain. Developers who run several projects with AI
+coding agents come back to a repo after weeks and neither they nor the agent
+remembers what is shipped, what is half-done, or why anything is built the way
+it is. Agents re-derive code structure cheaply; they cannot re-derive intent,
+stage, or rationale, because that knowledge is not in the repo. Memory stores
+it next to the code.
 
-The loop is small:
+Everything is local: plain files under `.memory/` (JSON sidecars plus Markdown
+bodies), a SQLite full-text index, no embeddings, no cloud account, no model
+API. Memory is distributed as the npm package `@aictx/memory` and the Homebrew
+formula `aictx/tap/memory`, and runs through the `memory` CLI and optional
+`memory-mcp` server.
+
+## The loop
 
 ```text
-load relevant memory -> do the work -> save what future agents should remember
+init once -> query on demand -> save product changes -> sync at session end
 ```
 
-Core memory commands run locally. They do not require a cloud account,
-embeddings, hosted sync, external model API, or network access.
-
-This project is distributed as the npm package `@aictx/memory` and the
-Homebrew formula `aictx/tap/memory`.
-
-## What Memory is for
-
-Memory is for durable project context that should survive across agents,
-sessions, branches, and reviews.
-
-It helps a coding agent answer two questions:
-
-- Before work: what matters for this task?
-- After work: what should future agents not have to rediscover?
-
-Good memory is useful on a later day. It can capture a decision, a workflow, a
-gotcha, an open question, a source record, or a compact synthesis of a larger
-area such as product intent, architecture, feature maps, conventions, roadmap,
-or agent guidance.
-
-:::tip
-A good first memory is something future agents can use: "release smoke tests run
-with `pnpm test:local`", "billing webhooks retry in the worker", or "the viewer
-can inspect memory and export Obsidian projections".
-:::
-
-## How it works
-
-1. The agent loads task-focused project memory.
-2. The agent does the work using the repo, tests, and conversation as evidence.
-3. The agent saves only durable context that should be active next time.
-
-Memory keeps that memory local, explicit, and reviewable.
-
-## Choose your path
-
-- New to Memory: start with [Getting started](/getting-started/) to install,
-  initialize a repo, and run the first load/save/diff loop.
-- Using Codex, Claude Code, Cursor, Cline, OpenCode, or MCP-capable clients:
-  use [Agent recipes](/agent-recipes/) for copyable setup prompts.
-- Trying to keep agent instruction files small: read the
-  [Mental model](/mental-model/) and [Specializing Memory](/specializing-memory/)
-  to separate behavior guidance from durable project knowledge.
-- Want reviewable local memory: use [Capabilities](/capabilities/) for the
-  load, inspect, diff, viewer, audit, and repair workflows.
-- Managing repeated or multi-project agent work: use
-  [Memory Recipes](/memory-recipes/) and [Wiki workflow](/wiki-workflow/) to
-  capture product intent, architecture, workflows, gotchas, and source-backed
-  syntheses.
-- Adding MCP later: read the [MCP guide](/mcp/) after the CLI workflow is clear.
+1. `memory init` — once per repo. Creates storage, installs a short guidance
+   block and a generated **product map** into `AGENTS.md`/`CLAUDE.md`, starts
+   the local viewer, and prints an **indexing brief** the coding agent follows
+   to build the initial graph.
+2. `memory query "<question>"` — mid-task, on demand. Returns a token-budgeted
+   Markdown subgraph of matching memory. There is no per-task context loading.
+3. `memory save --stdin` — after product-meaningful changes. Intent JSON in,
+   validated graph writes out. The product map refreshes automatically.
+4. `memory sync` — at session end. Verifies code anchors against the actual
+   tree and reports what went stale, with a pre-filled save skeleton.
+5. `memory status` — features by stage, open questions, stale anchors.
+   `memory status --all` is the dashboard across every registered project.
 
 ## First-time setup prompt
 
-Copy this prompt into [Codex](https://developers.openai.com/codex/cli),
-[Claude Code](https://code.claude.com/docs/en/setup),
+Copy this prompt into [Claude Code](https://code.claude.com/docs/en/setup),
+[Codex](https://developers.openai.com/codex/cli),
 [Cursor](https://docs.cursor.com/context/rules-for-ai), or another coding
 agent from the project root:
 
 ```text
-Set up fresh Memory for this repository.
+Set up Memory for this repository.
 
 Install Memory with one of:
 brew install aictx/tap/memory
 npm install -g @aictx/memory
 
-Then run:
-memory setup
-memory check
-memory load "onboard to this repository"
+Then run from the project root:
+memory init
+
+Follow the printed indexing brief: explore the repo, draft the product graph
+(features with stage and anchors, decisions with their reasons, gotchas, open
+questions), interview me for what the repo cannot tell you, and save it all in
+one `memory save --stdin` call.
 
 When this is done, report:
-- whether setup wrote memory
-- whether check passed
-- how I can inspect the result with `memory view` or `memory diff`
+- what the product map in AGENTS.md/CLAUDE.md now shows
+- what `memory status` reports
+- how I can inspect the graph with `memory view`
 ```
 
 ## Start here
 
-- [Getting started](/getting-started/) installs Memory, initializes a repo, and
-  walks through the first load/save/diff loop.
-- [Capabilities](/capabilities/) maps the main commands to the jobs users and
-  agents actually need to do.
-- [Mental model](/mental-model/) explains canonical memory, generated state,
-  retrieval, and how Memory fits beside agent instruction files.
-- [Wiki workflow](/wiki-workflow/) covers source-backed ingestion and maintained
-  syntheses.
-- [Specializing Memory](/specializing-memory/) shows how to shape memory for your
-  repo's product, workflows, and agent guidance.
-- [Memory Recipes](/memory-recipes/) gives copyable prompts for product,
-  architecture, debugging, workflow, source-backed, and repair memory.
+- [Getting started](/getting-started/) installs Memory, runs `init`, and walks
+  through building the first product graph and the query/save/sync loop.
+- [Mental model](/mental-model/) explains the product graph: kinds, stages,
+  anchors, the map as push context, query as pull, and save discipline.
+- [Capabilities](/capabilities/) maps the commands to the jobs they do.
+- [CLI guide](/cli/) documents every verb and flag.
+- [MCP guide](/mcp/) covers the four MCP tools and when to use them.
 - [Agent integration](/agent-integration/) gives agents the concrete workflow
   and safety rules.
-- [Agent recipes](/agent-recipes/) gives copyable setup prompts for Codex,
-  Claude Code, Cursor, Cline, OpenCode, and MCP-capable clients.
-
-## CLI and MCP
-
-Use the CLI by default. Configure MCP when your agent client already supports
-tool servers and you want the routine load/search/inspect/save/diff actions
-inside the client.
-
-For exact tool names and boundaries, see the [MCP guide](/mcp/) and
-[Reference](/reference/).
+- [Reference](/reference/) has the exact schema, storage layout, and save
+  input shape.
 
 ## For agents
 
@@ -140,7 +97,9 @@ crawling the full website navigation.
 
 ## Project health
 
-The public repository includes contributor guidelines, a code of conduct,
-security reporting instructions, support paths, a public roadmap, a release
-policy, CI, CodeQL, OpenSSF Scorecard, and Dependabot configuration. See the
-repository root for the maintained community and release files.
+Memory is pre-1.0; breaking changes are expected across versions, and storage
+recovery is `memory reset` followed by `memory init`. The public repository
+includes contributor guidelines, a code of conduct, security reporting
+instructions, support paths, a public roadmap, a release policy, CI, CodeQL,
+OpenSSF Scorecard, and Dependabot configuration. See the repository root for
+the maintained community and release files.

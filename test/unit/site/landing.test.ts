@@ -35,35 +35,24 @@ describe("site landing page", () => {
     expect(landing).toContain("aictx/memory");
     expect(landing).toContain('href="https://github.com/aictx/memory"');
     expect(landing).toContain('aria-label="Open the aictx/memory GitHub repository"');
-    expect(landing).toContain("Stop re&#8209;explaining your");
-    expect(landing).toContain("repo to AI agents.");
+    expect(landing).toContain("Your agent knows your code.");
+    expect(landing).toContain("It doesn't know your product.");
     expect(heroIdentity).toContain(
-      "Memory is a local wiki for AI agents. They load repo context, keep it current, and you review the changes."
+      "Memory keeps the product graph of a codebase: features, decisions, status"
+    );
+    expect(heroIdentity).toContain(
+      "Agents query it on demand and keep it current as the product changes."
     );
     expect(heroIdentity).not.toContain("Memory by Aictx is the open source npm package");
     expect(heroIdentity).not.toContain("independent and not affiliated");
     expect(landing).toMatch(/class="value-section context-section"\s+id="context"/);
-    expect(landing).not.toContain('class="value-grid"');
-    expect(landing).toContain("Why Memory?");
-    expect(normalizedLanding).toContain(
-      "Give the repo a wiki agents can load, maintain, and inspect under review."
-    );
-    expect(landing).toContain('class="comparison comparison-why" aria-label="Why use Memory"');
-    expect(landing).toContain("<strong>Start the repo wiki.</strong>");
-    expect(normalizedLanding).toContain(
-      "Capture product intent, decisions, workflows, conventions, and gotchas in a local wiki agents can reuse instead of asking you to repeat."
-    );
-    expect(landing).toContain("<strong>Load the right page.</strong>");
-    expect(landing).toContain("Agents pull focused wiki context before work &mdash; no long");
-    expect(normalizedLanding).toContain(
-      "briefing, giant prompt, vector database, or retrieval stack to maintain."
-    );
-    expect(landing).toContain("<strong>Review what changed.</strong>");
-    expect(normalizedLanding).toContain(
-      "Inspect the same typed entries agents use, including objects, schema, relations, provenance, and graph context, in a local viewer."
-    );
-    expect(landing).not.toContain("<strong>Review it like code.</strong>");
-    expect(landing).not.toContain("Get started");
+    expect(landing).toContain("The loop");
+    expect(landing).toContain('class="comparison comparison-why" aria-label="How Memory works"');
+    expect(landing).toContain("<strong>Index once.</strong>");
+    expect(landing).toContain("<strong>Query on demand.</strong>");
+    expect(landing).toContain("<strong>Save and sync.</strong>");
+    expect(normalizedLanding).toContain("token-budgeted subgraph");
+    expect(landing).toContain("Generated product map");
     expect(landing).toContain('aria-label="Install Memory"');
     expect(landing).toContain('aria-label="Install commands"');
     expect(landing).toContain("Open viewer");
@@ -71,75 +60,14 @@ describe("site landing page", () => {
     expect(landing).toContain("Homebrew");
     expect(landing).toContain("brew install aictx/tap/memory");
     expect(landing).toContain("npm install -g @aictx/memory");
-    expect(landing).not.toContain('class="why-block"');
-    expect(landing).not.toContain("Why not AGENTS.md only?");
-    expect(landing).not.toContain("Why not long context?");
-    expect(landing).not.toContain("Why not RAG?");
-    expect(landing).not.toContain("Why local files?");
-    expect(landing).not.toContain("Token-efficient context");
-    expect(landing).not.toContain("No hosted dependency");
-    expect(landing).not.toContain(
-      "Core memory works without a cloud account, embeddings, hosted sync, or external model API."
-    );
-    expect(landing).not.toContain("Durable memory beats bigger prompts.");
-    expect(landing).not.toContain("Memory turns the README promise into a working loop");
-    expect(landing).not.toContain("Create starter memory and short repo guidance in one first-run workflow.");
-    expect(landing).not.toContain("Task-focused context");
-    expect(landing).not.toContain("Reviewable repo memory");
-    expect(landing).not.toContain("Keep AGENTS.md small.");
-    expect(landing).not.toContain('<section class="split-section" id="context"');
-    expect(landing).toContain("Proof in the first five minutes.");
-    expect(landing).toContain("Instead of reopening old decisions");
-    expect(landing).toContain("task-shaped context pack before the edit begins.");
-    expect(landing).toContain("Context");
-    expect(landing).not.toContain("Codex starts with the missing context.");
     expect(landing).toContain("Worked for 7m 18s");
-    expect(landing).toContain("AI Context Pack");
-    expect(landing).toContain("Remind me: are we still avoiding dashboard-style UI here?");
-    expect(landing).toContain("memory load \"improve viewer search UI\"");
-    expect(landing).toContain("Loaded 6 relevant memories before editing");
-    expect(normalizedLanding).toContain(
-      "Viewer memory page shows canonical types, facets, scopes, and relations first."
-    );
-    expect(landing).not.toContain("Inspect the memory agents will use.");
-    expect(landing).not.toContain("The repo keeps the briefing.");
-    expect(landing).not.toContain("become local, reviewable repo memory.");
-    expect(landing).not.toContain("would otherwise ask you to repeat.");
-    expect(landing).not.toContain('id="workflow"');
-    expect(landing).not.toContain("Turn repeated briefings into repo memory.");
-    expect(landing).not.toContain('class="setup-value-grid"');
-    expect(landing).not.toContain("Less repeated context.");
-    expect(landing).not.toContain("Cleaner instruction files.");
-    expect(landing).not.toContain("Reviewable by default.");
-    expect(landing).not.toContain("Project memory becomes repo state.");
-    expect(landing).not.toContain("Typed local memory.");
-    expect(landing).not.toContain("Short agent files.");
-    expect(landing).not.toContain("Ready next session.");
-    expect(landing).not.toContain('class="steps setup-steps"');
-    expect(landing).not.toContain("Make project context part of the repo.");
-    expect(landing).not.toContain("One activation writes the memory layer and short agent guidance.");
-    expect(landing).not.toContain("Memory lives with the code.");
-    expect(landing).not.toContain("Instructions stay readable.");
-    expect(landing).not.toContain("The repo can brief the agent.");
-    expect(landing).not.toContain("Memory keeps the everyday loop small after the first setup");
-    expect(landing).not.toContain('id="agent-memory"');
-    expect(landing).not.toContain("Persistent memory for the tools agents already use.");
-    expect(landing).not.toContain('aria-label="Memory guides by coding agent"');
-    expect(landing).not.toContain("set up once</span>");
-    expect(landing).not.toContain("load relevant reminders");
-    expect(landing).not.toContain("Create the memory layer.");
-    expect(landing).not.toContain("Load the right reminders.");
-    expect(landing).not.toContain("Save what future sessions should remember.");
-    expect(landing).not.toContain("The agent loads the project context it needs.");
-    expect(landing).not.toContain("The agent does the work with that context.");
-    expect(landing).not.toContain("The agent saves what future agents should remember.");
-    expect(landing).not.toContain("Load context. Save memory. Review the diff.");
-    expect(landing).not.toContain("memory load \"change auth routes\"");
-    expect(landing).not.toContain("memory save --stdin");
-    expect(landing).not.toContain("memory diff");
-    expect(landing).not.toContain("Let agents learn under review.");
-    expect(landing).not.toContain("Useful knowledge. No durable review.");
-    expect(landing).not.toContain("Review, commit, or roll back.");
+    expect(landing).toContain('memory query "state of batch exports"');
+    expect(landing).not.toContain("local wiki");
+    expect(landing).not.toContain("context pack");
+    expect(landing).not.toContain("memory load");
+    expect(landing).not.toMatch(/\bfacets?\b/iu);
+    expect(landing).not.toContain("memory lens");
+    expect(landing).not.toContain("memory handoff");
   });
 
   it("keeps header and footer navigation focused", async () => {
@@ -297,13 +225,12 @@ describe("site landing page", () => {
     expect(publicCopy).not.toMatch(/\boriginal\b/);
   });
 
-  it("frames the demo as a schema and graph inspection surface", async () => {
+  it("frames the demo as a product-graph inspection surface", async () => {
     const landing = await readFile(resolve(repoRoot, "site/src/pages/index.astro"), "utf8");
 
-    expect(landing).toContain("Inspect the memory schema and graph.");
-    expect(landing).toContain("Browse a local memory database with canonical object types");
-    expect(landing).toContain("relation overviews");
-    expect(landing).toContain("memory schema graph with relation overview");
+    expect(landing).toContain("Inspect the product graph.");
+    expect(landing).toContain("Browse a local memory database in the viewer");
+    expect(landing).toContain("memory graph with relation overview");
     expect(landing).not.toContain("Browse the local handbook");
   });
 

@@ -6,7 +6,6 @@ export const MEMORY_ERROR_CODES = [
   "MemoryNotInitialized",
   "MemoryAlreadyInitializedInvalid",
   "MemoryUnsupportedStorageVersion",
-  "MemoryInvalidConfig",
   "MemoryInvalidJson",
   "MemoryInvalidJsonl",
   "MemorySchemaValidationFailed",
@@ -22,7 +21,6 @@ export const MEMORY_ERROR_CODES = [
   "MemoryInvalidRelation",
   "MemorySecretDetected",
   "MemoryIndexUnavailable",
-  "MemoryExportTargetInvalid",
   "MemoryLockBusy",
   "MemoryGitOperationFailed",
   "MemoryInternalError"

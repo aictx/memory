@@ -22,10 +22,6 @@ export interface SecretDetectionResult {
   findings: SecretFinding[];
 }
 
-export interface ScanProjectSecretsOptions {
-  includeContextPacks?: boolean;
-}
-
 interface SecretRule {
   severity: SecretSeverity;
   rule: string;
@@ -119,17 +115,13 @@ export function detectSecretsInPatch(value: unknown, path = "<patch>"): SecretDe
 }
 
 export async function scanProjectSecrets(
-  projectRoot: string,
-  options: ScanProjectSecretsOptions = {}
+  projectRoot: string
 ): Promise<SecretDetectionResult> {
-  const ignore = options.includeContextPacks
-    ? [".memory/index/**"]
-    : [".memory/index/**", ".memory/context/**"];
   const paths = (
     await fg(".memory/**/*.{json,jsonl,md}", {
       cwd: projectRoot,
       dot: true,
-      ignore,
+      ignore: [".memory/index/**", ".memory/context/**"],
       onlyFiles: true,
       unique: true
     })

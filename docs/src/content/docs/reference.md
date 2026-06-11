@@ -1,162 +1,173 @@
 ---
 title: Reference
-description: Compact CLI, MCP, docs, object taxonomy, and structured patch reference.
+description: Schema v5 — node kinds, sidecar fields, statuses, predicates, save input, config, storage layout, and the sync marker.
 ---
 
-Use this page when you need exact names, commands, and patch shapes.
+Exact names and shapes for storage schema v5.
 
-## CLI commands
+## Node kinds
 
-The CLI is the default interface for routine memory work.
+Object types are `project`, `feature`, `decision`, `gotcha`, and `question`.
 
-| Area | Commands |
-| --- | --- |
-| Setup | `memory init`, `memory setup` |
-| Maintenance | `memory check`, `memory rebuild`, `memory reset`, `memory upgrade` |
-| Routine memory | `memory load`, `memory search`, `memory suggest`, `memory audit`, `memory remember`, `memory save` |
-| Wiki workflow | `memory wiki ingest`, `memory wiki file`, `memory wiki lint`, `memory wiki log` |
-| Inspection | `memory inspect`, `memory stale`, `memory graph`, `memory lens` |
-| Branch continuity | `memory handoff show`, `memory handoff update --stdin`, `memory handoff close --stdin` |
-| Inspection and recovery | `memory diff`, `memory history`, `memory restore`, `memory rewind` |
-| Export | `memory export obsidian` |
-| Viewer | `memory projects`, `memory view` |
-| Docs | `memory docs` |
+- `project` — one per repo, created by `memory init`; its title and first
+  body sentence head the generated product map.
+- `feature` — carries an optional `stage` and `anchors`.
+- `decision`, `gotcha`, `question` — title plus Markdown body.
 
-Commands that support structured output accept `--json`:
+`memory save` accepts node kinds `feature`, `decision`, `gotcha`, and
+`question`; the `project` node is created by init and updated by id.
 
-```bash
-memory check --json
-memory docs --json
+## Ids
+
+Object ids are `kind.slug`, matching:
+
+```text
+^[a-z][a-z0-9_]*\.[a-z0-9][a-z0-9-]*$
 ```
 
-`memory setup --dry-run` is read-only and does not initialize storage or write
-repo files. `memory audit` includes role coverage gaps and advisory stale,
-conflict, provenance, and referenced-file findings, but missing roles and
-possible-stale findings are not `memory check` failures. `memory handoff show`
-returns only an active handoff for the current Git branch; closed handoffs remain
-historical memory.
+Examples: `feature.webhook-retry-queue`, `decision.retries-run-in-worker`.
 
-## MCP tools
+## Statuses
 
-MCP is available when the agent client already exposes Memory MCP tools. Local
-MCP exposes exactly:
+Object statuses: `active`, `stale`, `superseded`, `open`, `closed`.
+Questions use `open`/`closed`; other kinds use `active`/`stale`/`superseded`.
 
-- `load_memory`
-- `search_memory`
-- `inspect_memory`
-- `remember_memory`
-- `save_memory_patch`
-- `diff_memory`
+Relation statuses: `active`, `stale`, `rejected`.
 
-CLI-only workflows in v1 include setup, lenses, handoff, maintenance, recovery,
-export, registry, viewer, docs, suggest, audit, wiki, stale inspection, and
-graph inspection.
+## Stages
 
-Future host adapters may expose generic `search` and `fetch` names over Memory
-search and inspect behavior. The local MCP server exposes the six Memory-specific
-tools above.
+Feature-only lifecycle stage: `idea`, `building`, `shipped`, `paused`, `dead`.
+The product map groups features by stage and excludes `dead` features.
 
-## Docs command
+## Relations
 
-```bash
-memory docs
-memory docs getting-started
-memory docs capabilities
-memory docs specializing-memory
-memory docs memory-recipes
-memory docs agent-recipes
-memory docs agent-integration --open
-memory docs --json
-```
+Predicates: `affects`, `depends_on`, `supersedes`, `related_to`.
+Optional confidence: `low`, `medium`, `high`.
 
-`memory docs` lists bundled public docs topics. `memory docs <topic>` prints the
-bundled Markdown for that topic. `--open` opens the hosted page at
-`https://docs.aictx.dev`.
+## Sidecar fields
 
-## Object types
+Each node is a JSON sidecar plus a Markdown body file. Sidecar shape:
 
-Object types are `project`, `architecture`, `source`, `synthesis`, `decision`,
-`constraint`, `question`, `fact`, `gotcha`, `workflow`, `note`, and `concept`.
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | string | `kind.slug` |
+| `type` | string | One of the five kinds |
+| `status` | string | See statuses above |
+| `title` | string | |
+| `body_path` | string | Relative path of the Markdown body |
+| `stage` | string? | Feature-only |
+| `anchors` | string[]? | Repo-relative path globs, e.g. `src/billing/` |
+| `tags` | string[]? | Unique non-empty strings |
+| `evidence` | object[]? | `{kind, id}`, kind in `memory`, `relation`, `file`, `commit`, `task`, `source` |
+| `source` | object? | `{kind, task?, commit?}`, kind in `agent`, `user`, `cli`, `mcp`, `system` |
+| `origin` | object? | `{kind, locator, captured_at?, digest?, media_type?}` for external provenance |
+| `superseded_by` | string? | Set when status is `superseded` |
+| `content_hash` | string | SHA-256 of the body |
+| `created_at` / `updated_at` | string | ISO date-times |
 
-`history`, `task-note`, and `feature` are not object types.
+## Save input
 
-Use `workflow` for durable project-specific how-tos: procedures, runbooks,
-command sequences, release/debugging/migration paths, verification routines,
-and maintenance steps. Generic tutorials, one-off task notes, and task diaries
-should not become workflow memory.
-
-Facet categories include `project-description`, `architecture`, `stack`,
-`convention`, `file-layout`, `product-feature`, `testing`,
-`decision-rationale`, `abandoned-attempt`, `workflow`, `gotcha`,
-`debugging-fact`, `source`, `product-intent`, `feature-map`, `roadmap`,
-`agent-guidance`, `concept`, `open-question`, `domain`, `bounded-context`,
-`capability`, `business-rule`, and `unresolved-conflict`.
-
-## Remember input
-
-`remember` is the routine agent write primitive. It accepts intent-first JSON
-and generates a structured patch internally.
+`memory save --stdin` and the `save_memory` MCP tool take the same intent
+JSON:
 
 ```json
 {
-  "task": "Fix Stripe webhook retries",
-  "memories": [
+  "task": "Ship retry handling for Stripe webhooks",
+  "nodes": [
     {
-      "kind": "decision",
-      "title": "Billing retries run in the worker",
-      "body": "Stripe webhook retries execute in the queue worker.",
-      "tags": ["billing", "stripe"],
-      "applies_to": ["services/billing/src/webhooks/handler.ts"]
+      "id": "feature.webhook-retry-queue",
+      "kind": "feature",
+      "title": "Webhook retry queue",
+      "body": "Failed Stripe webhooks re-enter a worker-owned retry queue.",
+      "stage": "building",
+      "anchors": ["services/billing/src/webhooks/"],
+      "tags": ["billing"],
+      "related": [
+        { "predicate": "depends_on", "to": "feature.billing-worker", "confidence": "high" }
+      ]
     }
-  ]
+  ],
+  "stale": [{ "id": "gotcha.old-retry-loop", "reason": "fixed by the new queue" }],
+  "supersede": [
+    {
+      "id": "decision.inline-retries",
+      "superseded_by": "decision.retries-run-in-worker",
+      "reason": "moved to worker"
+    }
+  ],
+  "delete": [{ "id": "question.retry-owner", "reason": "answered" }]
 }
 ```
 
-Supported top-level action arrays are `memories`, `updates`, `stale`,
-`supersede`, and `relations`.
+Rules:
 
-Workflow/how-to memory uses the same intent-first input:
+- `task` is required; `nodes`, `stale`, `supersede`, and `delete` are
+  optional arrays.
+- A node with an `id` that resolves to an existing object is an update;
+  otherwise it is a create. `kind`, `title`, and `body` are required on
+  create.
+- `stage` is feature-only. `related` entries create relations from this node.
+- `--dry-run` validates and plans without writing. Every successful save
+  refreshes the product map and rebuilds the index.
+
+## Config
+
+`.memory/config.json`:
 
 ```json
 {
-  "task": "Document release smoke test",
-  "memories": [
-    {
-      "kind": "workflow",
-      "title": "Release smoke test",
-      "body": "Before tagging a release, run package verification and inspect the Memory diff.",
-      "category": "workflow",
-      "applies_to": ["package.json"]
-    }
-  ]
+  "version": 5,
+  "project": { "id": "project.my-repo", "name": "My Repo" },
+  "memory": { "defaultTokenBudget": 2000, "autoIndex": true }
 }
 ```
 
-## Structured patch
+- `version` is the storage schema version. Memory refuses to operate on
+  storage with a different version; recovery is `memory reset` then
+  `memory init` (there is no migration pre-1.0).
+- `defaultTokenBudget` is the `memory query` budget when `--budget` is not
+  passed.
 
-The structured patch is the canonical advanced write contract.
+## Storage layout
+
+```text
+.memory/
+  config.json            # schema version, project identity, defaults
+  memory/<slug>.json     # node sidecars
+  memory/<slug>.md       # node bodies
+  relations/<slug>.json  # relations
+  schema/                # bundled JSON schemas for validation
+  events.jsonl           # append-only event log
+  sync-state.json        # committed sync marker
+  index/                 # generated SQLite FTS index (gitignored)
+  recovery/              # pre-overwrite backups of dirty files (gitignored)
+  .backup/               # reset archives (gitignored)
+```
+
+Canonical files are meant to be committed and reviewed; everything generated
+is gitignored and rebuildable with `memory rebuild`.
+
+## Sync marker
+
+`.memory/sync-state.json`:
 
 ```json
-{
-  "source": {
-    "kind": "agent",
-    "task": "Fix Stripe webhook retries"
-  },
-  "changes": [
-    {
-      "op": "create_object",
-      "type": "decision",
-      "title": "Billing retries moved to queue worker",
-      "body": "Stripe webhook retries now happen in the queue worker.",
-      "tags": ["billing", "stripe"]
-    }
-  ]
-}
+{ "version": 1, "last_sync_commit": "<git sha>" }
 ```
 
-Patch operations include `create_object`, `update_object`, `mark_stale`,
-`supersede_object`, `delete_object`, `create_relation`, `update_relation`, and
-`delete_relation`.
+`memory sync` diffs `last_sync_commit..HEAD` plus working-tree changes, and
+advances the marker on a non-dry run. A missing or invalid marker triggers a
+full anchor verification instead of failing.
 
-Structured patches are for durable information future agents should know. A
-task that produced no durable future value does not need a save.
+## Project registry
+
+`memory status --all`, `memory projects`, and the viewer's projects dashboard
+read the user-level registry at `$MEMORY_HOME/projects.json`, defaulting to
+`~/.memory/projects.json`. The registry stores project roots and metadata for
+discovery; canonical memory stays in each project's own `.memory/` directory.
+
+## Events
+
+Canonical events in `events.jsonl`: `memory.created`, `memory.updated`,
+`memory.marked_stale`, `memory.superseded`, `memory.deleted`,
+`relation.created`, `relation.updated`, `relation.deleted`, `index.rebuilt`.

@@ -19,15 +19,15 @@ const viewerUrl = "https://demo.aictx.dev/?token=demo";
           aictx/memory
         </a>
         <h1 class="hero-title">
-          <span class="hero-title-desktop">Stop re&#8209;explaining your</span>
-          <span class="hero-title-desktop">repo to AI agents.</span>
-          <span class="hero-title-mobile">Stop re&#8209;explaining</span>
-          <span class="hero-title-mobile">your repo to AI agents.</span>
+          <span class="hero-title-desktop">Your agent knows your code.</span>
+          <span class="hero-title-desktop">It doesn't know your product.</span>
+          <span class="hero-title-mobile">Your agent knows your code.</span>
+          <span class="hero-title-mobile">It doesn't know your product.</span>
         </h1>
 
         <p class="hero-identity">
-          <span class="hero-identity-line">Memory is a local wiki for AI agents.</span>
-          <span class="hero-identity-line">They load repo context, keep it current, and you review the changes.</span>
+          <span class="hero-identity-line">Memory keeps the product graph of a codebase: features, decisions, status — anchored to the code.</span>
+          <span class="hero-identity-line">Agents query it on demand and keep it current as the product changes.</span>
         </p>
 
         <div class="hero-install" aria-label="Install Memory">
@@ -52,41 +52,57 @@ const viewerUrl = "https://demo.aictx.dev/?token=demo";
     >
       <div class="value-section-inner">
         <div class="section-heading">
-          <h2 id="context-title">Why Memory?</h2>
+          <h2 id="context-title">The loop</h2>
           <p>
-            Give the repo a wiki agents can load, maintain, and inspect under
-            review.
+            Build the graph once. Query it on demand. Keep it honest at session
+            end.
           </p>
         </div>
 
-        <div class="comparison comparison-why" aria-label="Why use Memory">
+        <div class="comparison comparison-why" aria-label="How Memory works">
           <div>
             <span>01</span>
-            <strong>Start the repo wiki.</strong>
+            <strong>Index once.</strong>
             <p>
-              Capture product intent, decisions, workflows, conventions, and
-              gotchas in a local wiki agents can reuse instead of asking you to
-              repeat.
+              <code>memory init</code> creates local storage and prints an
+              indexing brief. Your agent explores the repo, interviews you for
+              intent and stage, and saves the initial graph: features,
+              decisions, gotchas, open questions.
             </p>
           </div>
           <div>
             <span>02</span>
-            <strong>Load the right page.</strong>
+            <strong>Query on demand.</strong>
             <p>
-              Agents pull focused wiki context before work &mdash; no long
-              briefing, giant prompt, vector database, or retrieval stack to
-              maintain.
+              Mid-task, the agent runs
+              <code>memory query "&lt;question&gt;"</code> and gets a
+              token-budgeted subgraph &mdash; matches, related decisions,
+              connected open questions. No per-task preloading.
             </p>
           </div>
           <div>
             <span>03</span>
-            <strong>Review what changed.</strong>
+            <strong>Save and sync.</strong>
             <p>
-              Inspect the same typed entries agents use, including objects,
-              schema, relations, provenance, and graph context, in a local
-              viewer.
+              <code>memory save</code> records product-meaningful changes and
+              refreshes the map. <code>memory sync</code> verifies code anchors
+              at session end and reports exactly what went stale.
             </p>
           </div>
+        </div>
+
+        <div class="agents-file" aria-label="Generated product map example">
+          <div class="file-title">
+            <span>AGENTS.md</span>
+            <strong>Generated product map</strong>
+          </div>
+          <p class="markdown-line heading">## Product map (generated — refresh with memory save or sync)</p>
+          <p class="markdown-line">Acme Render — Self-hosted PDF render service for invoice pipelines.</p>
+          <p class="markdown-line">**Building:** webhook-retry-queue — Failed webhooks re-enter a retry queue. — services/billing/</p>
+          <p class="markdown-line">**Shipped:** pdf-render-api — Renders invoice templates to PDF. — services/render/</p>
+          <p class="markdown-line">**Paused:** batch-exports — Nightly bulk export of rendered documents. — services/exports/</p>
+          <p class="markdown-line">**Recent decisions:** retries-run-in-worker · sqlite-over-postgres</p>
+          <p class="markdown-line">**Open questions:** pdf-storage-location — Where do rendered PDFs live long-term?</p>
         </div>
       </div>
     </section>
@@ -99,68 +115,69 @@ const viewerUrl = "https://demo.aictx.dev/?token=demo";
       <div class="payoff-inner">
         <div class="payoff-heading">
           <p class="section-kicker">Use Memory when</p>
-          <h2 id="payoff-title">Context should survive the agent session.</h2>
+          <h2 id="payoff-title">You run many projects with AI agents.</h2>
           <p>
-            Memory is for durable, local, reviewable project knowledge: the
-            parts agents and humans should not have to rediscover.
+            Come back to a repo after three weeks and neither you nor the agent
+            remembers what is shipped, what is half-done, or why it was built
+            this way. Code can be re-read; intent, stage, and rationale cannot.
           </p>
         </div>
 
-        <div class="payoff-grid" aria-label="When Memory is useful">
+        <div class="payoff-grid" aria-label="What the product graph holds">
           <article>
-            <span>Many sessions</span>
-            <strong>You work across repos, branches, or agents.</strong>
+            <span>Cold resume</span>
+            <strong>Pick any project back up.</strong>
             <p>
-              Keep durable project state from disappearing when the next
-              session starts.
+              The product map and graph carry what is shipped, building,
+              paused, and dead &mdash; before anyone re-reads the code.
             </p>
           </article>
           <article>
-            <span>Real delegation</span>
-            <strong>Agents make decisions you need to carry forward.</strong>
+            <span>Feature stage</span>
+            <strong>Status the repo cannot express.</strong>
             <p>
-              Save the workflows, setup paths, constraints, and known traps
-              worth inheriting.
+              Code for a paused feature looks exactly like code for a shipped
+              one. Stage lives in the graph, not in guesswork.
             </p>
           </article>
           <article>
-            <span>Large codebases</span>
-            <strong>Architecture should not be rediscovered every time.</strong>
+            <span>Decisions</span>
+            <strong>The why survives the session.</strong>
             <p>
-              Maintain conventions, boundaries, and source-backed summaries
-              agents can load on demand.
+              Decisions are stored with their reasons and survive sessions,
+              branches, and agent switches.
             </p>
           </article>
           <article>
-            <span>Local wiki</span>
-            <strong>Project knowledge stays local and reviewable.</strong>
+            <span>Code anchors</span>
+            <strong>Staleness is mechanical.</strong>
             <p>
-              Store wiki-like memory in the repo instead of an opaque hosted
-              memory layer.
+              Nodes anchor to path globs. <code>memory sync</code> diffs the
+              tree and reports which claims need re-verification.
             </p>
           </article>
           <article>
-            <span>Agent-built work</span>
-            <strong>Verify what changed without reading everything.</strong>
+            <span>Many repos</span>
+            <strong>One dashboard across projects.</strong>
             <p>
-              Inspect decisions, sources, open questions, and syntheses before
-              trusting the result.
+              <code>memory status --all</code> prints one row per registered
+              project: stages, open questions, stale anchors, last sync.
             </p>
           </article>
           <article>
-            <span>Small instruction files</span>
-            <strong>Keep AGENTS.md and CLAUDE.md focused.</strong>
+            <span>Local files</span>
+            <strong>Reviewable, git-native memory.</strong>
             <p>
-              Rules files stay operating manuals while changing project facts
-              live in Memory.
+              Plain files in <code>.memory/</code> with a SQLite full-text
+              index. No embeddings, no cloud, no model API.
             </p>
           </article>
         </div>
 
         <div class="payoff-strip" aria-label="Memory value stack">
-          <span>Parallel project state</span>
-          <span>Reviewable agent decisions</span>
-          <span>Small instruction files</span>
+          <span>Cold-resume context</span>
+          <span>Answers grounded in product reality</span>
+          <span>Git-native memory</span>
         </div>
       </div>
     </section>
@@ -171,10 +188,10 @@ const viewerUrl = "https://demo.aictx.dev/?token=demo";
       aria-labelledby="before-after-title"
     >
       <div class="section-heading">
-        <h2 id="before-after-title">Proof in the first five minutes.</h2>
+        <h2 id="before-after-title">Product context on demand.</h2>
         <p>
-          Instead of reopening old decisions, the agent starts with a
-          task-shaped context pack before the edit begins.
+          Instead of re-deriving feature state from code and git history, the
+          agent asks the graph and starts grounded.
         </p>
       </div>
 
@@ -193,40 +210,40 @@ const viewerUrl = "https://demo.aictx.dev/?token=demo";
             <div class="scene-layer before">
               <div
                 class="codex-chat codex-chat-before"
-                aria-label="Codex chat without Memory"
+                aria-label="Agent chat without Memory"
               >
                 <div class="codex-chat-topbar">
-                  <span>Update viewer search behavior</span>
+                  <span>Pick batch exports back up</span>
                   <strong>•••</strong>
                 </div>
                 <div class="codex-user-bubble">
-                  <p>Can you polish viewer search?</p>
+                  <p>Where did we leave batch exports?</p>
                 </div>
                 <div class="codex-work-pill">Worked for 7m 18s⌄</div>
                 <div class="codex-divider"></div>
                 <div class="codex-response">
                   <p>
-                    I need to inspect the docs and viewer code to recover the
-                    product direction.
+                    I need to reconstruct the state of this feature from the
+                    code and git history.
                   </p>
                 </div>
                 <div class="codex-command-row">
                   <span aria-hidden="true">›</span>
-                  Ran <code>rg "viewer|search|schema|facets"</code>
+                  Ran <code>rg "exports|batch|cron"</code>
                 </div>
                 <div class="codex-command-row">
                   <span aria-hidden="true">›</span>
-                  Read <code>docs/viewer.md</code>, <code
-                    >viewer/src/App.svelte</code
+                  Read <code>services/exports/</code>, <code
+                    >git log --oneline</code
                   >
                 </div>
                 <div class="codex-command-row muted-row">
                   <span aria-hidden="true">›</span>
-                  Explored 11 files, 4 searches
+                  Explored 14 files, 5 searches
                 </div>
                 <div class="codex-response warning-message">
                   <p>
-                    Remind me: are we still avoiding dashboard-style UI here?
+                    Is batch exports still planned, or did we abandon it?
                   </p>
                 </div>
               </div>
@@ -234,38 +251,38 @@ const viewerUrl = "https://demo.aictx.dev/?token=demo";
             <div class="scene-layer after">
               <div
                 class="codex-chat codex-chat-after"
-                aria-label="Codex chat with Memory"
+                aria-label="Agent chat with Memory"
               >
                 <div class="codex-chat-topbar">
-                  <span>Update viewer search behavior</span>
+                  <span>Pick batch exports back up</span>
                   <strong>•••</strong>
                 </div>
                 <div class="codex-user-bubble">
-                  <p>Can you polish viewer search?</p>
+                  <p>Where did we leave batch exports?</p>
                 </div>
                 <div class="codex-command-row memory-command-row">
                   <span aria-hidden="true">›</span>
-                  Ran <code>memory load "improve viewer search UI"</code>
+                  Ran <code>memory query "state of batch exports"</code>
                 </div>
                 <div class="memory-context-pack">
-                  <span>AI Context Pack</span>
+                  <span>Memory — product graph</span>
                   <strong
-                    >Viewer memory page shows canonical types, facets, scopes,
-                    and relations first.</strong
+                    >batch-exports — paused. Nightly bulk export of rendered
+                    documents. services/exports/</strong
                   >
                   <p>
-                    Keep guided lenses secondary. Verify schema filters and
-                    relation boundaries.
+                    Decision: exports wait on the storage choice. Open
+                    question: where do rendered PDFs live long-term?
                   </p>
                 </div>
                 <div class="codex-command-row muted-row">
                   <span aria-hidden="true">›</span>
-                  Loaded 6 relevant memories before editing
+                  3 nodes and 1 open question, straight from the graph
                 </div>
                 <div class="codex-response ready-message">
                   <p>
-                    I have the UI constraint and verification path. I’ll update
-                    search without reopening old decisions.
+                    Batch exports is paused pending the storage decision. I'll
+                    resume from services/exports/ without re-deriving the plan.
                   </p>
                 </div>
               </div>
@@ -277,7 +294,7 @@ const viewerUrl = "https://demo.aictx.dev/?token=demo";
               min="0"
               max="100"
               value="50"
-              aria-label="Slide between before and after for context loading"
+              aria-label="Slide between before and after for product context"
             />
           </div>
         </div>
@@ -286,7 +303,7 @@ const viewerUrl = "https://demo.aictx.dev/?token=demo";
 
     <section class="demo-section" id="demo" aria-labelledby="demo-title">
       <div class="section-heading">
-        <h2 id="demo-title">Inspect the memory schema and graph.</h2>
+        <h2 id="demo-title">Inspect the product graph.</h2>
       </div>
 
       <div class="demo-art">
@@ -299,15 +316,16 @@ const viewerUrl = "https://demo.aictx.dev/?token=demo";
           </span>
           <img
             src="/assets/viewer-demo.png"
-            alt="Memory viewer showing the memory schema graph with relation overview and canonical storage navigation."
+            alt="Memory viewer showing the memory graph with relation overview and canonical storage navigation."
           />
         </a>
       </div>
 
       <div class="demo-footer">
         <p>
-          Browse a local memory database with canonical object types, facet
-          categories, relation overviews, provenance links, and graph context.
+          Browse a local memory database in the viewer: projects dashboard,
+          node list, full node detail, and the relation graph connecting
+          features, decisions, gotchas, and open questions.
         </p>
         <a class="text-link" href={viewerUrl} rel="noreferrer"> Open viewer </a>
       </div>

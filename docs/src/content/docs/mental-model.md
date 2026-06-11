@@ -1,117 +1,123 @@
 ---
 title: Mental model
-description: How Memory stores, indexes, retrieves, and inspects persistent local project memory.
+description: The product graph — kinds, stages, anchors, the map as push context, query as pull, sync as reconciliation, and save discipline.
 ---
 
-Memory helps future agents start from durable project context instead of a blank
-chat. The important distinction is between memory that should last and working
-context that belongs only to the current task.
+Memory stores one thing: the product layer of a codebase. This page explains
+the model behind the commands.
 
-## The short version
+## The product graph
 
-```text
-canonical memory -> generated index -> task-focused context pack
-```
+The graph has five kinds of node:
 
-Canonical memory is the durable source of truth. Generated state is rebuildable.
-The context pack is what an agent gets for a specific task.
+| Kind | What it holds |
+| --- | --- |
+| `project` | One per repo: what this product is. Created by `init`. |
+| `feature` | What the product does for users, with a lifecycle `stage` and code `anchors`. |
+| `decision` | A choice and the reason it was made. |
+| `gotcha` | A known trap or failure mode. |
+| `question` | An open product or technical question that affects future work. |
 
-## Why not just use existing context?
+Nodes connect through four relation predicates: `affects`, `depends_on`,
+`supersedes`, and `related_to`. Relations are useful when they change what an
+agent should conclude — a decision that `affects` a feature, a feature that
+`depends_on` another. Do not wire everything to everything.
 
-Agent instruction files such as `AGENTS.md` are still useful. Keep them short:
-when to load memory, when to save, and which tooling boundaries matter. If they
-also carry every product decision, source record, workflow, gotcha, and evolving
-synthesis, they become broad and stale.
+The test for whether something belongs in the graph: is this knowledge an
+agent cannot re-derive from the code? Code structure, function signatures, and
+call graphs do not belong here — agents recover those cheaply by reading the
+repo. Intent, stage, and rationale do belong here, because they live nowhere
+else.
 
-Vector databases and RAG systems are useful when you need a large retrieval
-service. Memory takes a smaller path for project memory: local files,
-deterministic indexes, Git review, and focused retrieval.
+## Stage
 
-Long context helps inside one session, but it does not decide what should be
-remembered, preserve reviewable provenance, clean up stale facts, or prepare the
-next agent.
+Every feature carries a stage: `idea`, `building`, `shipped`, `paused`, or
+`dead`. Stage is the single most valuable field in the graph and the one the
+repo is worst at expressing — code for a paused feature looks exactly like
+code for a shipped one. Keep stages honest: an abandoned experiment marked
+`dead` saves a future session from polishing it; a feature marked `building`
+tells the agent the rough edges are known.
 
-Plain local files are the foundation. Memory adds validation, memory types,
-generated indexes, task-focused loading, relation-aware inspection, and a
-save/no-save discipline so the files remain useful.
+## Anchors
 
-## Canonical memory
+Anchors are repo-relative path globs on a node — `services/billing/`,
+`src/**/*.ts` — linking the claim to the code it describes. They are what make
+staleness mechanical instead of a feeling:
 
-`.memory/` contains canonical memory and generated support files.
+- `memory status` reports anchors that no longer match any file.
+- `memory sync` diffs the tree since the last sync and reports nodes whose
+  anchored files changed or disappeared.
+- `memory check` warns when anchors or the generated map are out of date.
 
-Canonical memory includes human-readable Markdown bodies, JSON sidecars with
-structured metadata, relation JSON files, and `events.jsonl` for semantic
-history. Saved memory becomes active after Memory validates and writes it.
+Anchor a feature to the directory that implements it, not to individual files
+that get renamed weekly. A node with no anchors can never be verified
+mechanically; `sync` lists unanchored nodes for that reason.
 
-Generated state can be recreated:
+## The map is push, the query is pull
 
-```bash
-memory check
-memory rebuild
-```
+Memory deliberately splits context into one small push surface and one
+on-demand pull surface.
 
-## Hybrid memory model
+**Push: the product map.** A generated, roughly one-screen section in
+`AGENTS.md`/`CLAUDE.md` — features grouped by stage with intent fragments and
+first anchors, recent decisions, open questions, and stale-anchor warnings. It
+is capped at about 1200 tokens, refreshed automatically on every `save` and
+`sync`, and marked do-not-edit. This is the only Memory context an agent
+carries into every session: enough to orient, not enough to drown.
 
-Memory uses three layers:
+**Pull: `memory query`.** When the agent needs detail mid-task, it asks a
+question. The query seeds on full-text matches, expands one hop along active
+relations, attaches connected open questions, and renders the result as
+Markdown inside a token budget (default 2000). Nothing else is preloaded.
+There is no per-task loading step.
 
-- `source` records preserve where context came from, such as README files,
-  package manifests, issues, external references recorded by an agent, or
-  user-stated context.
-- Atomic memories capture precise reusable claims, such as decisions, facts,
-  constraints, gotchas, workflows, questions, notes, or concepts.
-- `synthesis` records maintain compact summaries for product intent, feature
-  maps, roadmap, architecture, conventions, agent guidance, and repeated
-  workflows.
+This split is deliberate. Loading a context pack before every task sounds
+efficient and is not — our own May 2026 benchmarks showed per-task context
+loading does not save tokens. What the graph buys is different: agent answers
+grounded in product reality, and a cold-resume path back into any project.
 
-Use a workflow memory for durable project-specific procedures: release steps,
-debugging paths, migration routines, verification checks, and maintenance
-commands. Do not turn generic tutorials or task diaries into project memory.
+## Sync is reconciliation, not authorship
 
-:::tip
-Keep memories shaped like things future agents can use. A synthesis should
-replace rereading scattered docs. An atomic memory should usually carry one
-durable claim.
-:::
+`memory sync` never writes graph nodes. It is the mechanical half of keeping
+the graph honest:
 
-For the exact object taxonomy, see [Reference](/reference/).
+1. Read the committed marker in `.memory/sync-state.json`.
+2. Diff the tree since that commit, plus working-tree changes.
+3. Verify every anchor against the actual files.
+4. Report: fresh nodes, nodes whose anchored code changed, nodes with orphaned
+   anchors, unanchored nodes, and directories with real code but no feature
+   coverage.
+5. Print an agent prompt with a pre-filled `memory save --stdin` skeleton for
+   the nodes that need re-verification.
+6. Advance the marker (unless `--dry-run`).
 
-## Demand-driven memory quality
+The judgment — did the behavior actually change, is the feature still
+`building`, is the anchor just renamed — stays with the agent and you, in one
+save call.
 
-Real work improves memory quality. Agent failure, confusion, stale loaded
-context, and user correction are signals that memory may need repair.
+## Save discipline
 
-The loop is:
+Save product-meaningful changes: feature behavior added or changed, a decision
+taken with its reason, a gotcha discovered, a question opened or answered.
+Update existing nodes (reuse their `id`) instead of creating near-duplicates;
+use `stale`, `supersede`, and `delete` to retire memory that current evidence
+invalidates.
 
-```text
-load -> work/fail/correction -> identify memory gap -> save memory repair
-```
+Do not save refactors, formatting, task diaries, generic tutorials, secrets,
+or short-lived implementation notes. Passing tests or renaming a variable
+should not create memory. A session that changed no product reality needs no
+save — that is the common case, and it is fine.
 
-See [Demand-driven memory](/demand-driven-memory/) for the user-facing workflow.
+## Trust order
 
-## Retrieval
+Memory is context, not instructions. When the graph conflicts with the current
+user request, the code, or test results, the current evidence wins — and the
+correction is worth saving so the next agent does not repeat the mistake.
 
-`memory load "<task summary>"` compiles a task-focused context pack. Load modes
-such as `coding`, `debugging`, `review`, `architecture`, and `onboarding` tune
-deterministic ranking and rendering.
+## Where things live
 
-Use `memory search "<query>"` when you need targeted lookup. Use `memory inspect
-<id>` when you already know which memory object matters.
-
-## Inspection
-
-Memory writes inspectable files. The local viewer and, in Git projects, the
-memory diff show the current state:
-
-```bash
-memory view
-memory diff
-```
-
-Plain `git diff -- .memory/` can omit untracked memory files before staging.
-`memory diff` includes tracked and untracked Memory changes.
-
-## CLI and MCP
-
-Use the CLI by default. MCP is available for clients that launch `memory-mcp` and
-want routine memory tools inside the client. See the [MCP guide](/mcp/) for the
-exact boundary.
+Canonical truth is plain files under `.memory/`: a JSON sidecar plus a
+Markdown body per node, relations as JSON, an append-only event log. The
+SQLite full-text index under `.memory/index/` is generated and disposable —
+`memory rebuild` recreates it from canonical files. The exact layout and field
+shapes are in the [Reference](/reference/).

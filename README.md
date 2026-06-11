@@ -1,6 +1,6 @@
 # Memory
 
-![Memory is a local wiki for AI agents. Agents load repo context, keep it current, and you review changes.](site/public/assets/readme-value-header.png)
+![Memory keeps the product graph of a codebase: features, decisions, and status, anchored to the code and queryable by agents.](site/public/assets/readme-value-header.png)
 
 <p align="center">
   <a href="https://memory.aictx.dev"><img alt="Website" src="https://img.shields.io/badge/website-memory.aictx.dev-111214?style=for-the-badge"></a>
@@ -15,117 +15,80 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
 </p>
 
-Memory is a local wiki for AI coding agents and assistants: repo context they
-can load before work, keep current after meaningful changes, and leave
-reviewable in your project. It is inspired by
-[Andrej Karpathy's LLM Wiki pattern](https://gist.githubusercontent.com/karpathy/442a6bf555914893e9891c11519de94f/raw/ac46de1ad27f92b28ac95459c782c07f6b8c964a/llm-wiki.md):
-durable, human-editable project knowledge that models can read before work.
+**Your agent knows your code. It doesn't know your product.**
 
-Stop re-explaining the same product intent, architecture decisions, repo
-conventions, setup steps, and known traps every time a new AI coding session
-starts. Activate Memory once in a repo: it gives agents a local wiki of durable
-project knowledge, wires short agent guidance into the project, and loads only
-the pages that matter for the current task.
+Memory keeps the product graph of a codebase: features with their lifecycle
+stage, decisions with their reasons, gotchas, and open questions — anchored to
+the code paths they describe. Agents query it on demand and keep it current as
+the product changes.
 
-Use Memory when:
+If you run several projects with AI coding agents, you know the failure mode.
+You come back to a repo after three weeks. Neither you nor the agent remembers
+what is shipped, what is half-done, why the queue lives in the worker, or what
+was decided about storage. The agent can re-derive code structure cheaply; it
+cannot re-derive intent, stage, or rationale, because that knowledge is not in
+the repo. So you re-explain, or the agent guesses.
 
-- You work across many repos, branches, or agent sessions and keep losing the
-  durable project state between them.
-- You delegate real coding work to AI agents and want decisions, workflows,
-  setup paths, and known traps to survive the chat.
-- You maintain large or long-lived codebases where architecture and conventions
-  keep getting rediscovered.
-- You want a local wiki agents can maintain from source-backed project
-  knowledge.
-- You want to understand and verify agent-built work without reading every
-  transcript or every file.
-- You want `AGENTS.md`, `CLAUDE.md`, and rules files to stay short instead of
-  becoming stale project encyclopedias.
+Memory stores that product layer as plain local files in `.memory/`: JSON
+sidecars with Markdown bodies, indexed with SQLite full-text search. No
+embeddings, no cloud account, no model API. Saved memory is reviewable in Git
+like any other change. Code-graph tools map what is in the repo; Memory
+captures what isn't.
 
 This repository publishes the npm package `@aictx/memory` and the Homebrew
-formula `aictx/tap/memory`.
-
-Memory works with Codex, Claude Code, Cursor, Cline, OpenCode, and
-MCP-capable clients. Use the `memory` CLI by default, then add the local
-`memory-mcp` server when you want routine Memory tools inside an MCP client.
-
-## Why Memory?
-
-Memory is for the repo wiki agents actually need: durable project context that
-should survive between agents, sessions, branches, and reviews without making
-you re-teach the repo each time.
-
-The value stack is practical:
-
-- Better agent work: agents start with the product, architecture, workflow, and
-  gotcha context that matters for the current task.
-- Less wasted context: `memory load` builds a focused pack instead of asking you
-  to paste the same briefing or carry every project fact in a giant prompt.
-- Reviewable memory: saved knowledge is local project state that humans can
-  inspect, diff, repair, and keep honest.
-
-- Why not `AGENTS.md` only? Agent instruction files are good operating manuals.
-  They become too broad and static when they also try to be the whole project
-  wiki.
-- Why not a vector DB or RAG stack? Those are useful for large retrieval
-  systems. Memory keeps v1 project memory local, inspectable, Git-aware, and
-  usable without embeddings, hosted infrastructure, or a model API.
-- Why not long context? Long context helps inside one session. It does not make
-  memory reviewable, current, reusable across future sessions, or easy to clean
-  up when facts go stale.
-- Why local files? Plain files make the wiki reviewable and portable. Memory
-  builds on that foundation with validation, typed memory, a local index,
-  task-focused loading, relation-aware inspection, and a save/no-save
-  discipline.
-
-### Inspect the Memory
-
-Memory is not just hidden context for agents. The visual memory viewer is the
-wiki review surface: a local place where humans can inspect the same schema,
-objects, facets, relations, provenance, audit advisories, and graph context
-agents load.
-
-<p align="center">
-  <a href="https://demo.aictx.dev/?token=demo">
-    <img
-      alt="Memory viewer showing the memory schema graph with relation overview and canonical storage navigation."
-      src="site/public/assets/readme-visual-memory.png"
-      width="940"
-    >
-  </a>
-  <br>
-  <sub>Schema, stored objects, relation provenance, maintenance advisories, and graph context in one inspectable local viewer.</sub>
-</p>
-
-## What Gets Stored
-
-| Memory | Use it for |
-| --- | --- |
-| `decision` / `constraint` | Choices and boundaries future agents should respect. |
-| `workflow` / `gotcha` | Repeatable procedures and known traps. |
-| `source` | Where important project facts came from. |
-| `synthesis` | Compact summaries of product intent, architecture, feature maps, conventions, and agent guidance. |
-| `question` / `fact` / `concept` | Open scope, reusable facts, and domain ideas. |
-
-The full object taxonomy, facets, and write contracts live in the
-[reference docs](https://docs.aictx.dev/reference/).
-
-Memory does not require a cloud account, embeddings, hosted sync, an external
-model API, or network access for core memory commands. Saved memory is active
-immediately after Memory validates and writes it.
+formula `aictx/tap/memory`. It ships the `memory` CLI and the optional
+`memory-mcp` server.
 
 ## How It Works
 
-![Memory workflow: load wiki context, do work, and save durable updates.](site/public/assets/readme-how-it-works.png)
+![Memory workflow: build the product graph once, query it on demand, keep it synced.](site/public/assets/readme-how-it-works.png)
 
 ```text
-set up once -> agents load wiki context -> save durable updates
+init once -> query on demand -> save product changes -> sync at session end
 ```
 
-The loop is deliberately small after setup. Agents load memory before
-non-trivial work, use the current repo and tests as evidence, then save only
-knowledge that should remain in the repo wiki for future sessions, branches,
-and reviews.
+1. **`memory init`** — once per repo. Creates `.memory/` storage, installs a
+   short guidance block plus an auto-generated **product map** into `AGENTS.md`
+   and `CLAUDE.md` (marker sections), starts the local viewer, and prints an
+   **indexing brief**. Your coding agent follows the brief to build the initial
+   graph: explore the repo, interview you for intent, stage, and decisions,
+   then save everything in one call.
+2. **`memory query "<question>"`** — on demand, mid-task. Returns a
+   token-budgeted Markdown subgraph: full-text matches, their one-hop
+   relations, and connected open questions. There is no per-task context
+   loading; the only always-on context is the roughly one-screen product map.
+3. **`memory save --stdin`** — after product-meaningful changes. The input is
+   intent JSON: `{task, nodes, stale, supersede, delete}`. The product map in
+   `AGENTS.md`/`CLAUDE.md` refreshes automatically on every save.
+4. **`memory sync`** — at session end or after merging. Diff-driven: verifies
+   anchors against the actual tree, reports nodes whose anchored code changed,
+   orphaned anchors, and coverage gaps, then prints an agent prompt with a
+   pre-filled save skeleton. Sync is mechanical — it never writes graph nodes
+   itself.
+5. **`memory status`** — features by stage, open questions, stale anchors,
+   last activity and sync. **`memory status --all`** is the cross-project
+   dashboard: one row per registered project, for people running many repos
+   with agents.
+
+### The product map
+
+The map is the only thing agents carry into every session. It is generated,
+capped at roughly one screen, and refreshed by `save` and `sync`:
+
+```markdown
+## Product map (generated — do not edit; refresh with memory save or memory sync)
+Acme Render — Self-hosted PDF render service for invoice pipelines.
+
+**Building:** webhook-retry-queue — Failed Stripe webhooks re-enter a worker-owned retry queue. — services/billing/src/webhooks/
+**Shipped:** pdf-render-api — Renders invoice templates to PDF over HTTP. — services/render/ · template-editor — In-browser template editing with live preview. — apps/editor/
+**Paused:** batch-exports — Nightly bulk export of rendered documents. — services/exports/
+
+**Recent decisions:** retries-run-in-worker — Webhook retries run in the queue worker · sqlite-over-postgres — SQLite for single-node deployments
+
+**Open questions:** pdf-storage-location — Where do rendered PDFs live long-term?
+```
+
+Everything deeper is pull, not push: `memory query` when the agent needs it.
 
 ## Get Started Quickly
 
@@ -142,48 +105,19 @@ brew install aictx/tap/memory
 npm install -g @aictx/memory
 
 cd path/to/your/repo
-memory setup
-memory load "onboard to this repository"
-memory view
+memory init
 ```
 
-`memory setup` activates Memory in the current repo. It creates local `.memory/`
-memory, updates the marked Memory sections in `AGENTS.md` and `CLAUDE.md`, writes
-conservative first-run memory, runs checks, and starts the local viewer. Use
-`memory setup --no-view` when you do not want the viewer to start, or
-`memory setup --dry-run` to preview before writing.
+`memory init` creates local storage, installs the guidance block and product
+map sections, starts the viewer, and prints the indexing brief for your agent.
+Use `memory init --no-view` to skip the viewer, `memory init --dry-run` to
+preview, or `memory init --brief` to reprint the brief later.
 
 Memory writes local files and never commits automatically.
 
-## Project Status and Upgrade Recovery
-
-Memory is not ready for production use yet. Breaking changes should be expected
-across package versions while the schema and local storage format are still
-evolving.
-
-If you update to the latest package version and later see errors from existing
-local Memory storage, reset and re-run setup from the project root:
-
-```bash
-memory reset
-memory setup
-```
-
-`memory reset` creates a backup archive under `.memory/.backup/` before clearing
-local Memory storage. If useful context is missing after setup, ask your coding
-agent to inspect the newest backup and add back only relevant durable project
-knowledge. For example:
-
-```text
-Memory was reset after a package upgrade. Inspect the newest archive in
-.memory/.backup/, compare it with the current .memory/ contents, and add back
-only relevant durable project knowledge that was lost. Do not restore stale
-schema files blindly; use current Memory commands and validate with memory check.
-```
-
 ## Ask an Agent to Activate It
 
-Paste this into Codex, Claude Code, OpenCode, Cursor, Cline, or another
+Paste this into Claude Code, Codex, OpenCode, Cursor, Cline, or another
 CLI-capable coding agent from the project root:
 
 ```text
@@ -193,64 +127,107 @@ Install Memory with one of:
 brew install aictx/tap/memory
 npm install -g @aictx/memory
 
-Then run:
-memory setup
-memory check
-memory load "onboard to this repository"
+Then run from the project root:
+memory init
+
+Follow the printed indexing brief: explore the repo, draft the product graph
+(features with stage and anchors, decisions with their reasons, gotchas, open
+questions), interview me for what the repo cannot tell you, and save it all in
+one `memory save --stdin` call.
 
 When this is done, report:
-- whether setup wrote memory
-- whether check passed
-- how I can inspect the result with `memory view` or `memory diff`
+- what the product map in AGENTS.md/CLAUDE.md now shows
+- what `memory status` reports
+- how I can inspect the graph with `memory view`
 ```
 
-After setup, the normal agent loop is small:
+After the initial graph exists, the ongoing loop is small:
 
 ```bash
-memory load "<task summary>"
+memory query "why do webhook retries run in the worker?"
 # do the work
-memory remember --stdin
-memory diff
+memory save --stdin
+memory sync   # at session end
 ```
 
-Save only durable project knowledge. Memory is meant to keep the repo wiki
-current, not archive every task transcript.
+## What Gets Stored
 
-## What You Get
+Five kinds of node, four relation predicates.
 
-Four surfaces ship today. Each one works locally and fits normal Git review.
+| Kind | What it holds |
+| --- | --- |
+| `project` | One per repo: what this product is. Created by `init`, feeds the map header. |
+| `feature` | What the product does for users. Carries a `stage` (`idea`, `building`, `shipped`, `paused`, `dead`) and `anchors` — repo-relative path globs linking it to code. |
+| `decision` | A choice and the reason it was made. |
+| `gotcha` | A known trap or failure mode. |
+| `question` | An open product or technical question that affects future work. |
 
-| Surface | What it gives agents and humans | Try |
-| --- | --- | --- |
-| One-time setup | Creates the local wiki memory and short repo guidance so future agents know when to load and save context. | `memory setup` |
-| Task-focused loading | Pulls relevant wiki context before coding, debugging, review, architecture, or onboarding work. | `memory load "change auth routes"` |
-| Visual memory viewer | Opens a local browser for the memory schema, canonical objects, facets, maintenance advisories, relation overview, provenance, and graph context. | `memory view` |
-| Save discipline | Saves only durable facts, decisions, workflows, gotchas, source records, and syntheses. | `memory remember --stdin` |
+Nodes connect through `affects`, `depends_on`, `supersedes`, and `related_to`
+relations. Anchors are what make staleness mechanical: when anchored files
+change or disappear, `sync` and `status` report exactly which nodes need
+re-verification.
+
+What this buys you, concretely:
+
+- Pick any project back up cold — the map and graph carry what is shipped,
+  half-done, and why.
+- Agent answers grounded in product reality instead of guesses from code.
+- Decisions that survive sessions, branches, and agent switches.
+- Mechanical staleness detection through anchors, not vibes.
+- Memory you can review, diff, and fix in Git.
+
+## The Sync Ritual
+
+`memory sync` is how the graph stays honest without re-reading the repo:
+
+```bash
+memory sync
+```
+
+It diffs the tree since the last sync marker (`.memory/sync-state.json`),
+checks every anchor against the current files, and reports four things: nodes
+whose anchored code changed, nodes whose anchors match nothing anymore, nodes
+with no anchors, and directories with real code but no feature coverage. When
+something needs attention it prints an agent prompt with a pre-filled
+`memory save --stdin` skeleton, so reconciliation is one save call. Run it at
+session end or after merging others' work. `--dry-run` reports without
+advancing the marker.
+
+## Inspect the Graph
+
+<p align="center">
+  <a href="https://demo.aictx.dev/?token=demo">
+    <img
+      alt="Memory viewer showing the memory schema graph with relation overview and canonical storage navigation."
+      src="site/public/assets/readme-visual-memory.png"
+      width="940"
+    >
+  </a>
+  <br>
+  <sub>The local viewer: projects dashboard, memory list, node detail, and the relation graph.</sub>
+</p>
+
+`memory view` starts a local browser viewer bound to `127.0.0.1`: a projects
+dashboard, the memory list, node detail, and an interactive relation graph.
+`memory inspect <id>` does the same for one node in the terminal, and
+`memory diff` shows tracked and untracked `.memory/` changes.
 
 ## Works With Your Agent
 
 | Agent or client | Fastest path |
 | --- | --- |
-| Codex | `memory setup` writes `AGENTS.md`; use the CLI loop by default. |
-| Claude Code | `memory setup` writes `CLAUDE.md`; use the CLI loop by default. |
-| OpenCode | Uses the root `AGENTS.md` guidance created by setup. |
-| Cursor | Copy `integrations/cursor/memory.mdc` into `.cursor/rules/memory.mdc`, then run setup. |
-| Cline | Copy `integrations/cline/memory.md` into `.clinerules/memory.md`, then run setup. |
-| MCP-capable clients | Start with the CLI; configure `memory-mcp` later when the client exposes MCP tools. |
+| Claude Code | `memory init` writes the guidance block and product map into `CLAUDE.md`. |
+| Codex | `memory init` writes `AGENTS.md`; use the CLI loop by default. |
+| OpenCode | Uses the root `AGENTS.md` guidance created by init. |
+| Cursor | Copy `integrations/cursor/memory.mdc` into `.cursor/rules/memory.mdc`, then run init. |
+| Cline | Copy `integrations/cline/memory.md` into `.clinerules/memory.md`, then run init. |
+| MCP-capable clients | Start with the CLI; configure `memory-mcp` for `query_memory`, `save_memory`, `status_memory`, and `inspect_memory` tools. |
 
-## Distribution Artifacts
-
-The `integrations/` directory includes generated skill and plugin artifacts for
-external agent packaging. They package the same CLI-first guidance as the setup
-aids and do not add MCP configuration.
-
-Codex users can add this repo's marketplace with one command:
+Codex users can add this repo's plugin marketplace with one command:
 
 ```bash
 codex plugin marketplace add aictx/memory
 ```
-
-Then open Codex Plugins and install **Memory**.
 
 Claude Code users can add the marketplace and install the plugin from inside
 Claude Code:
@@ -263,27 +240,51 @@ Claude Code:
 For official listing paths and release prep, see
 [Publishing agent plugins](https://docs.aictx.dev/plugin-publishing/).
 
+## Project Status and Upgrade Recovery
+
+Memory is pre-1.0. Breaking changes should be expected across package versions
+while the schema and local storage format are still evolving. There is no
+storage migration: when a new version rejects existing `.memory/` storage,
+reset and re-index from the project root:
+
+```bash
+memory reset
+memory init
+```
+
+`memory reset` creates a backup archive under `.memory/.backup/` before
+clearing local storage. To rebuild the graph afterwards, ask your coding agent:
+
+```text
+Memory was reset after a package upgrade. Run `memory init` and follow the
+indexing brief to rebuild the product graph. Inspect the newest archive in
+.memory/.backup/ for prior features, decisions, gotchas, and open questions,
+and re-save only what is still true in one `memory save --stdin` call. Do not
+copy old storage files back; validate the result with `memory check`.
+```
+
 ## Documentation
 
-- [Setup](https://docs.aictx.dev/getting-started/)
-- [Memory recipes](https://docs.aictx.dev/memory-recipes/)
-- [Agent recipes](https://docs.aictx.dev/agent-recipes/)
+- [Getting started](https://docs.aictx.dev/getting-started/)
+- [Mental model](https://docs.aictx.dev/mental-model/)
+- [Capabilities](https://docs.aictx.dev/capabilities/)
 - [CLI reference](https://docs.aictx.dev/cli/)
 - [MCP](https://docs.aictx.dev/mcp/)
+- [Agent integration](https://docs.aictx.dev/agent-integration/)
 - [Reference](https://docs.aictx.dev/reference/)
-- [Wiki workflow](https://docs.aictx.dev/wiki-workflow/)
 
 ## Contribute
 
 Memory is MIT-licensed and built in the open. Issues, docs fixes, examples,
-agent recipes, and pull requests are welcome.
+and pull requests are welcome.
 
 [Contribute on GitHub](https://github.com/aictx/memory/blob/main/CONTRIBUTING.md)
 
 ## Project identity
 
-Memory by Aictx gives AI coding agents a local wiki for repo context. It stores
-durable project memory as reviewable local files agents can load before work
-and update after meaningful changes. It is distributed through the open source
-npm package `@aictx/memory` and the Homebrew formula `aictx/tap/memory`, then
-runs through the `memory` CLI and optional `memory-mcp` server.
+Memory by Aictx keeps the product graph of a codebase for AI coding agents:
+features with stage and code anchors, decisions with their reasons, gotchas,
+and open questions, stored as reviewable local files. It is distributed
+through the open source npm package `@aictx/memory` and the Homebrew formula
+`aictx/tap/memory`, then runs through the `memory` CLI and optional
+`memory-mcp` server.

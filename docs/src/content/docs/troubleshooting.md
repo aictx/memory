@@ -1,18 +1,18 @@
 ---
 title: Troubleshooting
-description: Fix common install, PATH, MCP, schema, index, and recovery issues.
+description: Fix common install, PATH, MCP, schema-version, index, and recovery issues.
 ---
 
 Start with the smallest check that answers the question:
 
 ```bash
 memory check
+memory status
 memory diff
-memory view --open
 ```
 
-`check` validates storage and index health. `diff` shows memory changes. `view`
-opens the local inspection UI.
+`check` validates storage, index health, anchors, and the product map
+sections. `status` summarizes the graph. `diff` shows memory changes.
 
 ## `memory` is not on PATH
 
@@ -36,42 +36,46 @@ binary before trusting schema errors.
 ## MCP tools are not available
 
 `memory init` creates local storage. It does not add MCP tools to an already
-running agent session. MCP tools become available when the client is configured
-to launch `memory-mcp`.
+running agent session. MCP tools become available when the client is
+configured to launch `memory-mcp` and a new session starts.
 
 If you need to keep working right now, use the CLI:
 
 ```bash
-memory load "<task summary>"
-memory remember --stdin
-memory diff
+memory query "<question>"
+memory save --stdin
 ```
 
-Configure MCP later in the client settings, then start a new agent session. See
-the [MCP guide](/mcp/) for exact tool names and CLI-only boundaries.
+See the [MCP guide](/mcp/) for the exact tool names and CLI-only boundaries.
 
-## Memory is empty after init
+## Unsupported storage version
 
-`memory init` creates starter storage. It does not create a full project memory
-map by itself.
-
-Guided setup:
+Memory refuses to operate on `.memory/` storage written by a different schema
+version, and `memory upgrade` is intentionally a stub — there is no migration
+pre-1.0. Recover with:
 
 ```bash
-memory setup
+memory reset
+memory init
 ```
 
-or ask for a bootstrap patch:
+`reset` archives the old storage under `.memory/.backup/` first. Ask your
+coding agent to rebuild the graph from the indexing brief and re-save only
+what is still true from the backup.
 
-```bash
-memory suggest --bootstrap --patch > bootstrap-memory.json
-memory patch review bootstrap-memory.json
-memory save --file bootstrap-memory.json
-memory check
-```
+## The graph is empty after init
 
-The bootstrap path is best for first-run product intent, feature map, roadmap,
-architecture, conventions, and agent guidance memory.
+That is expected. `init` creates storage and prints the indexing brief;
+building the graph is the agent's job. Hand the brief to your coding agent
+(reprint it with `memory init --brief`), or paste the first-time setup prompt
+from the [docs landing page](/).
+
+## Product map missing or out of date
+
+`memory check` warns when `AGENTS.md`/`CLAUDE.md` have no generated product
+map section or the section is stale. Run `memory init` to install the marker
+sections; any `memory save` or `memory sync` refreshes the map afterwards.
+Do not edit the generated section by hand.
 
 ## Schema or index errors
 
@@ -91,10 +95,10 @@ memory rebuild
 
 ## Dirty memory warnings
 
-Dirty or untracked `.memory/` files are not by themselves a reason to skip saving
-durable memory. Review the files, then use supported CLI/MCP save paths when
-there is durable future value. Memory backs up dirty touched files under
-`.memory/recovery/` before overwrite/delete and continues where possible.
+Dirty or untracked `.memory/` files are not by themselves a reason to skip a
+valid save. Review the files, then use the supported save path. Memory backs
+up dirty touched files under `.memory/recovery/` before overwrite or delete
+and continues where possible.
 
 ## Git diff misses new memory files
 

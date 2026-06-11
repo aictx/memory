@@ -22,16 +22,14 @@ const publicDocsTargets = [
   "docs/src/content/docs/index.md",
   "docs/src/content/docs/getting-started.md",
   "docs/src/content/docs/capabilities.md",
-  "docs/src/content/docs/memory-recipes.md",
   "docs/src/content/docs/cli.md",
   "docs/src/content/docs/mcp.md",
   "docs/src/content/docs/agent-integration.md",
-  "docs/src/content/docs/agent-recipes.md",
-  "docs/src/content/docs/specializing-memory.md",
+  "docs/src/content/docs/mental-model.md",
+  "docs/src/content/docs/plugin-publishing.md",
   "docs/src/content/docs/reference.md",
   "docs/src/content/docs/troubleshooting.md",
-  "docs/src/content/docs/viewer.md",
-  "docs/src/content/docs/wiki-workflow.md"
+  "docs/src/content/docs/viewer.md"
 ] as const;
 
 const forbiddenMcpToolNames = [

@@ -15,14 +15,15 @@ describe("memory docs", () => {
     expect(output.stderr()).toBe("");
     expect(output.stdout()).toContain("Memory docs: https://docs.aictx.dev/");
     expect(output.stdout()).toContain("- getting-started:");
+    expect(output.stdout()).toContain("- mental-model:");
     expect(output.stdout()).toContain("- capabilities:");
-    expect(output.stdout()).toContain("- specializing-memory:");
-    expect(output.stdout()).toContain("- memory-recipes:");
-    expect(output.stdout()).toContain("- demand-driven-memory:");
-    expect(output.stdout()).toContain("- wiki-workflow:");
+    expect(output.stdout()).toContain("- cli:");
+    expect(output.stdout()).toContain("- mcp:");
     expect(output.stdout()).toContain("- agent-integration:");
-    expect(output.stdout()).toContain("- agent-recipes:");
     expect(output.stdout()).toContain("- plugin-publishing:");
+    expect(output.stdout()).toContain("- viewer:");
+    expect(output.stdout()).toContain("- troubleshooting:");
+    expect(output.stdout()).toContain("- reference:");
   });
 
   it("keeps the topic list aligned with bundled docs pages", async () => {
@@ -62,7 +63,7 @@ describe("memory docs", () => {
     expect(exitCode).toBe(0);
     expect(output.stderr()).toBe("");
     expect(output.stdout()).toContain("# Getting started");
-    expect(output.stdout()).toContain("memory setup");
+    expect(output.stdout()).toContain("memory init");
     expect(output.stdout()).not.toMatch(/^---\n/u);
   });
 
@@ -93,17 +94,6 @@ describe("memory docs", () => {
     expect(envelope.data.content).toContain("# Agent integration");
   });
 
-  it("prints the bundled demand-driven memory topic", async () => {
-    const output = createCapturedOutput();
-
-    const exitCode = await main(["node", "memory", "docs", "memory-quality"], output.writers);
-
-    expect(exitCode).toBe(0);
-    expect(output.stderr()).toBe("");
-    expect(output.stdout()).toContain("# Demand-driven memory");
-    expect(output.stdout()).toContain("load -> work/fail/correction");
-  });
-
   it("prints the bundled capabilities topic", async () => {
     const output = createCapturedOutput();
 
@@ -112,57 +102,19 @@ describe("memory docs", () => {
     expect(exitCode).toBe(0);
     expect(output.stderr()).toBe("");
     expect(output.stdout()).toContain("# Capabilities");
-    expect(output.stdout()).toContain("Routine memory work");
+    expect(output.stdout()).toContain("memory query");
   });
 
-  it("prints the bundled wiki workflow topic", async () => {
+  it("prints the bundled mental model topic", async () => {
     const output = createCapturedOutput();
 
-    const exitCode = await main(["node", "memory", "docs", "wiki"], output.writers);
+    const exitCode = await main(["node", "memory", "docs", "product-graph"], output.writers);
 
     expect(exitCode).toBe(0);
     expect(output.stderr()).toBe("");
-    expect(output.stdout()).toContain("# Wiki workflow");
-    expect(output.stdout()).toContain("memory wiki ingest");
-    expect(output.stdout()).toContain("source records");
-  });
-
-  it("prints the bundled agent recipes topic", async () => {
-    const output = createCapturedOutput();
-
-    const exitCode = await main(["node", "memory", "docs", "agent-recipes"], output.writers);
-
-    expect(exitCode).toBe(0);
-    expect(output.stderr()).toBe("");
-    expect(output.stdout()).toContain("# Agent recipes");
-    expect(output.stdout()).toContain("Codex");
-    expect(output.stdout()).toContain("Cursor");
-    expect(output.stdout()).toContain("memory setup");
-    expect(output.stdout()).toContain("memory diff");
-  });
-
-  it("keeps the recipes alias scoped to agent recipes", async () => {
-    const output = createCapturedOutput();
-
-    const exitCode = await main(["node", "memory", "docs", "recipes"], output.writers);
-
-    expect(exitCode).toBe(0);
-    expect(output.stderr()).toBe("");
-    expect(output.stdout()).toContain("# Agent recipes");
-    expect(output.stdout()).not.toContain("# Memory Recipes");
-  });
-
-  it("prints the bundled memory recipes topic", async () => {
-    const output = createCapturedOutput();
-
-    const exitCode = await main(["node", "memory", "docs", "memory-recipes"], output.writers);
-
-    expect(exitCode).toBe(0);
-    expect(output.stderr()).toBe("");
-    expect(output.stdout()).toContain("# Memory Recipes");
-    expect(output.stdout()).toContain("Build or repair product memory for this repository.");
-    expect(output.stdout()).toContain("memory wiki ingest --stdin");
-    expect(output.stdout()).toContain("memory diff");
+    expect(output.stdout()).toContain("# Mental model");
+    expect(output.stdout()).toContain("Anchors");
+    expect(output.stdout()).toContain("memory sync");
   });
 
   it("prints the bundled plugin publishing topic", async () => {

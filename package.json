@@ -61,7 +61,6 @@
     "build:viewer": "vite build --config viewer/vite.config.ts",
     "build:demo-viewer": "pnpm build:viewer && node scripts/build-viewer-demo-data.mjs && tsc --noEmit",
     "build:guidance": "node scripts/generate-agent-guidance.mjs",
-    "bench:memory": "node experiments/memory-token-savings/src/benchmark.mjs",
     "deploy:site:cloudflare": "wrangler deploy",
     "deploy:demo:cloudflare": "wrangler deploy --config wrangler.demo.jsonc",
     "dev": "tsx src/cli/main.ts",

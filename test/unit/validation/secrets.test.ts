@@ -241,18 +241,6 @@ describe("project secret scanning", () => {
     });
   });
 
-  it("can include generated context packs when requested", async () => {
-    const projectRoot = await createProjectRoot();
-    await writeProjectFile(projectRoot, ".memory/context/context-pack.md", `sk-${"a".repeat(20)}`);
-
-    const result = await scanProjectSecrets(projectRoot, { includeContextPacks: true });
-
-    expect(result.valid).toBe(false);
-    expect(result.errors).toContainEqual(
-      expect.objectContaining({ path: ".memory/context/context-pack.md:1" })
-    );
-  });
-
   it("does not mutate files while scanning", async () => {
     const projectRoot = await createProjectRoot();
     const path = ".memory/memory/notes/example.md";

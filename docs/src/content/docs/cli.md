@@ -1,176 +1,206 @@
 ---
 title: CLI guide
-description: Setup, routine work, inspection, recovery, export, docs, and viewer commands.
+description: Every memory CLI verb with its flags — init, query, save, sync, status, and the inspection and maintenance commands.
 ---
 
-The CLI is the default way to use Memory. It handles setup, routine memory work,
-inspection, recovery, exports, bundled docs, and the local viewer.
-
-Most days, an agent only needs:
+The CLI is the default way to use Memory. The day-to-day surface is small:
 
 ```bash
-memory load "task summary"
-memory remember --stdin
-memory diff
+memory query "<question>"   # pull product context mid-task
+memory save --stdin         # save product-meaningful changes
+memory sync                 # reconcile at session end
+memory status               # where things stand
 ```
 
-The rest of the CLI is there for setup, review, recovery, and maintenance.
+Everything else is setup, inspection, or maintenance. All commands accept a
+global `--json` flag for structured envelopes.
 
-## Quick checks
+## The loop
 
-```bash
-memory check
-memory diff
-memory view --open
-```
+### `memory init`
 
-- `check` validates canonical memory and generated index health.
-- `diff` shows memory changes, including untracked files in Git projects.
-- `view --open` starts the local browser viewer.
-
-## Setup and bootstrap
+Initialize Memory storage in this project and print the indexing brief.
 
 ```bash
 memory init
-memory setup
-memory setup --dry-run
-memory setup --no-view
-memory setup --open
-memory setup --review-agent-guidance
-memory patch review bootstrap-memory.json
+memory init --dry-run
+memory init --no-view
+memory init --no-agent-guidance
+memory init --force
+memory init --brief
 ```
 
-- `setup` is the normal onboarding command. It initializes storage if needed,
-  applies conservative bootstrap memory, and starts the local viewer unless
-  told not to.
-- `init` creates empty storage for automation, tests, and manual workflows.
-- `setup --dry-run` previews setup without writing memory or repo files.
-- `setup --force --dry-run` previews reset/setup behavior without deleting or
-  rewriting anything.
-- `setup --no-view` skips viewer startup; `setup --open` also opens the viewer
-  in the default browser.
-- `setup --review-agent-guidance` prints a prompt for the active agent to
-  semantically review existing `AGENTS.md` and `CLAUDE.md` content outside the
-  managed Memory block after setup. It does not automatically infer or save
-  memory from free-form guidance.
-- `patch review` reviews a structured memory patch without writing it.
+- Creates `.memory/` storage with a starter `project` node.
+- Installs the guidance block and generated product map sections into
+  `AGENTS.md` and `CLAUDE.md` (skipped with `--no-agent-guidance`).
+- Starts the local viewer (skipped with `--no-view`).
+- Prints the indexing brief the coding agent follows to build the initial
+  graph. `--brief` prints only the brief and touches nothing.
+- `--dry-run` previews what init would create or change without writing.
+- `--force` discards existing Memory storage and initializes from scratch.
 
-:::tip
-If memory is empty after `init`, use `memory setup` before hand-writing memory.
-The bootstrap flow is designed for that first-run gap.
-:::
+### `memory query <question>`
 
-## Routine memory work
+Query local Memory and print a token-budgeted Markdown subgraph of matching
+memory.
 
 ```bash
-memory load "change auth routes"
-memory search "auth route conventions"
-memory inspect decision.auth-route-conventions
-memory suggest --after-task "change auth routes" --json
-memory audit --json
-memory remember --stdin
+memory query "why do webhook retries run in the worker?"
+memory query "state of batch exports" --budget 1200
 ```
 
-The routine loop is narrow: load context, do the work, and save durable
-knowledge as active memory. A task that produced no reusable project knowledge
-does not need a save.
+- Seeds on full-text matches, expands one hop along active relations, and
+  attaches connected open questions.
+- `--budget <number>` overrides the token budget (default comes from
+  `.memory/config.json`, initially 2000).
 
-Use `remember` for normal intent-first memory creation. Use `save` only when
-you need to submit a structured patch directly. In
-`suggest --after-task --json`, use `recommended_actions` and
-`repair_candidates` as advice; the agent still writes the meaningful title,
-body, and reason from current evidence.
+### `memory save --stdin`
 
-## Wiki-style source workflows
+Save product memory from intent-first input: create or update
+feature/decision/gotcha/question nodes, mark stale, supersede, or delete.
 
 ```bash
-memory wiki ingest --stdin
-memory wiki ingest --stdin --dry-run --json
-memory wiki file --stdin
-memory wiki lint --json
-memory wiki log --limit 20
+memory save --stdin
+memory save --stdin --dry-run
 ```
 
-`wiki ingest` creates or updates a source record with `origin` and files
-agent-supplied syntheses in the same atomic patch. `wiki file` saves a useful
-query result or synthesis through the intent-first remember path. `wiki lint`
-uses audit semantics with wiki wording, and `wiki log` renders a chronological
-view from canonical events.
+- `--stdin` is required; the input is JSON with the shape
+  `{task, nodes, stale, supersede, delete}`. See the
+  [Reference](/reference/#save-input) for the exact node fields.
+- `--dry-run` validates and plans the write without changing anything.
+- Every successful save refreshes the product map in `AGENTS.md`/`CLAUDE.md`.
 
-Commands that support structured output accept `--json`:
+### `memory sync`
+
+Run the diff-driven staleness pass: report nodes whose anchors changed or died
+since the last sync, list coverage gaps, refresh the product map, and advance
+the sync marker.
 
 ```bash
-memory check --json
+memory sync
+memory sync --dry-run
 ```
 
-## Inspection and debugging
+- Diffs the tree since the commit recorded in `.memory/sync-state.json`.
+- Reports changed, orphaned, and unanchored nodes plus directories with code
+  but no feature coverage, and prints an agent prompt with a pre-filled save
+  skeleton when reconciliation is needed.
+- Never writes graph nodes itself. `--dry-run` reports without advancing the
+  marker or refreshing the map.
+
+### `memory status`
+
+Summarize the product graph: features by stage, open questions, stale anchors,
+last activity, and last sync.
 
 ```bash
-memory stale
-memory graph <id>
-memory lens project-map
-memory lens current-work
-memory handoff show
+memory status
+memory status --all
 ```
 
-`audit` includes role coverage gaps and advisory stale/conflict findings, but
-missing roles and possible-stale findings are not `check` failures. `stale`
-lists only confirmed stale and superseded memory. `graph` shows a one-hop
-relation neighborhood. `lens` renders readable project views. `handoff`
-preserves unfinished current-branch state without making it project truth.
+- `--all` prints one row per registered project from the user-level registry
+  (`~/.memory/projects.json`) — the cross-project dashboard.
 
-`audit --json` is report-only by default. It can flag possible stale references,
-stale source origins, missing referenced files, unresolved active conflicts,
-and supersession chains that need review. Those findings do not mutate memory
-or prove a claim false; they tell the agent or human what to verify next.
+## Inspection
 
-## Maintenance
+### `memory check`
+
+Validate canonical storage and generated index health. Also warns when anchors
+match no files or the product map sections in `AGENTS.md`/`CLAUDE.md` are
+missing or out of date.
 
 ```bash
 memory check
-memory rebuild
-memory upgrade
-memory reset
-memory reset --all
+memory check --json
 ```
 
-`rebuild` regenerates indexes from canonical memory. `reset` backs up and clears
-local `.memory/` storage. `reset --all` resets every project in the user-level
-registry; add `--destroy` only when you intend to delete each registered
-`.memory/` without backup.
+### `memory diff`
 
-## Git inspection and recovery
+Show Memory changes, including untracked memory files in Git projects. Plain
+`git diff -- .memory/` can miss untracked files before staging.
 
 ```bash
 memory diff
-memory history
-memory restore <commit>
-memory rewind
 ```
 
-Memory writes local files and never commits automatically. Git remains the source
-of truth for history and rollback when the project is inside a Git worktree.
+### `memory inspect <id>`
 
-## Export, viewer, and docs
+Show one Memory object and its direct relations.
 
 ```bash
-memory export obsidian
-memory projects list
-memory view --open
-memory docs
-memory docs getting-started
-memory docs demand-driven-memory
-memory docs memory-recipes
-memory docs agent-recipes
-memory docs agent-integration --open
+memory inspect feature.webhook-retry-queue
 ```
 
-`view` starts a local memory viewer. `docs` lists bundled public docs topics.
-`docs <topic>` prints bundled Markdown for that topic. `--open` opens the
-hosted docs site.
+### `memory view`
+
+Start the local viewer: projects dashboard, memory list, node detail, and the
+relation graph. Binds to `127.0.0.1` only.
+
+```bash
+memory view
+memory view --open
+memory view --port 4888
+memory view --detach
+```
+
+- `--open` opens the URL in the default browser.
+- `--port <number>` picks the port (random available port by default).
+- `--detach` starts the viewer in a background process and prints its URL.
+
+## Maintenance
+
+### `memory rebuild`
+
+Rebuild generated indexes from canonical storage. Does not change canonical
+memory.
+
+```bash
+memory rebuild
+```
+
+### `memory projects`
+
+Manage the user-level project registry behind `memory status --all` and the
+viewer's projects dashboard.
+
+```bash
+memory projects list
+memory projects add            # registers the current directory
+memory projects add /path/to/project
+memory projects remove <registry-id|project-id|path>
+memory projects prune          # drop entries whose storage is gone
+```
+
+### `memory reset`
+
+Back up and clear local Memory storage. The backup archive lands under
+`.memory/.backup/`.
+
+```bash
+memory reset
+memory reset --all       # every project in the registry
+memory reset --destroy   # delete .memory/ entirely, no backup
+```
+
+### `memory upgrade`
+
+Removed as a migration path. Storage created by older schema versions is not
+migrated; run `memory reset` then `memory init` and rebuild the graph from the
+indexing brief.
+
+### `memory docs`
+
+Read bundled public docs or open the hosted docs site.
+
+```bash
+memory docs
+memory docs getting-started
+memory docs cli --open
+memory docs --json
+```
 
 ## MCP
 
-MCP is available when the agent client has launched and connected to
-`memory-mcp`. Use the [MCP guide](/mcp/) for configuration and exact tool
-boundaries.
+MCP covers query, save, status, and inspect when the client has launched
+`memory-mcp`. Everything else — init, sync, viewer, registry, maintenance —
+stays in the CLI. See the [MCP guide](/mcp/).

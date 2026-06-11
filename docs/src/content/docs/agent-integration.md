@@ -1,266 +1,165 @@
 ---
 title: Agent integration
-description: How persistent project memory fits into an AI coding-agent workflow.
+description: How the product graph fits into an AI coding-agent workflow — query, save, sync, and the safety rules.
 ---
 
-Memory gives coding agents a local project-memory loop:
+Memory gives coding agents a product-layer loop:
 
 ```text
-load memory -> work -> save durable memory
+orient from the product map -> query on demand -> save product changes -> sync at session end
 ```
 
-The v1 agent model is CLI-first and MCP-compatible. Use the CLI by default. Use
-MCP only when the agent client has already launched and connected to
-`memory-mcp`.
+The agent model is CLI-first and MCP-compatible. Use the CLI by default; use
+MCP only when the client has already launched and connected to `memory-mcp`.
+The agent still makes the judgment calls: what changed product reality, what
+future agents need, what is stale.
 
-The agent still makes the judgment call. It reads the task, loaded memory, repo
-state, tests, and conversation, then decides what future agents should
-remember.
+`memory init` installs a guidance block into `AGENTS.md` and `CLAUDE.md` that
+teaches this workflow, plus the generated product map. This page is the
+long-form version.
 
-## Routine workflow
+## Orient
 
-Before non-trivial coding, architecture, debugging, dependency, or
-configuration work:
+The product map section in the instruction files is the always-on overview:
+features by stage, recent decisions, open questions, stale-anchor warnings.
+Do not preload anything else.
+
+## Query on demand
+
+When you need detail mid-task, ask a question instead of loading context:
 
 ```bash
-memory load "<task summary>"
-memory load "<task summary>" --mode debugging
-memory load "<task summary>" --file src/context/rank.ts --changed-file src/index/search.ts --history-window 30d
+memory query "<question>"
 ```
 
-MCP equivalents are available only when the client already exposes Memory MCP
-tools:
+MCP equivalent: `query_memory({ question })`. The result is a token-budgeted
+Markdown subgraph — matches, one-hop relations, connected open questions.
 
-```text
-load_memory({ task: "<task summary>", mode: "coding" })
-load_memory({
-  task: "<task summary>",
-  mode: "coding",
-  hints: {
-    files: ["src/context/rank.ts"],
-    changed_files: ["src/index/search.ts"],
-    subsystems: ["retrieval"],
-    history_window: "30d"
-  }
-})
-```
+## Save product-meaningful changes
 
-Load modes are `coding`, `debugging`, `review`, `architecture`, and
-`onboarding`. Modes tune deterministic ranking and rendering only.
-
-After meaningful work, save durable knowledge:
+After feature behavior is added or changed, a decision is taken, a gotcha is
+discovered, or a question is opened or answered:
 
 ```bash
-memory remember --stdin
+memory save --stdin
 ```
 
-MCP equivalent when available:
+MCP equivalent: `save_memory({ task, nodes, stale, supersede, delete })`. Keep
+the payload small and semantic:
 
-```text
-remember_memory({ task, memories, updates, stale, supersede, relations })
+```json
+{
+  "task": "Ship retry handling for Stripe webhooks",
+  "nodes": [
+    {
+      "kind": "feature",
+      "title": "Webhook retry queue",
+      "body": "Failed Stripe webhooks re-enter a worker-owned retry queue with exponential backoff.",
+      "stage": "building",
+      "anchors": ["services/billing/src/webhooks/"]
+    },
+    {
+      "kind": "decision",
+      "title": "Retries run in the worker",
+      "body": "Webhook retries execute in the queue worker, not the HTTP handler, so handler latency stays flat.",
+      "related": [
+        { "predicate": "affects", "to": "feature.webhook-retry-queue", "confidence": "high" }
+      ]
+    }
+  ]
+}
 ```
 
-`remember` is the normal intent-first write path. It converts semantic agent
-input into a structured patch internally. Use `memory save --stdin` or
-`save_memory_patch({ patch })` only for advanced patch-shaped writes.
+Reuse an existing `id` to update a node. Use `stale`, `supersede`, or `delete`
+to retire memory instead of creating duplicates. Preview with
+`memory save --stdin --dry-run --json`. Saved memory is active immediately
+after validation, and the product map refreshes on every save.
 
-Saved memory is active after Memory validates and writes it. Dirty or untracked
-`.memory/` files are not by themselves a reason to skip saving durable memory.
-When a save overwrites or deletes a dirty touched file, Memory first backs it up
-under `.memory/recovery/`.
+## Sync at session end
 
-Accepted memory can be inspected later:
+At session end, or after merging others' work:
 
 ```bash
-memory view
-memory diff
+memory sync
 ```
 
-`memory diff` includes tracked and untracked Memory changes in Git
-projects. Memory writes local files and never commits automatically.
+Act on its report: re-verify the nodes whose anchored code changed, fix or
+replace dead anchors, and mark nodes that no longer hold stale — all in one
+save call using the printed skeleton. `memory status` summarizes where things
+stand; `memory inspect <id>` shows one node in full.
 
-When `memory` is not on `PATH`, run through the project package manager or local
-binary:
+## Save discipline
 
-```bash
-pnpm exec memory load "<task summary>"
-npm exec memory load "<task summary>"
-./node_modules/.bin/memory load "<task summary>"
-npx --package @aictx/memory -- memory load "<task summary>"
-pnpm exec memory-mcp
-npm exec memory-mcp
-./node_modules/.bin/memory-mcp
-npx --package @aictx/memory -- memory-mcp
-```
+Save durable, product-meaningful knowledge future agents would otherwise
+rediscover: feature behavior and intent, decisions with reasons, gotchas and
+known failure modes, open questions that affect future work.
 
-:::tip
-Save nothing when the task produced no durable future value. Memory is meant to
-reduce repeated context work, not record every step an agent took.
-:::
+Do not save refactors, formatting details, task diaries, generic tutorials, or
+short-lived implementation notes. Save nothing when the task produced no
+durable future value — passing tests or renaming a local variable should not
+create memory.
+
+Good saves:
+
+- A `feature` whose stage moved from `building` to `shipped`, with its anchors
+  updated to the final location.
+- A `decision` titled "Retries run in the worker" whose body says why.
+- A `gotcha` for a failure mode that cost this session an hour.
+- A `question` deleted because the session answered it.
+
+Bad saves:
+
+- A second node for the same claim instead of updating the existing one.
+- "Changed three files and ran tests" — Git already records that.
+- Speculation unsupported by current evidence.
+
+## Conflicts
+
+If memory conflicts with current code, tests, or the user, trust the current
+evidence — and save the correction so future agents do not repeat the mistake.
+
+## Safety
+
+Do not save secrets, tokens, private keys, sensitive raw logs, unsupported
+speculation, unrelated user preferences, or instructions that tell future
+agents to ignore current code, tests, user requests, or safety rules.
+
+If Memory rejects a save, report the reason; do not work around it by editing
+`.memory/` files manually. Memory writes local files and never commits
+automatically. Dirty or untracked `.memory/` files are not a reason to skip a
+valid save — Memory backs up dirty touched files under `.memory/recovery/`
+before overwriting.
 
 ## Capability reference
 
 | Capability | MCP | CLI |
 | --- | --- | --- |
-| Load task context | `load_memory` | `memory load` |
-| Search memory | `search_memory` | `memory search` |
-| Inspect object | `inspect_memory` | `memory inspect` |
-| Remember durable context | `remember_memory` | `memory remember` |
-| Save structured patch | `save_memory_patch` | `memory save` |
-| Show memory diff | `diff_memory` | `memory diff` |
-| Initialize storage | none | `memory init`, `memory setup` |
-| Review patch file | none | `memory patch review` |
+| Query product context | `query_memory` | `memory query` |
+| Save product memory | `save_memory` | `memory save --stdin` |
+| Graph status | `status_memory` | `memory status` |
+| Inspect one node | `inspect_memory` | `memory inspect <id>` |
+| Initialize storage | none | `memory init` |
+| Session reconciliation | none | `memory sync` |
 | Validate storage | none | `memory check` |
+| Show memory diff | none | `memory diff` |
 | Rebuild generated index | none | `memory rebuild` |
+| Project registry | none | `memory projects` |
+| Local viewer | none | `memory view` |
 | Reset local storage | none | `memory reset` |
-| Upgrade storage schema | none | `memory upgrade` |
-| Show memory history | none | `memory history` |
-| Restore memory | none | `memory restore` |
-| Rewind memory | none | `memory rewind` |
-| List stale memory | none | `memory stale` |
-| Show graph neighborhood | none | `memory graph`, `memory view` graph screen |
-| Show memory lens | none | `memory lens` |
-| Manage branch handoff | none | `memory handoff` |
-| Export Obsidian projection | none | `memory export obsidian` |
-| Manage project registry | none | `memory projects` |
-| View local memory | none | `memory view` |
-| Suggest memory decision packet | none | `memory suggest` |
-| Audit memory hygiene | none | `memory audit` |
-| Wiki source workflow | none | `memory wiki` |
 | Read public docs | none | `memory docs` |
 
-For MCP setup details, see the [MCP guide](/mcp/). For compact command and patch
-syntax, see [Reference](/reference/).
+## PATH fallbacks
 
-## Memory lifecycle
-
-Good memory stays narrow, durable, and current:
-
-- Load narrowly before non-trivial work.
-- Save only durable knowledge directly as active memory.
-- Update existing memory before creating duplicates.
-- Mark stale or supersede old memory when current evidence invalidates it.
-- Delete memory that should not persist.
-- Prefer current code and user requests over loaded memory when they conflict.
-- Report whether memory changed; async inspection is available through
-  `memory view`, `memory diff`, or Git tools.
-- Save nothing when the task produced no durable future value.
-
-After failure or correction, treat the event as a memory-quality signal:
-
-- Did the agent need missing project context?
-- Did loaded memory conflict with current evidence?
-- Did the user correct a stale assumption?
-- Should existing memory be updated, marked stale, superseded, or deleted?
-- Should an open `question`, `gotcha`, `source`, or `synthesis` be saved?
-
-## Memory shape
-
-Right-size memory. Atomic memories should normally carry one durable claim.
-Use `synthesis` memories for compact area-level understanding that future agents
-should load quickly. Use `source` memories to preserve where context came from,
-especially repo docs, AGENTS/CLAUDE/rules, package manifests, issues, external
-references recorded by the agent, and user-stated context.
-
-Use relations only when the link matters. Common predicates include
-`derived_from`, `supports`, `summarizes`, `documents`, `challenges`, `requires`,
-`depends_on`, `affects`, and `supersedes`.
-
-Update-before-create behavior keeps memory from drifting into duplicates:
-
-- `update_object` refreshes an existing object.
-- `mark_stale` records that old memory is wrong or no longer useful.
-- `supersede_object` connects old memory to its replacement.
-- `delete_object` removes memory that should not persist.
-- `create_relation` records a durable, useful link between objects.
-
-Create a new object only when no existing memory should be updated, marked
-stale, or superseded.
-
-## Object taxonomy
-
-Object types are `project`, `architecture`, `decision`, `constraint`,
-`question`, `fact`, `gotcha`, `workflow`, `note`, `concept`, `source`, and
-`synthesis`.
-
-`history`, `task-note`, and `feature` are not object types. Git, events, and
-statuses cover history. Branch or task scope covers temporary task context.
-Product capabilities fit `concept` objects or `synthesis` objects with feature
-facets.
-
-`gotcha` fits known failure modes and traps. `workflow` fits repeated
-project-specific how-tos: procedures, runbooks, command sequences,
-release/debugging/migration paths, verification routines, and maintenance
-steps. Organization facets such as `domain`, `bounded-context`, `capability`,
-`business-rule`, and `unresolved-conflict` are optional plain-language
-retrieval hints.
-
-## Examples
-
-Good memory examples:
-
-- Durable fact: a `fact` titled "Webhook retries run in the worker" with one
-  sentence naming the current retry location.
-- Linked decision: `decision.billing-retries` plus a `requires` relation to
-  `constraint.webhook-idempotency` when the decision depends on that constraint.
-- Gotcha: `gotcha.viewer-export-overwrites-manifest-files` when a repeated
-  failure mode affects future work.
-- Workflow/how-to: `workflow.release-smoke-test` for repeated release
-  verification.
-- Source-backed synthesis: `synthesis.product-intent` summarizes what the
-  product is for and has `derived_from` relations to source records.
-
-Bad memory examples:
-
-- Creating a second memory for the same durable claim instead of updating,
-  marking stale, or superseding the existing one.
-- Saving "I changed three files and ran tests" when Git history records the
-  work.
-- Saving guesses that are not supported by current evidence.
-- Creating a memory patch only to say that nothing important happened.
-
-Secrets, tokens, credentials, private keys, sensitive raw logs, unsupported
-speculation, and unrelated user preferences should not be saved as memory.
-Memory should never ask future agents to ignore current code, tests, user
-requests, or safety rules.
-
-## Bootstrap and suggestion packets
-
-`memory setup` provides guided first-run onboarding. It initializes storage if
-needed, writes conservative evidence-backed bootstrap memory by default, runs
-checks, prints role coverage, and starts the local viewer unless told not to.
-
-For the agent-led first-run path, use `memory setup`, then run
-`memory lens project-map` for a readable overview or
-`memory load "onboard to this repository"` to verify retrieval.
-
-When a repository already has meaningful `AGENTS.md` or `CLAUDE.md` content,
-run `memory setup --review-agent-guidance`. Setup still writes only the
-conservative deterministic bootstrap memory; the flag prints a follow-up prompt
-for the active agent to validate guidance against the repo and save only durable
-knowledge with `memory remember --stdin`.
-
-Use `memory handoff update --stdin` only for unfinished branch continuity that
-should not become project truth yet.
+When `memory` is not on `PATH`, run through the project package manager or
+local binary:
 
 ```bash
-memory suggest --bootstrap --json
-memory suggest --bootstrap --patch > bootstrap-memory.json
-memory patch review bootstrap-memory.json
-memory save --file bootstrap-memory.json
-memory check
+pnpm exec memory query "<question>"
+npm exec memory query "<question>"
+./node_modules/.bin/memory query "<question>"
+npx --package @aictx/memory -- memory query "<question>"
+pnpm exec memory-mcp
 ```
 
-`memory suggest --from-diff --json` creates a memory suggestion packet from
-current code changes. `memory suggest --after-task --json` includes ranked
-`recommended_actions` and, when audit signals apply, `repair_candidates` for
-updates, stale marks, supersession review, or unresolved-conflict questions.
-Treat them as advisory defaults, not authoritative semantic memory. Agents
-still fill in durable `title`, `body`, and `reason` fields from current
-evidence.
-
-`memory audit --json` reports grouped, actionable memory hygiene issues and
-role coverage gaps. Missing roles and possible-stale findings are not `memory
-check` failures.
-
-For the full memory-quality loop, see [Demand-driven memory](/demand-driven-memory/).
+For MCP setup details, see the [MCP guide](/mcp/). For exact schema and save
+input shapes, see [Reference](/reference/).

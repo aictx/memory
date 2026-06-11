@@ -55,9 +55,8 @@ describe("CLI exit codes", () => {
     }
   });
 
-  it("maps config, object, relation, secret, and internal errors to exit 1", () => {
+  it("maps object, relation, secret, and internal errors to exit 1", () => {
     const codes: MemoryErrorCode[] = [
-      "MemoryInvalidConfig",
       "MemoryObjectNotFound",
       "MemoryRelationNotFound",
       "MemoryDuplicateId",

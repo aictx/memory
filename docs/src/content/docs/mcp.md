@@ -1,18 +1,19 @@
 ---
 title: Memory MCP server
-description: Configure the Memory MCP server for project context, agent memory tools, and the CLI/MCP capability boundary.
+description: Configure the Memory MCP server and use the four tools — query_memory, save_memory, status_memory, and inspect_memory.
 ---
 
 `memory-mcp` is an MCP stdio server. Configure your MCP client to launch the
 global binary, or a project-local binary when the project pins Memory.
 
-Use MCP when your agent client already supports MCP tools and you want routine
-Memory actions inside that client. Keep setup, viewer, maintenance,
-recovery, registry, docs, wiki, and other operational workflows in the CLI.
+Use MCP when your agent client already supports MCP tools and you want the
+routine Memory actions — query, save, status, inspect — inside that client.
+Init, sync, viewer, registry, and maintenance workflows stay in the CLI.
 
 :::tip
-`memory init` creates local storage; it does not add MCP tools to a running agent
-session. Configure the client to launch `memory-mcp`, then start a new session.
+`memory init` creates local storage; it does not add MCP tools to a running
+agent session. Configure the client to launch `memory-mcp`, then start a new
+session.
 :::
 
 ## Install
@@ -58,65 +59,95 @@ to stderr.
 
 ## Tools
 
-Local MCP exposes exactly these tools in v1:
+The local MCP server exposes exactly four tools.
 
-- `load_memory`
-- `search_memory`
-- `inspect_memory`
-- `remember_memory`
-- `save_memory_patch`
-- `diff_memory`
+### `query_memory`
 
-Examples:
+CLI equivalent: `memory query`. Returns a token-budgeted Markdown subgraph of
+matching memory.
 
 ```text
-load_memory({ task: "<task summary>", mode: "coding" })
-search_memory({ query: "auth route conventions" })
-inspect_memory({ id: "decision.auth-route-conventions" })
-remember_memory({
-  task: "<task summary>",
-  memories: [{ kind: "fact", title: "Durable fact", body: "Reusable project context." }]
+query_memory({
+  question: "why do webhook retries run in the worker?",
+  budget: 1200            // optional token budget
 })
-save_memory_patch({ patch: { source, changes } })
-diff_memory({})
 ```
+
+### `save_memory`
+
+CLI equivalent: `memory save --stdin`. Saves durable product memory from
+intent-first input: create or update feature/decision/gotcha/question nodes,
+mark stale, supersede, or delete.
+
+```text
+save_memory({
+  task: "Ship retry handling for Stripe webhooks",
+  nodes: [
+    {
+      kind: "feature",                       // feature | decision | gotcha | question
+      title: "Webhook retry queue",
+      body: "Failed Stripe webhooks re-enter a worker-owned retry queue.",
+      stage: "building",                     // feature-only
+      anchors: ["services/billing/src/webhooks/"],
+      tags: ["billing"],
+      related: [{ predicate: "depends_on", to: "feature.billing-worker", confidence: "high" }]
+    }
+  ],
+  stale: [{ id: "gotcha.old-retry-loop", reason: "fixed by the new queue" }],
+  supersede: [{ id: "decision.inline-retries", superseded_by: "decision.retries-run-in-worker", reason: "moved to worker" }],
+  delete: [{ id: "question.retry-owner", reason: "answered" }]
+})
+```
+
+All top-level arrays are optional; `task` is required. Pass an existing `id`
+in a node to update it; `kind`, `title`, and `body` are required only when
+creating. Writes are serialized per project.
+
+### `status_memory`
+
+CLI equivalent: `memory status`. Summarizes the product graph: features by
+stage, open questions, stale anchors, last activity, and last sync.
+
+```text
+status_memory({})
+```
+
+### `inspect_memory`
+
+CLI equivalent: `memory inspect <id>`. Shows one Memory object and its direct
+relations.
+
+```text
+inspect_memory({ id: "decision.retries-run-in-worker" })
+```
+
+## Project scoping
 
 When the MCP server was launched globally rather than from the project root,
-`project_root` selects the initialized project for a tool call:
+every tool accepts an optional `project_root` to select the initialized
+project:
 
 ```text
-load_memory({
+query_memory({
   project_root: "/path/to/project",
-  task: "<task summary>",
-  mode: "coding"
+  question: "what is shipped?"
 })
 ```
 
-`project_root` is for choosing an initialized local Memory project. It is not arbitrary filesystem access;
-reads and writes remain scoped to that project's `.memory/` directory.
+`project_root` chooses an initialized local Memory project. It is not
+arbitrary filesystem access; reads and writes remain scoped to that project's
+`.memory/` directory.
 
 ## CLI-only work
 
-These workflows stay in the CLI in v1:
+These workflows stay in the CLI:
 
-- Setup: `memory init`, `memory setup`
-- Lenses: `memory lens`
-- Branch handoff: `memory handoff`
-- Maintenance: `memory check`, `memory rebuild`, `memory reset`, `memory upgrade`
-- Recovery: `memory history`, `memory restore`, `memory rewind`
-- Export: `memory export obsidian`
-- Registry: `memory projects`
-- Viewer: `memory view`
+- Setup: `memory init`
+- Session reconciliation: `memory sync`
+- Validation and maintenance: `memory check`, `memory rebuild`,
+  `memory reset`, `memory diff`
+- Registry and viewer: `memory projects`, `memory view`
 - Docs: `memory docs`
-- Suggest and audit: `memory suggest`, `memory audit`
-- Wiki workflow: `memory wiki`
-- Stale inspection: `memory stale`
-- Graph inspection: `memory graph`, `memory view` graph screen
 
-Local viewing remains a browser inspection surface, so `memory view` has no MCP
-equivalent. Graph inspection is available in the CLI and local viewer, but not
-as a local MCP tool.
-
-Future host adapters may expose generic `search` and `fetch` names over Memory
-search and inspect behavior. The local MCP server exposes the six Memory-specific
-tools above.
+The viewer is a browser inspection surface, so `memory view` has no MCP
+equivalent.

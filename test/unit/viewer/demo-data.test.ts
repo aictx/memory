@@ -13,58 +13,34 @@ const scriptPath = join(repoRoot, "scripts", "build-viewer-demo-data.mjs");
 const committedSeedPath = join(repoRoot, "src", "viewer", "demo-data.generated.json");
 const tempRoots: string[] = [];
 const expectedMemoryIds = [
-  "architecture.local-first-todo-app",
-  "concept.filtered-views",
-  "concept.quick-add",
-  "constraint.offline-first",
-  "fact.storage-localstorage",
-  "gotcha.completed-filter-counts",
+  "decision.cloud-sync",
+  "decision.local-first-storage",
+  "feature.filtered-views",
+  "feature.quick-add",
+  "feature.recurring-tasks",
+  "gotcha.filter-count-drift",
   "project.todo-app",
-  "question.recurring-tasks",
-  "source.agent-guidance",
-  "source.package-json",
-  "source.product-brief",
-  "source.readme",
-  "synthesis.agent-guidance",
-  "synthesis.conventions-quality",
-  "synthesis.feature-map",
-  "synthesis.product-intent",
-  "synthesis.repository-map",
-  "synthesis.stack-and-tooling",
-  "workflow.local-development",
-  "workflow.post-task-verification"
+  "question.recurring-scope"
 ];
-const expectedHubRelations = [
-  ["synthesis.product-intent", "summarizes", "project.todo-app"],
-  ["synthesis.feature-map", "documents", "project.todo-app"],
-  ["synthesis.repository-map", "documents", "project.todo-app"],
-  ["architecture.local-first-todo-app", "documents", "project.todo-app"],
-  ["synthesis.stack-and-tooling", "documents", "project.todo-app"],
-  ["synthesis.conventions-quality", "documents", "project.todo-app"],
-  ["synthesis.agent-guidance", "documents", "project.todo-app"],
-  ["workflow.local-development", "supports", "project.todo-app"],
-  ["workflow.post-task-verification", "supports", "project.todo-app"],
-  ["constraint.offline-first", "affects", "project.todo-app"]
+const expectedRelations = [
+  ["decision.local-first-storage", "affects", "project.todo-app"],
+  ["feature.quick-add", "depends_on", "decision.local-first-storage"],
+  ["feature.filtered-views", "depends_on", "decision.local-first-storage"],
+  ["gotcha.filter-count-drift", "affects", "feature.filtered-views"],
+  ["question.recurring-scope", "affects", "feature.recurring-tasks"],
+  ["feature.recurring-tasks", "related_to", "feature.quick-add"],
+  ["decision.local-first-storage", "supersedes", "decision.cloud-sync"]
 ] as const;
-const expectedProvenanceRelations = [
-  ["synthesis.product-intent", "derived_from", "source.product-brief"],
-  ["synthesis.feature-map", "derived_from", "source.product-brief"],
-  ["synthesis.repository-map", "derived_from", "source.readme"],
-  ["architecture.local-first-todo-app", "derived_from", "source.readme"],
-  ["synthesis.stack-and-tooling", "derived_from", "source.package-json"],
-  ["synthesis.conventions-quality", "derived_from", "source.product-brief"],
-  ["workflow.local-development", "derived_from", "source.package-json"],
-  ["workflow.post-task-verification", "derived_from", "source.package-json"],
-  ["constraint.offline-first", "derived_from", "source.product-brief"],
-  ["synthesis.agent-guidance", "derived_from", "source.agent-guidance"]
-] as const;
+const allowedPredicates = new Set(["affects", "depends_on", "supersedes", "related_to"]);
+const allowedTypes = new Set(["project", "feature", "decision", "gotcha", "question"]);
+const allowedStages = new Set(["idea", "building", "shipped", "paused", "dead"]);
 
 afterEach(async () => {
   await Promise.all(tempRoots.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
 describe("viewer demo data seed", () => {
-  it("generates deterministic sanitized data from the curated memory allowlist", async () => {
+  it("generates deterministic sanitized product-graph demo data", async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "memory-demo-data-"));
     tempRoots.push(tempRoot);
     const outFile = join(tempRoot, "demo-data.json");
@@ -90,16 +66,19 @@ describe("viewer demo data seed", () => {
         objects: Array<{
           id: string;
           type: string;
-          facets: { category: string } | null;
-          origin: {
-            kind: string;
-            locator: string;
-            captured_at?: string;
-            digest?: string;
-            media_type?: string;
-          } | null;
+          status: string;
+          stage: string | null;
+          anchors: string[];
+          superseded_by: string | null;
         }>;
-        relations: Array<{ id: string; from: string; predicate: string; to: string }>;
+        relations: Array<{ id: string; from: string; predicate: string; to: string; status: string }>;
+        counts: {
+          objects: number;
+          relations: number;
+          stale_objects: number;
+          superseded_objects: number;
+          active_relations: number;
+        };
       };
     };
     const serialized = JSON.stringify(data);
@@ -107,47 +86,59 @@ describe("viewer demo data seed", () => {
     const relationEndpointIds = new Set(
       data.bootstrap.relations.flatMap((relation) => [relation.from, relation.to])
     );
-    const sourceObjects = data.bootstrap.objects.filter((object) => object.type === "source");
-    const packageJsonSource = data.bootstrap.objects.find((object) => object.id === "source.package-json");
-    const predicates = new Set(data.bootstrap.relations.map((relation) => relation.predicate));
+    const features = data.bootstrap.objects.filter((object) => object.type === "feature");
     const relationTriples = new Set(data.bootstrap.relations.map(relationTripleKey));
 
     expect(second).toBe(first);
     expect(second).toBe(committed);
     expect([...data.seed.memory_ids].sort()).toEqual(expectedMemoryIds);
-    expect(data.seed.source).toBe("synthetic-todo-app-memory");
+    expect(data.seed.source).toBe("synthetic-todo-app-product-graph");
     expect(data.bootstrap.project).toEqual({
       id: "project.todo-app",
       name: "Todo App"
     });
     expect(objectIds).toEqual(expectedMemoryIds);
-    expect(data.bootstrap.objects.find((object) => object.id === "project.todo-app")).toMatchObject({
-      type: "project",
-      facets: { category: "project-description" }
-    });
-    expect(data.bootstrap.objects.some((object) => object.id === "project.memory")).toBe(false);
-    expect(sourceObjects.length).toBeGreaterThan(0);
-    for (const source of sourceObjects) {
-      expect(relationEndpointIds.has(source.id)).toBe(true);
-      expect(source.origin).toMatchObject({
-        kind: "file",
-        locator: expect.any(String)
-      });
+
+    for (const object of data.bootstrap.objects) {
+      expect(allowedTypes).toContain(object.type);
+
+      if (object.type === "feature") {
+        expect(object.stage).not.toBeNull();
+      } else {
+        expect(object.stage).toBeNull();
+      }
+
+      if (object.stage !== null) {
+        expect(allowedStages).toContain(object.stage);
+      }
     }
-    expect(packageJsonSource?.origin).toMatchObject({
-      kind: "file",
-      locator: "package.json",
-      media_type: "application/json"
+
+    expect(features.length).toBeGreaterThanOrEqual(2);
+    expect(features.some((feature) => feature.anchors.length > 0)).toBe(true);
+    expect(
+      data.bootstrap.objects.find((object) => object.id === "decision.cloud-sync")
+    ).toMatchObject({
+      status: "superseded",
+      superseded_by: "decision.local-first-storage"
     });
-    for (const relation of expectedHubRelations) {
+    expect(
+      data.bootstrap.objects.find((object) => object.id === "question.recurring-scope")?.status
+    ).toBe("open");
+
+    for (const relation of data.bootstrap.relations) {
+      expect(allowedPredicates).toContain(relation.predicate);
+    }
+    for (const relation of expectedRelations) {
       expect(relationTriples).toContain(relation.join("\0"));
     }
-    for (const relation of expectedProvenanceRelations) {
-      expect(relationTriples).toContain(relation.join("\0"));
-    }
-    expect(predicates).toContain("supports");
-    expect(predicates).toContain("challenges");
-    expect(predicates).not.toContain("related_to");
+
+    expect(data.bootstrap.counts).toEqual({
+      objects: data.bootstrap.objects.length,
+      relations: data.bootstrap.relations.length,
+      stale_objects: 0,
+      superseded_objects: 1,
+      active_relations: data.bootstrap.relations.length
+    });
     expect(data.meta.project_root).toBe("demo://todo-app");
     expect(data.meta.memory_root).toBe("demo://todo-app/.memory");
     expect(data.projects.projects).toHaveLength(1);

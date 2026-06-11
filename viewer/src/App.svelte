@@ -5,39 +5,12 @@
   import cytoscape from "cytoscape";
   import { onDestroy, onMount } from "svelte";
 
-  /**
-   * Facet categories were removed from the v5 storage schema. The viewer UI
-   * still renders a facet filter shell until its planned rework; with no
-   * categories the filter only offers "all".
-   */
-  const FACET_CATEGORIES: readonly string[] = [];
-
-  type FacetCategory = (typeof FACET_CATEGORIES)[number];
   type ObjectStatus = "active" | "stale" | "superseded" | "open" | "closed";
   type ObjectType = (typeof OBJECT_TYPES)[number];
+  type FeatureStage = "idea" | "building" | "shipped" | "paused" | "dead";
   type RelationStatus = "active" | "stale" | "rejected";
   type RelationConfidence = "low" | "medium" | "high";
-  type Predicate =
-    | "affects"
-    | "requires"
-    | "depends_on"
-    | "supersedes"
-    | "conflicts_with"
-    | "supports"
-    | "challenges"
-    | "derived_from"
-    | "summarizes"
-    | "documents"
-    | "mentions"
-    | "implements"
-    | "related_to";
-
-  interface Scope {
-    kind: "project" | "branch" | "task";
-    project: string;
-    branch: string | null;
-    task: string | null;
-  }
+  type Predicate = "affects" | "depends_on" | "supersedes" | "related_to";
 
   interface Source {
     kind: "agent" | "user" | "cli" | "mcp" | "system";
@@ -58,12 +31,6 @@
     id: string;
   }
 
-  interface ObjectFacets {
-    category: FacetCategory;
-    applies_to?: string[];
-    load_modes?: string[];
-  }
-
   interface MemoryObjectSummary {
     id: string;
     type: ObjectType;
@@ -71,9 +38,9 @@
     title: string;
     body_path: string;
     json_path: string;
-    scope?: Scope;
+    stage: FeatureStage | null;
+    anchors: string[];
     tags: string[];
-    facets?: ObjectFacets | null;
     evidence: Evidence[];
     source: Source | null;
     origin: SourceOrigin | null;
@@ -109,8 +76,6 @@
       relations: number;
       stale_objects: number;
       superseded_objects: number;
-      source_objects: number;
-      synthesis_objects: number;
       active_relations: number;
     };
     storage_warnings: string[];
@@ -204,12 +169,6 @@
     objects: MemoryObjectSummary[];
   }
 
-  interface MemorySnapshotItem {
-    label: string;
-    value: string;
-    detail: string;
-  }
-
   interface DocGraphNode {
     id: string;
     label: string;
@@ -262,7 +221,6 @@
   let searchQuery = $state("");
   let layerFilter = $state<LayerFilter>("all");
   let typeFilter = $state("all");
-  let facetCategoryFilter = $state("all");
   let statusFilter = $state("all");
   let tagFilter = $state("all");
   let pagePreset = $state<PagePreset>("all");
@@ -307,9 +265,9 @@
     { label: "Question", color: "#5f6c37", borderColor: "#fffefa" }
   ];
   const graphRelationLegend: Array<{ label: string; color: string; lineStyle: "solid" | "dashed" }> = [
-    { label: "Semantic", color: "#4f6f5a", lineStyle: "solid" },
-    { label: "Dependency", color: "#4f6590", lineStyle: "solid" },
-    { label: "Provenance", color: "#766b94", lineStyle: "dashed" }
+    { label: "Dependency", color: "#5b6f95", lineStyle: "solid" },
+    { label: "Supersedes", color: "#a14a3d", lineStyle: "solid" },
+    { label: "Other", color: "#78736b", lineStyle: "solid" }
   ];
   const graphStyles: cytoscape.StylesheetJson = [
     {
@@ -337,21 +295,9 @@
       }
     },
     {
-      selector: "node.graph-node-source",
-      style: {
-        shape: "round-rectangle"
-      }
-    },
-    {
       selector: "node.graph-node-project",
       style: {
         shape: "hexagon"
-      }
-    },
-    {
-      selector: "node.graph-node-workflow",
-      style: {
-        shape: "round-diamond"
       }
     },
     {
@@ -372,12 +318,6 @@
         "target-arrow-color": "data(color)",
         "target-arrow-shape": "triangle",
         width: "data(width)"
-      }
-    },
-    {
-      selector: "edge.graph-edge-provenance",
-      style: {
-        "line-style": "dashed"
       }
     },
     {
@@ -520,11 +460,6 @@
       : directRelations.filter((relation) => relation.from === selectedObject.id)
   );
   const typeOptions = $derived(uniqueSorted(objects.map((object) => object.type)));
-  const facetCategoryOptions = $derived.by(() =>
-    FACET_CATEGORIES.filter((category) =>
-      objects.some((object) => object.facets?.category === category)
-    )
-  );
   const statusOptions = $derived(uniqueSorted(objects.map((object) => object.status)));
   const tagOptions = $derived(uniqueSorted(objects.flatMap((object) => object.tags)));
   const markdownBlocks = $derived(
@@ -538,10 +473,7 @@
     ...(selectedProject?.warnings ?? []),
     ...warnings
   ]));
-  const hasStarterMemoryOnly = $derived.by(() => isStarterMemoryOnly(objects));
-  const memorySnapshot = $derived.by(() => buildMemorySnapshot(objects, relations));
   const activeMemoryCount = $derived(objects.filter((object) => isCurrentStatus(object.status)).length);
-  const facetCategoryCount = $derived(facetCategoryOptions.length);
   const trustLabel = $derived.by(() => selectedProject === null ? "No project" : gitLabel(selectedProject));
   const trustDescription = $derived.by(() =>
     selectedProject === null ? "No project is selected." : gitDescription(selectedProject)
@@ -762,7 +694,6 @@
     searchQuery = "";
     layerFilter = "all";
     typeFilter = allOption;
-    facetCategoryFilter = allOption;
     statusFilter = allOption;
     tagFilter = allOption;
     pagePreset = "all";
@@ -878,7 +809,6 @@
       objectMatchesPagePreset(object, pagePreset) &&
       objectMatchesLayer(object, layerFilter) &&
       optionMatches(typeFilter, object.type) &&
-      optionMatches(facetCategoryFilter, object.facets?.category ?? "") &&
       optionMatches(statusFilter, object.status) &&
       (tagFilter === allOption || object.tags.includes(tagFilter)) &&
       objectMatchesSearch(object, searchQuery)
@@ -908,8 +838,9 @@
       object.id,
       object.type,
       object.status,
+      object.stage ?? "",
+      object.anchors.join(" "),
       object.tags.join(" "),
-      object.facets?.category ?? "",
       object.evidence.map((evidence) => `${evidence.kind} ${evidence.id}`).join(" "),
       object.origin === null
         ? ""
@@ -952,7 +883,6 @@
       searchQuery = "";
       layerFilter = "all";
       typeFilter = allOption;
-      facetCategoryFilter = allOption;
       statusFilter = allOption;
       tagFilter = allOption;
       selectedObjectId = id;
@@ -1522,20 +1452,10 @@
     }
 
     switch (relation.predicate) {
-      case "requires":
       case "depends_on":
         return "#5b6f95";
       case "supersedes":
-      case "conflicts_with":
-      case "challenges":
         return "#a14a3d";
-      case "derived_from":
-      case "supports":
-      case "summarizes":
-      case "documents":
-        return "#6b637d";
-      case "implements":
-        return "#4d745b";
       default:
         return "#78736b";
     }
@@ -1550,7 +1470,6 @@
     closeSidebarDrawer();
     searchQuery = "";
     typeFilter = allOption;
-    facetCategoryFilter = allOption;
     statusFilter = allOption;
     tagFilter = allOption;
     pagePreset = section as PagePreset;
@@ -1595,35 +1514,6 @@
       .filter((section) => section.objects.length > 0);
   }
 
-  function buildMemorySnapshot(
-    memoryObjects: MemoryObjectSummary[],
-    relationList: MemoryRelationSummary[]
-  ): MemorySnapshotItem[] {
-    const currentCount = memoryObjects.filter((object) => isCurrentStatus(object.status)).length;
-    const featureCount = memoryObjects.filter(
-      (object) => object.type === "feature" && isCurrentStatus(object.status)
-    ).length;
-    const activeRelationCount = relationList.filter((relation) => relation.status === "active").length;
-
-    return [
-      {
-        label: "Active objects",
-        value: String(currentCount),
-        detail: "current product memory nodes"
-      },
-      {
-        label: "Features",
-        value: String(featureCount),
-        detail: "current feature nodes in the product graph"
-      },
-      {
-        label: "Active relations",
-        value: String(activeRelationCount),
-        detail: "active links between memory nodes"
-      }
-    ];
-  }
-
   function bodyPreview(object: MemoryObjectSummary): string {
     const text = object.body
       .replace(/^#+\s+/gm, "")
@@ -1638,10 +1528,6 @@
     return `${type.charAt(0).toUpperCase()}${type.slice(1)} objects`;
   }
 
-  function facetCategoryLabel(object: MemoryObjectSummary): string {
-    return object.facets?.category ?? "no facet category";
-  }
-
   function editedDateLabel(object: MemoryObjectSummary): string {
     return `Edited ${compactIsoDateTime(object.updated_at)}`;
   }
@@ -1649,22 +1535,6 @@
   function compactIsoDateTime(value: string): string {
     const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(value);
     return match === null ? value : `${match[1]} ${match[2]}`;
-  }
-
-  function scopeLabel(scope: Scope | undefined): string {
-    if (scope === undefined) {
-      return "project";
-    }
-
-    if (scope.kind === "branch") {
-      return `branch:${scope.branch ?? "unknown"}`;
-    }
-
-    if (scope.kind === "task") {
-      return `task:${scope.task ?? "unknown"}`;
-    }
-
-    return "project";
   }
 
   function relationCounterpart(relation: MemoryRelationSummary, objectId: string): string {
@@ -1743,31 +1613,6 @@
     return left.id.localeCompare(right.id);
   }
 
-  function isStarterMemoryOnly(memoryObjects: readonly MemoryObjectSummary[]): boolean {
-    if (memoryObjects.length !== 2) {
-      return false;
-    }
-
-    const projectObject = memoryObjects.find(
-      (object) => object.type === "project" && object.source?.kind === "system"
-    );
-    const architectureObject = memoryObjects.find(
-      (object) => object.id === "architecture.current" && object.source?.kind === "system"
-    );
-
-    return (
-      projectObject !== undefined &&
-      architectureObject !== undefined &&
-      /^# .+\n\nProject-level memory for .+\.$/.test(normalizeBody(projectObject.body)) &&
-      normalizeBody(architectureObject.body) ===
-        "# Current Architecture\n\nArchitecture memory starts here."
-    );
-  }
-
-  function normalizeBody(body: string): string {
-    return body.replace(/\r\n?/g, "\n").trim();
-  }
-
   function sidecarJsonForObject(object: MemoryObjectSummary): Record<string, unknown> {
     return {
       id: object.id,
@@ -1776,9 +1621,9 @@
       title: object.title,
       body_path: object.body_path,
       json_path: object.json_path,
-      scope: object.scope,
+      stage: object.stage,
+      anchors: object.anchors,
       tags: object.tags,
-      facets: object.facets,
       evidence: object.evidence,
       source: object.source,
       origin: object.origin,
@@ -1955,7 +1800,7 @@
           <dl class="sidebar-stats" aria-label="Memory schema stats">
             <div><dt>{activeMemoryCount}</dt><dd>active</dd></div>
             <div><dt>{relations.length}</dt><dd>links</dd></div>
-            <div><dt>{facetCategoryCount}</dt><dd>facets</dd></div>
+            <div><dt>{objects.length}</dt><dd>objects</dd></div>
           </dl>
         {/if}
 
@@ -2074,7 +1919,7 @@
                 <dl class="mini-stats">
                   <div><dt>Memories</dt><dd>{project.counts?.objects ?? 0}</dd></div>
                   <div><dt>Relations</dt><dd>{project.counts?.relations ?? 0}</dd></div>
-                  <div><dt>Syntheses</dt><dd>{project.counts?.synthesis_objects ?? 0}</dd></div>
+                  <div><dt>Stale</dt><dd>{project.counts?.stale_objects ?? 0}</dd></div>
                 </dl>
                 {#if project.warnings.length > 0}
                   <p class="warning-copy">{project.warnings[0]}</p>
@@ -2315,7 +2160,9 @@
                     <dl class="graph-meta">
                       <div><dt>Type</dt><dd>{selectedGraphObject.type}</dd></div>
                       <div><dt>Status</dt><dd>{selectedGraphObject.status}</dd></div>
-                      <div><dt>Facet</dt><dd>{facetCategoryLabel(selectedGraphObject)}</dd></div>
+                      {#if selectedGraphObject.stage !== null}
+                        <div><dt>Stage</dt><dd>{selectedGraphObject.stage}</dd></div>
+                      {/if}
                       <div><dt>Relations</dt><dd>{relationsForObject(selectedGraphObject.id).length}</dd></div>
                       <div><dt>Graph</dt><dd>{relationsForObject(selectedGraphObject.id).length === 0 ? "Unlinked" : "Linked"}</dd></div>
                     </dl>
@@ -2386,7 +2233,7 @@
             <p class="eyebrow">Canonical Memory storage</p>
             <h2 id="memory-list-title">{bootstrap.project.name} Memory Schema</h2>
             <p>
-              Browse the real object types, facet categories, statuses, scopes, evidence, and relations
+              Browse the real object types, stages, statuses, anchors, evidence, and relations
               saved in this project's local memory database.
             </p>
           </header>
@@ -2396,7 +2243,7 @@
               <div>
                 <strong>Canonical objects</strong>
                 <span>
-                  {filteredObjects.length} rows · {objects.length} objects · {facetCategoryCount} facets · {relations.length} links
+                  {filteredObjects.length} rows · {objects.length} objects · {relations.length} links
                 </span>
               </div>
               <p class="projection-status" role="status">
@@ -2423,12 +2270,6 @@
                 <option value={allOption}>All types</option>
                 {#each typeOptions as type (type)}
                   <option value={type}>{type}</option>
-                {/each}
-              </select>
-              <select bind:value={facetCategoryFilter} onchange={clearPagePreset} data-testid="viewer-facet-filter" aria-label="Facet category">
-                <option value={allOption}>All facets</option>
-                {#each facetCategoryOptions as category (category)}
-                  <option value={category}>{category}</option>
                 {/each}
               </select>
               <select bind:value={statusFilter} onchange={clearPagePreset} data-testid="viewer-status-filter" aria-label="Status">
@@ -2571,14 +2412,6 @@
               </section>
             {/if}
 
-            {#if hasStarterMemoryOnly}
-              <section class="onboarding-callout" aria-label="Starter memory notice" data-testid="starter-memory-notice">
-                <p><strong>Starter memory only.</strong> Seed useful repo memory with a bootstrap patch, then refresh the viewer.</p>
-                <code>memory suggest --bootstrap --patch &gt; bootstrap-memory.json</code>
-                <code>memory save --file bootstrap-memory.json</code>
-              </section>
-            {/if}
-
             <div class="browser-workspace-grid">
             <section class="sectioned-memory" aria-label="Memory objects">
               <div class="schema-browser-toolbar">
@@ -2612,8 +2445,9 @@
                           <span class="object-meta" data-testid={`object-meta-${object.id}`}>
                             <span>{object.type}</span>
                             <span>{object.status}</span>
-                            <span>{facetCategoryLabel(object)}</span>
-                            <span>{scopeLabel(object.scope)}</span>
+                            {#if object.stage !== null}
+                              <span class="pill" data-testid={`object-stage-${object.id}`}>{object.stage}</span>
+                            {/if}
                             <span>{editedDateLabel(object)}</span>
                           </span>
                           <small>{bodyPreview(object)}</small>
@@ -2636,7 +2470,9 @@
                     <div class="selected-object-chips" aria-label="Selected object summary">
                       <span>{selectedObject.type}</span>
                       <span>{selectedObject.status}</span>
-                      <span>{facetCategoryLabel(selectedObject)}</span>
+                      {#if selectedObject.stage !== null}
+                        <span data-testid="selected-object-stage">{selectedObject.stage}</span>
+                      {/if}
                       <span>{directRelations.length} {directRelations.length === 1 ? "relation" : "relations"}</span>
                     </div>
                   </div>
@@ -2748,9 +2584,11 @@
                       <div><dt>Name</dt><dd>{selectedObject.title}</dd></div>
                       <div><dt>ID</dt><dd class="mono">{selectedObject.id}</dd></div>
                       <div><dt>Type</dt><dd>{selectedObject.type}</dd></div>
-                      <div><dt>Facet</dt><dd>{facetCategoryLabel(selectedObject)}</dd></div>
                       <div><dt>Status</dt><dd>{selectedObject.status}</dd></div>
-                      <div><dt>Scope</dt><dd>{scopeLabel(selectedObject.scope)}</dd></div>
+                      {#if selectedObject.stage !== null}
+                        <div><dt>Stage</dt><dd>{selectedObject.stage}</dd></div>
+                      {/if}
+                      <div><dt>Anchors</dt><dd>{selectedObject.anchors.length}</dd></div>
                       <div><dt>Origin</dt><dd>{selectedObject.origin?.kind ?? "none"}</dd></div>
                       <div><dt>Evidence</dt><dd>{selectedObject.evidence.length}</dd></div>
                       <div><dt>Relations</dt><dd>{directRelations.length}</dd></div>
@@ -2799,27 +2637,22 @@
                       {:else}
                         <li class="empty-copy">No evidence links.</li>
                       {/each}
-                      {#each directRelations.filter((relation) => ["derived_from", "supports", "summarizes", "documents"].includes(relation.predicate)) as relation (relation.id)}
-                        <li>
-                          <span class="pill">{relation.predicate}</span>
-                          <button type="button" onclick={() => selectRelated(relationCounterpart(relation, selectedObject.id))}>
-                            {relationTargetLabel(relation, selectedObject.id)}
-                          </button>
-                        </li>
-                      {/each}
                     </ul>
                   </details>
 
-                  <details class="notion-toggle" data-testid="facet-details">
-                    <summary>Facet category</summary>
-                    {#if selectedObject.facets == null}
-                      <p class="empty-copy">No facets saved on this object.</p>
+                  <details class="notion-toggle" data-testid="anchor-details">
+                    <summary>Anchors</summary>
+                    {#if selectedObject.anchors.length === 0}
+                      <p class="empty-copy">No anchors saved on this object.</p>
                     {:else}
-                      <dl class="facet-grid">
-                        <div><dt>Category</dt><dd>{selectedObject.facets.category}</dd></div>
-                        <div><dt>Applies to</dt><dd>{selectedObject.facets.applies_to?.join(", ") || "global"}</dd></div>
-                        <div><dt>Load modes</dt><dd>{selectedObject.facets.load_modes?.join(", ") || "all modes"}</dd></div>
-                      </dl>
+                      <ul class="relation-list" aria-label="Anchors">
+                        {#each selectedObject.anchors as anchor (anchor)}
+                          <li>
+                            <span class="pill">anchor</span>
+                            <code>{anchor}</code>
+                          </li>
+                        {/each}
+                      </ul>
                     {/if}
                   </details>
 
@@ -2828,7 +2661,6 @@
                     <dl>
                       <div><dt>Body</dt><dd>{selectedObject.body_path}</dd></div>
                       <div><dt>Sidecar</dt><dd>{selectedObject.json_path}</dd></div>
-                      <div><dt>Scope</dt><dd>{selectedObject.scope?.kind ?? "project"}</dd></div>
                       <div><dt>Updated</dt><dd>{selectedObject.updated_at}</dd></div>
                     </dl>
                     <section class="json-view" aria-label="Object sidecar JSON" data-testid="json-view">
@@ -3055,8 +2887,7 @@
   .markdown-view,
   .object-list,
   .project-delete-status,
-  .warnings,
-  .onboarding-callout {
+  .warnings {
     border: 1px solid #d9ded7;
     border-radius: 8px;
     background: #ffffff;
@@ -3225,22 +3056,13 @@
     background: #ffffff;
   }
 
-  .warnings,
-  .onboarding-callout {
+  .warnings {
     display: grid;
     gap: 8px;
     margin-bottom: 16px;
     padding: 14px;
-  }
-
-  .warnings {
     border-color: #e5d08b;
     background: #fffbea;
-  }
-
-  .onboarding-callout {
-    border-color: #b8c9c4;
-    background: #f7f5f0;
   }
 
   .object-list {
@@ -4819,7 +4641,6 @@
   }
 
   .warnings,
-  .onboarding-callout,
   .list-controls,
   .sectioned-memory {
     max-width: none;
@@ -4921,10 +4742,6 @@
 
   .list-controls [data-testid="viewer-tag-filter"] {
     min-width: 140px;
-  }
-
-  .list-controls [data-testid="viewer-facet-filter"] {
-    min-width: 160px;
   }
 
   .sectioned-memory {
@@ -5141,29 +4958,6 @@
 
   .notion-toggle-list {
     gap: 12px;
-  }
-
-  .facet-grid {
-    display: grid;
-    gap: 8px;
-    margin: 0;
-  }
-
-  .facet-grid div {
-    display: grid;
-    grid-template-columns: 96px minmax(0, 1fr);
-    gap: 12px;
-  }
-
-  .facet-grid dt {
-    color: #99958d;
-    font-weight: 760;
-  }
-
-  .facet-grid dd {
-    margin: 0;
-    color: #3e3d39;
-    overflow-wrap: anywhere;
   }
 
   .notion-toggle summary {
@@ -5531,7 +5325,6 @@
   .notion-toggle > :not(summary),
   .markdown-view,
   .json-view,
-  .facet-grid,
   .relation-columns {
     min-width: 0;
     max-width: 100%;
@@ -5984,8 +5777,7 @@
       padding: 22px 18px 28px;
     }
 
-    .notion-properties div,
-    .facet-grid div {
+    .notion-properties div {
       grid-template-columns: 1fr;
       gap: 2px;
     }
@@ -6267,7 +6059,6 @@
     .memory-stage.has-selected-object .list-controls,
     .memory-stage.has-selected-object .schema-context-panel,
     .memory-stage.has-selected-object .warnings,
-    .memory-stage.has-selected-object .onboarding-callout,
     .memory-stage.has-selected-object .sectioned-memory {
       display: none;
     }
@@ -6434,7 +6225,6 @@
     .memory-stage.has-selected-object .list-controls,
     .memory-stage.has-selected-object .schema-context-panel,
     .memory-stage.has-selected-object .warnings,
-    .memory-stage.has-selected-object .onboarding-callout,
     .memory-stage.has-selected-object .sectioned-memory {
       display: none;
     }

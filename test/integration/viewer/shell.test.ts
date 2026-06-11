@@ -198,6 +198,7 @@ describe("read-only viewer shell", () => {
 
       await page.selectOption('[data-testid="viewer-type-filter"]', "feature");
       await expectCount(page, '[data-testid="object-row-feature.release-checklist"]', 1);
+      await expectText(page, '[data-testid="object-stage-feature.release-checklist"]', "building");
       await expectCount(page, '[data-testid="object-row-decision.viewer-shell"]', 0);
 
       await page.selectOption('[data-testid="viewer-type-filter"]', "all");
@@ -242,6 +243,7 @@ describe("read-only viewer shell", () => {
       await setViewerSearch(page, "shell layout");
       await page.locator('[data-testid="object-row-decision.viewer-shell"]').click();
       await assertSelectedObject(page, "Viewer Shell Layout", "decision.viewer-shell");
+      await expectText(page, '[data-testid="anchor-details"]', "viewer/src/App.svelte");
       await expectText(page, '[data-testid="outgoing-relations"]', "depends_on");
       await expectText(page, '[data-testid="outgoing-relations"]', "Viewer Markdown Safety");
       await expectNoText(page, '[data-testid="selected-object"]', "Unrelated Source");
@@ -281,7 +283,7 @@ describe("read-only viewer shell", () => {
     }
   });
 
-  it("explains the bootstrap workflow when only starter memory exists", async () => {
+  it("browses a freshly initialized project on mobile and desktop layouts", async () => {
     const assets = await stat(join(viewerAssetsDir, "index.html"));
 
     expect(assets.isFile()).toBe(true);

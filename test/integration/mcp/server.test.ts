@@ -209,7 +209,7 @@ describe("memory MCP server bootstrap", () => {
     expect(docs).toContain("npx --package @aictx/memory -- memory-mcp");
     expect(docs).toContain("./node_modules/.bin/memory-mcp");
     expect(docs).toContain("Startup diagnostics and failures are written");
-    expect(docs).toContain("not arbitrary filesystem access");
+    expect(docs.replace(/\s+/g, " ")).toContain("not arbitrary filesystem access");
   });
 
   it("serves multiple isolated projects from one globally launched process", async () => {

@@ -1,6 +1,6 @@
 ---
 title: Local viewer
-description: Local browser viewer for project memory inspection and explicit project maintenance.
+description: Local browser viewer for the product graph — projects dashboard, memory list, node detail, and the relation graph.
 ---
 
 `memory view` starts a local browser viewer for human inspection.
@@ -12,21 +12,35 @@ memory view --port 4888
 memory view [--port <number>] [--open] [--detach] [--json]
 ```
 
-Use it when you want to browse memory objects, source-backed syntheses,
-relations, audit advisories, project registry entries, and generated Obsidian
-export state without editing canonical memory files.
-
 The command binds only to `127.0.0.1`, chooses an available random port by
-default, and prints a local URL with a per-run API token. It can start outside
-an initialized project and open to a Projects dashboard populated from the
-user-level registry, plus the current project when the launch directory is
-initialized.
+default, and prints a local URL with a per-run API token. `--detach` starts it
+in a background process and prints the URL. It can start outside an
+initialized project and open to the projects dashboard populated from the
+user-level registry.
 
-## Projects
+## Screens
+
+- **Projects** — dashboard of registered projects from the registry, plus the
+  current project when the launch directory is initialized.
+- **Memories** — the node list for one project: features, decisions, gotchas,
+  and questions with their statuses. Feature rows carry a stage pill
+  (idea, building, shipped, paused, dead).
+- **Detail** — one node in full: body, stage, anchors, tags, evidence,
+  relations, and provenance.
+- **Graph** — the interactive relation graph, color-coded by node kind, for
+  exploring how features, decisions, gotchas, and questions connect.
+
+The viewer is read-only for graph content; writes go through
+`memory save --stdin` (or the `save_memory` MCP tool). Its one destructive
+action, deleting a project, removes that project's `.memory/` directory and
+registry entry — never source files.
+
+## Projects registry
 
 The registry lives at `$MEMORY_HOME/projects.json`, defaulting to
-`~/.memory/projects.json`. It stores project metadata and roots. Canonical memory
-stays isolated in each project's own `.memory/` directory.
+`~/.memory/projects.json`. It stores project metadata and roots for the
+projects dashboard and `memory status --all`. Canonical memory stays isolated
+in each project's own `.memory/` directory.
 
 Project registry commands:
 
@@ -39,29 +53,11 @@ memory projects prune
 ```
 
 :::tip
-The project registry is for discovery in the viewer. It is not shared memory
-and does not make project IDs globally unique.
+The project registry is for discovery in the viewer and the `status --all`
+dashboard. It is not shared memory and does not make project ids globally
+unique.
 :::
 
-## Write actions
-
-The viewer is mostly read-only. It has two explicit write actions.
-
-The Maintenance screen groups deterministic audit findings by memory id. It
-highlights possible stale references, stale source origins, missing file
-evidence, unresolved active conflicts, and supersession chains that need human
-or agent review. These are advisory review prompts; the viewer does not mark
-memory stale or repair it automatically.
-
-Obsidian export calls the same generated projection service as:
-
-```bash
-memory export obsidian
-```
-
-Delete project permanently removes that project's derived `.memory/` directory
-and removes its entry from `$MEMORY_HOME/projects.json`. It does not delete
-source files.
-
-`memory view` is a CLI workflow and has no MCP equivalent. Use MCP for routine
-agent memory tools; use the viewer when a human wants to inspect local memory.
+`memory view` is a CLI workflow and has no MCP equivalent. Use MCP for the
+routine query/save/status/inspect tools; use the viewer when a human wants to
+look at the graph.

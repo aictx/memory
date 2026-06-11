@@ -65,7 +65,8 @@ const DOC_TOPICS = [
   {
     topic: "getting-started",
     title: "Getting started",
-    description: "Install Memory, initialize memory, and run the first load/save/diff loop.",
+    description:
+      "Install Memory, run init, build the first product graph, and run the query/save/sync loop.",
     file: "getting-started.md",
     path: "/getting-started/",
     aliases: ["quickstart", "install", "start"]
@@ -73,55 +74,24 @@ const DOC_TOPICS = [
   {
     topic: "mental-model",
     title: "Mental model",
-    description: "Understand canonical memory, generated state, and the hybrid memory model.",
+    description:
+      "Understand the product graph: kinds, stages, anchors, map-as-push, query-as-pull, and sync.",
     file: "mental-model.md",
     path: "/mental-model/",
-    aliases: ["model", "memory-model"]
+    aliases: ["model", "memory-model", "product-graph"]
   },
   {
     topic: "capabilities",
     title: "Capabilities",
-    description: "See what Memory can do in v1, grouped by user and agent jobs.",
+    description: "See what Memory can do, grouped by the jobs users and agents need.",
     file: "capabilities.md",
     path: "/capabilities/",
     aliases: ["features", "capability-map", "what-can-it-do"]
   },
   {
-    topic: "specializing-memory",
-    title: "Specializing Memory",
-    description: "Tailor Memory to a project, team, repo, and agent workflow.",
-    file: "specializing-memory.md",
-    path: "/specializing-memory/",
-    aliases: ["specialize", "customize", "tailor", "project-memory"]
-  },
-  {
-    topic: "memory-recipes",
-    title: "Memory Recipes",
-    description: "Copyable prompts for specializing Memory without adding product surface.",
-    file: "memory-recipes.md",
-    path: "/memory-recipes/",
-    aliases: ["prompt-recipes", "memory-prompts", "specialization-recipes"]
-  },
-  {
-    topic: "demand-driven-memory",
-    title: "Demand-driven memory",
-    description: "Use agent failure, confusion, and correction to improve durable project memory.",
-    file: "demand-driven-memory.md",
-    path: "/demand-driven-memory/",
-    aliases: ["demand-driven", "memory-quality", "context-engine"]
-  },
-  {
-    topic: "wiki-workflow",
-    title: "Wiki workflow",
-    description: "Maintain source-backed wiki-style memory through CLI-only ingest, file, lint, and log commands.",
-    file: "wiki-workflow.md",
-    path: "/wiki-workflow/",
-    aliases: ["wiki", "ingest", "source-origin", "llm-wiki"]
-  },
-  {
     topic: "cli",
     title: "CLI guide",
-    description: "Use setup, routine memory, inspection, recovery, export, viewer, and docs commands.",
+    description: "Use init, query, save, sync, status, and the inspection and maintenance commands.",
     file: "cli.md",
     path: "/cli/",
     aliases: ["commands", "command-line"]
@@ -129,7 +99,7 @@ const DOC_TOPICS = [
   {
     topic: "mcp",
     title: "MCP guide",
-    description: "Configure Memory MCP and understand the CLI/MCP capability boundary.",
+    description: "Configure Memory MCP and use the query, save, status, and inspect tools.",
     file: "mcp.md",
     path: "/mcp/",
     aliases: ["mcp-setup", "tools"]
@@ -137,28 +107,10 @@ const DOC_TOPICS = [
   {
     topic: "agent-integration",
     title: "Agent integration",
-    description: "Teach coding agents to load, use, save, and inspect Memory safely.",
+    description: "Teach coding agents to query, save, and sync the product graph safely.",
     file: "agent-integration.md",
     path: "/agent-integration/",
     aliases: ["agents", "agent", "guidance"]
-  },
-  {
-    topic: "agent-recipes",
-    title: "Agent recipes",
-    description: "Copyable Memory setup and routine-loop recipes for common coding agents.",
-    file: "agent-recipes.md",
-    path: "/agent-recipes/",
-    aliases: [
-      "recipes",
-      "agent-setup",
-      "codex",
-      "claude",
-      "claude-code",
-      "cursor",
-      "cline",
-      "opencode",
-      "open-code"
-    ]
   },
   {
     topic: "plugin-publishing",
@@ -171,7 +123,7 @@ const DOC_TOPICS = [
   {
     topic: "viewer",
     title: "Local viewer",
-    description: "Inspect project memory through the local browser viewer.",
+    description: "Inspect the product graph through the local browser viewer.",
     file: "viewer.md",
     path: "/viewer/",
     aliases: ["view", "local-viewer"]
@@ -179,7 +131,7 @@ const DOC_TOPICS = [
   {
     topic: "troubleshooting",
     title: "Troubleshooting",
-    description: "Fix common install, PATH, MCP, schema, index, and recovery issues.",
+    description: "Fix common install, PATH, MCP, schema-version, index, and recovery issues.",
     file: "troubleshooting.md",
     path: "/troubleshooting/",
     aliases: ["help", "debug"]
@@ -187,10 +139,11 @@ const DOC_TOPICS = [
   {
     topic: "reference",
     title: "Reference",
-    description: "Compact CLI, MCP, docs, object taxonomy, and structured patch reference.",
+    description:
+      "Schema v5 reference: node kinds, sidecar fields, predicates, save input, config, and storage layout.",
     file: "reference.md",
     path: "/reference/",
-    aliases: ["ref", "patch", "structured-patch"]
+    aliases: ["ref", "schema", "storage-layout"]
   }
 ] as const satisfies readonly DocsTopic[];
 
